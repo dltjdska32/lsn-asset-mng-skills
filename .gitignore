@@ -24,6 +24,12 @@ workspace/cache/
 *.db.bak
 *.sqlite
 *.sqlite3
+.*.restore
+.*.rollback
+*.restore.tmp
+*.rollback.tmp
+*.backup.tmp
+*.db.tmp
 backup/
 backups/
 **/backup/
