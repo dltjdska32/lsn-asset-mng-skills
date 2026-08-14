@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "investment-stack"
+version = "0.1.0"
+description = "Deterministic local runtime for evidence-based investment analysis"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "LicenseRef-Proprietary"
+authors = [{ name = "investment-stack contributors" }]
+dependencies = []
+
+[project.scripts]
+investment-stack = "investment_stack.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "runtime" }
+
+[tool.setuptools.packages.find]
+where = ["runtime"]

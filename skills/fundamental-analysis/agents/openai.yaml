@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fundamental Analysis"
+  short_description: "Analyze companies from timestamped primary evidence"
+  default_prompt: "Use $fundamental-analysis to analyze this company from current primary-source evidence."

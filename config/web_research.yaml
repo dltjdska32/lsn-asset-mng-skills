@@ -1,0 +1,5 @@
+version: 1
+latest_as_of_required: true
+relevant_news_enabled: true
+deduplicate_event_clusters: true
+

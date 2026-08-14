@@ -1,0 +1,4 @@
+interface:
+  display_name: "Investment Review"
+  short_description: "Review high-risk investment outputs and evidence"
+  default_prompt: "Use $review to perform a risk-based review of this investment analysis."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Investment Report"
+  short_description: "Create partial-aware evidence-based investment reports"
+  default_prompt: "Use $investment-report to produce an as-of investment report with evidence and explicit unknowns."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Investment Valuation"
+  short_description: "Value supported assets with explicit assumptions"
+  default_prompt: "Use $valuation to value this supported asset with explicit evidence and assumptions."
