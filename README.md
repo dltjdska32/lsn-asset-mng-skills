@@ -1,11 +1,13 @@
 # investment-stack
 
+The eight skill definitions under `skills/` are authoritative. Codex repository-local discovery uses byte-identical mirrors under `.agents/skills/`; after changing a skill, run `py scripts/sync_agent_skills.py`. The architecture invariant rejects drift.
+
 `investment-stack` is a local-first, deterministic runtime for evidence-based
 investment analysis. The canonical v1.3 architecture is frozen; implementation
 is proceeding in bounded phases.
 
-The current slice implements Phase 1 foundations, Phase 2 Storage Safety, and
-Phase 3 Personal Ledger & Projection:
+The current slice implements Phase 1 foundations, Phase 2 Storage Safety,
+Phase 3 Personal Ledger & Projection, Phase 4 Evidence & Research, Phase 5 Asset Analysis, Phase 6 Report & Review, Phase 7 Acceptance, and the Phase 8 final integration/hardening handoff:
 
 - exactly seven request modes;
 - deterministic mode routing with an explicit mode override;
@@ -28,12 +30,42 @@ Phase 3 Personal Ledger & Projection:
 - rebuildable position, cash, liability, and cashflow projections;
 - weighted-average, user-provided, and unavailable cost-basis states;
 - cash-only transfers, explicit FX and loan components, splits, and ticker
-  aliases.
+  aliases;
+- free-first provider adapters for OpenDART, SEC Company Facts, and timestamped
+  Kraken public trades;
+- injected Web Research fallback for latest/current data and latest relevant
+  news without a separate Skill, Agent, or database;
+- immutable `analysis_as_of` / timezone pinning, freshness assessment, provider
+  states, source conflicts, observation selection, and calculation lineage in
+  `run.db`;
+- explicit partial/unavailable behavior when credentials, timestamps, or
+  provider coverage are missing;
+- deterministic equity fundamentals and asset-appropriate equity valuation with
+  explicit assumptions only;
+- ETF/fund NAV, cost, concentration, tracking, liquidity, and dated look-through
+  analysis;
+- Bitcoin, gold, and silver analysis with price/risk and asset-specific context,
+  never corporate DCF/EPS valuation;
+- a materiality gate that precedes portfolio deep research, plus cross-asset
+  allocation and aligned historical risk/contribution calculations;
+- partial-aware as-of reports with explicit Analysis/Market/Financial/Macro/Portfolio
+  data timestamps, confidence, unknowns, evidence identifiers, and calculation lineage;
+- deterministic conditional review for materiality, low confidence, conflicts,
+  stale/unknown critical inputs, unsupported requests/models, material news/rumor,
+  and strategy-impact triggers; an independent reviewer callback remains optional.
 
-No server, generic DAG, outbox, research cache, web retrieval, market-price or
-FX lookup, market valuation, tax-lot engine, or portfolio-performance engine is
-introduced by this slice. Phase 3 records book state only; valuation and
-research remain deferred.
+- final MVP acceptance regression spanning unit/integration/adversarial seams;
+- executable frozen-architecture invariants plus validated backup/restore drill;
+- cross-phase checks that research/report flows cannot mutate `personal.db` and future observations cannot become current-value claims.
+- final fixed-pipeline coverage for all seven Request Modes and explicit non-posting scenario boundaries;
+- end-to-end Provider → Evidence → Asset Analysis → Calculation Lineage → Report/Review validation;
+- live selected-equity bridge from Provider/Web Research through financial observations into fundamental/valuation calculations, with a structured Codex web-hit bundle adapter;
+- release hardening that rejects repo-local runtime databases, SQLite sidecars, non-example `.env` files, and secret artifacts.
+
+No server, generic DAG, outbox, research cache, advanced tax-lot engine,
+portfolio-performance attribution engine, MCP layer, or mandatory independent reviewer
+is introduced by this slice. Web Research remains an adapter boundary and reports are
+run-local derived outputs rather than a personal Source of Truth.
 
 ## Run locally
 
@@ -48,7 +80,9 @@ python -m unittest discover -s tests -v
 ```
 
 For an editable install, run `python -m pip install -e .` in an isolated
-environment.
+environment. `OPENDART_API_KEY` is optional; when absent the provider reports
+`MISSING_CREDENTIAL` and the research flow can continue with public/keyless or
+Web Research fallback paths.
 
 ## Safety boundary
 
@@ -72,3 +106,10 @@ by append-only database triggers. Missing economic time, timezone, cash impact,
 or entity resolution remains pending/confirmation-only and cannot affect the
 confirmed projections. In-kind asset transfers are not supported. See
 [ARCHITECTURE.md](ARCHITECTURE.md) for the frozen invariants.
+
+
+Current implementation handoff: [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).
+Phase 7 acceptance record: [docs/PHASE7_ACCEPTANCE.md](docs/PHASE7_ACCEPTANCE.md).
+Final hardening record: [docs/PHASE8_FINAL_HARDENING.md](docs/PHASE8_FINAL_HARDENING.md).
+
+Live deep-research bridge: [docs/LIVE_DEEP_RESEARCH.md](docs/LIVE_DEEP_RESEARCH.md).

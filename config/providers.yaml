@@ -1,3 +1,24 @@
-version: 1
-providers: []
-
+version: 2
+providers:
+  - id: opendart
+    source_tier: 1
+    priority: 10
+    capabilities: [fundamentals]
+    credential_env: OPENDART_API_KEY
+    optional: true
+  - id: sec_companyfacts
+    source_tier: 1
+    priority: 10
+    capabilities: [fundamentals]
+    credential_env: null
+  - id: kraken_public
+    source_tier: 3
+    priority: 30
+    capabilities: [current_price]
+    credential_env: null
+  - id: web_research
+    source_tier: 4
+    priority: 40
+    capabilities: [current_price, historical_price, fundamentals, fund_holdings, macro, news, fx]
+    credential_env: null
+    role: fallback

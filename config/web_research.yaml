@@ -1,5 +1,13 @@
-version: 1
+version: 2
 latest_as_of_required: true
 relevant_news_enabled: true
 deduplicate_event_clusters: true
-
+intents:
+  - LATEST_CURRENT_DATA
+  - LATEST_RELEVANT_NEWS
+current_price_forbidden_source_kinds:
+  - news_article
+  - search_snippet
+  - blog
+  - analyst_report
+  - undated_page

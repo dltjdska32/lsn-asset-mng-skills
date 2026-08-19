@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,6 +14,7 @@ from investment_stack.personal.paths import (
 
 
 class PersonalPathResolutionTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == "nt", "Windows path semantics require Windows")
     def test_windows_default(self) -> None:
         path = resolve_personal_db_path(
             system="Windows",

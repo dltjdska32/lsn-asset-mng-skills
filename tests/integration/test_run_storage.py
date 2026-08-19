@@ -216,7 +216,7 @@ class RunStorageTests(unittest.TestCase):
             raw = sqlite3.connect(manager.database_path)
             raw.execute(
                 "INSERT INTO schema_migrations VALUES (?, ?, ?, ?)",
-                (2, "unexpected", "2026-08-14T00:00:00+00:00", "unexpected"),
+                (999, "unexpected", "2026-08-14T00:00:00+00:00", "unexpected"),
             )
             raw.commit()
             raw.close()
