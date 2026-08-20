@@ -3,7 +3,7 @@
 The eight skill definitions under `skills/` are authoritative. Codex repository-local discovery uses byte-identical mirrors under `.agents/skills/`; after changing a skill, run `py scripts/sync_agent_skills.py`. The architecture invariant rejects drift.
 
 `investment-stack` is a local-first, deterministic runtime for evidence-based
-investment analysis. The canonical v1.3 architecture is frozen; implementation
+investment analysis. The canonical v1.3 architecture is frozen; v1.3.1 hardens current-quote fallback and Korean user-facing status rendering; implementation
 is proceeding in bounded phases.
 
 The current slice implements Phase 1 foundations, Phase 2 Storage Safety,

@@ -118,8 +118,8 @@ class Phase8FullStackIntegrationTests(unittest.TestCase):
                 sections=(valuation_section,),
             )
 
-            self.assertIn("Market Data As Of: 2026-08-14T09:59:00+00:00", result.report.markdown)
-            self.assertIn("Calculation lineage:", result.report.markdown)
+            self.assertIn("시장 시세 기준시각: 2026-08-14T09:59:00+00:00", result.report.markdown)
+            self.assertIn("계산 근거:", result.report.markdown)
             self.assertIn(str(analysis.valuation.metadata["calculation_id"]), result.report.markdown)
             self.assertEqual(before, file_digest(personal.database_path))
             self.assertEqual(state_version, run.fetch_phase6_context()["pinned_personal_state"]["state_version"])

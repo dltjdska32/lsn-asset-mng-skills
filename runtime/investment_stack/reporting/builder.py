@@ -8,6 +8,7 @@ from dataclasses import replace
 from datetime import datetime
 
 from investment_stack.evidence import RunDatabaseManager
+from investment_stack.reporting.display import ko_status
 from investment_stack.reporting.models import (
     Availability,
     Confidence,
@@ -217,35 +218,38 @@ class InvestmentReportBuilder:
     @staticmethod
     def _render(report: InvestmentReport, evidence_by_id: dict[str, dict[str, object]]) -> str:
         def shown(value: str | None) -> str:
-            return value if value else "UNKNOWN"
+            return value if value else "확인 불가"
 
         lines = [
             f"# {report.title}",
             "",
-            f"- Report Availability: **{report.availability.value}**",
-            f"- Confidence: **{report.confidence.value}**",
-            f"- Analysis As Of: {report.as_of.analysis_as_of} ({report.as_of.analysis_timezone})",
-            f"- Market Data As Of: {shown(report.as_of.market_data_as_of)}",
-            f"- Financial Data As Of: {shown(report.as_of.financial_data_as_of)}",
-            f"- Macro Data As Of: {shown(report.as_of.macro_data_as_of)}",
-            f"- Portfolio Data As Of: {shown(report.as_of.portfolio_data_as_of)}",
-            f"- Conditional Review: {'REQUIRED' if report.review_required else 'NOT TRIGGERED'}",
+            f"- 보고서 상태: **{ko_status(report.availability)}**",
+            f"- 정보 신뢰도: **{ko_status(report.confidence)}**",
+            f"- 분석 기준시각: {report.as_of.analysis_as_of} ({report.as_of.analysis_timezone})",
+            f"- 시장 시세 기준시각: {shown(report.as_of.market_data_as_of)}",
+            f"- 재무정보 기준시각: {shown(report.as_of.financial_data_as_of)}",
+            f"- 거시경제 기준시각: {shown(report.as_of.macro_data_as_of)}",
+            f"- 포트폴리오 기준시각: {shown(report.as_of.portfolio_data_as_of)}",
+            f"- 추가 검토: {'필요' if report.review_required else '불필요'}",
         ]
         if report.review_triggers:
-            lines.append("- Review Triggers: " + ", ".join(report.review_triggers))
+            lines.append("- 내부 검토 사유: " + ", ".join(report.review_triggers))
         for section in report.sections:
-            lines.extend(("", f"## {section.title}", f"Status: **{section.status.value}**"))
+            lines.extend(("", f"## {section.title}", f"상태: **{ko_status(section.status)}**"))
             if section.lines:
                 lines.extend(f"- {line}" for line in section.lines)
             else:
-                lines.append("- UNKNOWN")
+                lines.append("- 확인 불가")
             for evidence_id in section.evidence_ids:
                 row = evidence_by_id[evidence_id]
-                data_time = row.get("observed_at") or row.get("published_at") or row.get("event_time") or "UNKNOWN"
-                source = row.get("source_name") or row.get("provider_id") or "UNKNOWN_SOURCE"
-                lines.append(f"- Evidence `{evidence_id}` — {source}; data time: {data_time}; freshness: {row.get('freshness_status') or 'UNKNOWN'}")
+                data_time = row.get("observed_at") or row.get("published_at") or row.get("event_time") or "확인 불가"
+                source = row.get("source_name") or row.get("provider_id") or "출처 확인 불가"
+                lines.append(
+                    f"- 근거 `{evidence_id}` — {source}; 기준시각: {data_time}; "
+                    f"시세상태: {ko_status(row.get('freshness_status'))}"
+                )
             if section.calculation_ids:
-                lines.append("- Calculation lineage: " + ", ".join(f"`{cid}`" for cid in section.calculation_ids))
+                lines.append("- 계산 근거: " + ", ".join(f"`{cid}`" for cid in section.calculation_ids))
         return "\n".join(lines) + "\n"
 
     def _persist(self, report: InvestmentReport) -> None:

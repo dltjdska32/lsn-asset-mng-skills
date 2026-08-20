@@ -25,7 +25,7 @@ class Phase6AcceptanceTests(unittest.TestCase, Phase6RunFixture):
         self.assertEqual(result.report.availability, Availability.PARTIAL)
         self.assertEqual(result.report.confidence, Confidence.MEDIUM)
         self.assertIn("Current price: UNKNOWN", result.report.markdown)
-        self.assertIn("Market Data As Of: UNKNOWN", result.report.markdown)
+        self.assertIn("시장 시세 기준시각: 확인 불가", result.report.markdown)
 
     def test_material_stale_data_triggers_conditional_review(self):
         add_market(self.manager, freshness="STALE")
@@ -37,7 +37,7 @@ class Phase6AcceptanceTests(unittest.TestCase, Phase6RunFixture):
         )
         self.assertTrue(result.review.required)
         self.assertEqual(result.report.confidence, Confidence.LOW)
-        self.assertIn("Conditional Review: REQUIRED", result.report.markdown)
+        self.assertIn("추가 검토: 필요", result.report.markdown)
         self.assertIn("STALE", result.report.markdown)
 
     def test_strategy_is_reported_as_analysis_not_execution(self):

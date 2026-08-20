@@ -37,7 +37,7 @@ class Phase6UnitTests(unittest.TestCase, Phase6RunFixture):
             review=review,
         )
         self.assertEqual(report.as_of.market_data_as_of, "2026-08-14T09:59:00+00:00")
-        self.assertIn("Market Data As Of: 2026-08-14T09:59:00+00:00", report.markdown)
+        self.assertIn("시장 시세 기준시각: 2026-08-14T09:59:00+00:00", report.markdown)
 
     def test_stale_market_evidence_cannot_be_labeled_current(self):
         add_market(self.manager, freshness="STALE")

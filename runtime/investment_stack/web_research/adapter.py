@@ -40,7 +40,9 @@ class WebResearchAdapter:
         selected = self._freshness.latest_as_of(observations, analysis_as_of=analysis_as_of)
         if selected is None:
             return ProviderResult(self.name, ProviderCapability.CURRENT_PRICE, ProviderStatus.UNAVAILABLE, reason="no timestamped current-data web observation")
-        return ProviderResult(self.name, ProviderCapability.CURRENT_PRICE, ProviderStatus.AVAILABLE, (selected,))
+        # Keep all valid timestamped hits. EvidenceResearchStore performs latest-as-of
+        # selection and records source conflicts without averaging values.
+        return ProviderResult(self.name, ProviderCapability.CURRENT_PRICE, ProviderStatus.AVAILABLE, tuple(observations))
 
     def fetch_latest_data(
         self,
