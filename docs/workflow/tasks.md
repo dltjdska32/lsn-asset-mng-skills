@@ -1,5 +1,7 @@
 # 작업 상태표
 
+**최신 상태 — Codex Luna 복구 세션 병렬 시작:** 관리형 worktree 준비 ID 3개가 실제 task ID로 전환되지 않아, 다른 별도 worktree/branch에서 projectless Codex `gpt-6-luna` A/B/C 세 task를 생성했다. 실제 ID `01a0cd9c-71fc-7b93-a08b-60eba72d8d01` / `01a0cd9c-aff9-7122-b0cc-bd638dbf7f81` / `01a0cd9c-e908-7f30-9991-75cbd9d2004f`; `wait_threads`에서 세 작업 active/inProgress 확인. 각 기준 SHA/branch/worktree는 `handoffs/CODEX-TRANSFER-01.md`. 코드 변경·테스트 통과는 아직 미확인. 준비 ID가 뒤늦게 활성화되면 중복 작업을 중단하고 복구 세션만 인수한다.
+
 **최신 상태 — 사용자 모델·담당 변경:** Gemini 구현을 별도 Codex GPT-6 Luna 작업 A/B/C로 이관 요청. `handoffs/CODEX-TRANSFER-01.md`에 각 원 WIP SHA, 새 branch/worktree, 준비 client ID 기록. Gemini 재개 자동화 `gemini`는 PAUSED. 세 새 branch/worktree 생성은 확인했으나 create_thread가 실제 threadId를 아직 반환하지 않아 Codex 세션 실행·모델 적용·병렬 구현은 **미확인**. 기존 18:21 KST 포인터의 Gemini 재개 계획은 이력으로만 읽는다. 다음은 실제 task ID·cwd·모델·실행 로그 확인 후 각 수정 검증 및 후속 도메인/통합/새 독립 검토/새 최종 검증이다.
 
 **최신 상태 — 2026-09-23 18:21 KST:** 제공자 한도 대기 중 A/B/C 고정 체크포인트의 독립 재검증 완료. `handoffs/PRE-RESUME-01.md` 및 신규 배정 CONTRACT-FIX-06 / IMPL-B-FIX-03 / IMPL-C-FIX-03 참조. A 49837ea의 별도 Codex typed-gate AUDIT-04 12개 중 10 PASS/2 FAIL(총괄 동일 재현), B d2db94f의 실제 provider 공개응답 오프라인 replay 6개 중 5 PASS/1 FAIL(BTC/EUR가 BTC/USD 가격 수용), C 377dbb4의 기존 26tests/2 FAIL 원인 확인. 셋 다 WIP이며 root runtime 통합·새 전체 독립 검토·다른 새 최종 검증은 아직 미완료. Gemini는 21:40 KST 이후 재개, 자동화 `gemini` ACTIVE.

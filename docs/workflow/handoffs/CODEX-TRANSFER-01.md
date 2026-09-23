@@ -10,6 +10,18 @@
 
 세 새 worktree에서 시작 HEAD를 직접 조회하고 서로 다른 branch로 `git switch -c`한 결과를 확인했다. `create_thread`는 아직 실제 `threadId` 대신 client 준비 ID만 반환했으므로 **새 Codex 세션 실행·모델 적용·병렬 활동은 미확인**이다. 준비 완료 뒤 실제 task ID, cwd, 모델, 작업·검증 로그를 이 문서와 tasks에 기록한다. 준비가 실패하면 중복 생성 전 상태를 확인하고 복구한다.
 
+## 실행 가능한 복구 세션
+
+관리형 worktree 준비 요청은 실제 task ID로 전환되지 않았다. 같은 폴더에 다른 작업을 연결하면 뒤늦게 준비 완료한 세션과 충돌할 수 있으므로, 각 Gemini WIP SHA에서 아래 **다른** 세 worktree/branch를 만들고 projectless Codex 작업을 생성했다. `create_thread`는 `model=gpt-6-luna`를 수락하고 실제 thread ID를 반환했다. `wait_threads` 즉시 상태에서 세 task 모두 `active/inProgress`, 시작 메시지와 대상 worktree 점검이 확인됐다. 따라서 새 Codex 구현 작업 세 개의 **실제 병렬 시작**은 확인됐지만 코드 변경·검증 통과는 아직 확인되지 않았다.
+
+| 작업 | 실제 Codex task ID | 새 branch / worktree | 기준 SHA |
+|---|---|---|---|
+| A | `01a0cd9c-71fc-7b93-a08b-60eba72d8d01` | `codex/luna-a` / `C:/Users/lsn/lsn-asset-mng-worktrees/codex-luna-a` | `49837ea3072914a00a7c65eff484789ea94d050a` |
+| B | `01a0cd9c-aff9-7122-b0cc-bd638dbf7f81` | `codex/luna-b` / `C:/Users/lsn/lsn-asset-mng-worktrees/codex-luna-b` | `d2db94f5d46b6e2ea04d28be0384d8b0400a923b` |
+| C | `01a0cd9c-e908-7f30-9991-75cbd9d2004f` | `codex/luna-c` / `C:/Users/lsn/lsn-asset-mng-worktrees/codex-luna-c` | `377dbb4e7c3f29bfd011c049acf4dd9dd98def0f` |
+
+관리형 준비 ID 3개는 여전히 실제 task ID가 확인되지 않았다. 뒤늦게 생성되면 별도 branch에 있는 중복 구현을 중단/보관하고 위 실제 task 세 개만 통합 대상으로 삼는다. 모델은 create_thread 인자 수락으로 확인했고, 실행 로그의 모델 표시는 추가 확인 대상이다. projectless task의 기본 cwd는 결과 폴더라서 코드 작업은 표의 대상 worktree를 명시했다. 파일시스템 쓰기가 sandbox 밖이면 각 task가 정확한 경로로 제한된 승인을 요청하도록 지시했다.
+
 배정 기준은 root `docs/workflow/assignments/CONTRACT-FIX-06.md`, `IMPL-B-FIX-03.md`, `IMPL-C-FIX-03.md`로 유지한다. 문서 안의 Gemini 담당과 21:40 KST 한도 문구는 이 전환에 한해 Codex GPT-6 Luna 담당/즉시 진행으로 대체된다. 파일 소유권·요구사항·검증 조건은 그대로다. A 공통계약 인수 전 B/C는 독립 소유 파일만 수정한다. 이후 IMPL-A, BRIEF, INTEGRATE, PACKAGE도 담당 Codex GPT-6 Luna 작업에서 진행하고, 전체 독립 검토와 최종 검증은 구현 작업과 서로 다른 새 Codex 작업으로 유지한다.
 
 개인 DB·인증정보·자동 주문·원격 push/deploy는 사용하지 않는다. 이전 Gemini 체크포인트나 독립 gate 부분 검토를 전체 구현·최종 검증으로 표시하지 않는다.
