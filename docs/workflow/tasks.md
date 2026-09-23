@@ -1,5 +1,7 @@
 # 작업 상태표
 
+최신 포인터(2026-09-23 08:35UTC): Gemini A `fdd64f05e3c8eb717a6ed2444cc5fb4b9727559e`에서 CONTRACT-FIX-04 실행 중(08:34:48UTC 시작, supervisor6000, conversation c2d86984-7d91-4fba-8723-9b3ec14ad098). FIX-03은 원 독립probe19PASS/계약74개중1FAIL, 추가 실제 DB반례5FAIL로 인수 미완료. 저장/evidence/fullscope를 A에 회송했다. 독립 감사 세션01a0cd29-c54f-7020-a9ec-abe51921f3ee는 고정 fdd64f0에서 CA03/04/07 잔여를 CONTRACT-AUDIT-02로 확인 중. root 런타임 통합 및 IMPL-A/B/C 본 병렬 구현은 아직 대기. 아래08:21 이전 포인터는 이력이다.
+
 ## 현재 실행 상태 — 2026-09-23 후속 승인
 
 아래 초기 실행 표는 이력이다. 후속 사용자가 초기 범위 제한을 해제하고 설정부터 Gemini 3세션 병렬 구현·새 Codex 독립 검토·수정·다른 새 Codex 최종 검증까지 승인했다. 현 총괄은 `01a0ccca-ac21-7d93-8bd9-9900ee3ea7cf`이며 기존 총괄은 조회 시 idle이었다. 현재 설계 기준은 DESIGN-2026-09-23-v0.1, 요구사항은 REQ-2026-09-23-v1이다.
@@ -27,6 +29,10 @@
 공개 live 수집·TLS 진단은 source-checks-2026-09-23.md에 별도 기록. truststore0.10.4 scoped SSLContext로 TLS/hostname 검증 유지 상태에서 SEC CompanyFacts·submissions, Naver basic/OHLCV, Yahoo chart, Coinbase ticker HTTP200 확인. Investing와 SEC archive 원문은403. 전체 수집→계산 E2E 성공과 혼동하지 않는다.
 
 CONTRACT-AUDIT-01: 같은 별도 검토 세션이 고정 `73d376e32437bf78f8534d040c68db106e59acb7` 작업 폴더 C:/Users/lsn/lsn-asset-mng-worktrees/contract-audit를 직접 감사했다. 추가 P1 CA01–07, 보고서·인계와 scripts/workflow/contract-audit-probes.py를 인수했다. 검토자 자신의 실행은18FAIL/1BLOCKED, 총괄이 이후1462fb6에 실행한 것은17FAIL/2PASS다. 부정경계 감사 결과이며 전체 suite 통과 수가 아니다. 신뢰 가능한 canonical evidence와 전체 binding 대조·strict bool/enum/type·gate·저장 재개·lossless adapter·semantic scope를 FIX-03으로 회송했다. 전체 구현 후 새 REVIEW-CODE-01/VERIFY-01은 아직 미실행이다.
+
+현재 실행 포인터(2026-09-23 08:21UTC): root 통합 브랜치 `codex/autonomous-integration`에는 workflow/자동화 문서만 반영되어 있으며 Gemini runtime commit은 아직 통합하지 않았다. A 브랜치 최신 확정코드는 `1462fb682c10364fb9510b42593ac352b6dca523`, 그 위에서 CONTRACT-FIX-03 작성 중. A conversation `c2d86984-7d91-4fba-8723-9b3ec14ad098`, 실행 receipt `gemini-a/workspace/runs/CONTRACT-FIX-03.receipt.json`, supervisor PID13304, 08:17:51UTC 시작. B/C는 SETUP/PREP 완료 후 계약 인수 대기. 계약 감사 Codex는 완료·idle이며 후속 전체 REVIEW-CODE/VERIFY는 각각 새 작업으로 생성한다. 사용자의 자율 진행 승인은 유지되므로 추가 지시를 기다리지 않는다.
+
+다음 실행 순서: FIX-03 종료/파일 소유 확인 → 같은 worktree의 test_contract 및 독립 probe → 필요한 Gemini 수정 → 전체회귀 → 계약 커밋/통합 → root가 검토한 같은 계약과 최신 배정을 A/B/C 각각 전달(복사 문서와 기존 인계를 보존) → IMPL-A/B/C 동시 실행과 receipt 시간대 확인 → 분석/BRIEF/INTEGRATE/PACKAGE → 새 REVIEW-CODE → 수정 → 다른 새 VERIFY. 실제 오류가 남아 있으면 준비/테스트 수를 완료로 바꾸지 않는다.
 
 ---
 

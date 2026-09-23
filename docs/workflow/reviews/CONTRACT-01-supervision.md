@@ -24,3 +24,8 @@
 - 2차 수정1462fb6: contract55개, errors2(bound_value 필드 오타·cross-run fixture의 FK 위반). independent memory probes를 같은 수정본에 실행:17FAIL/2PASS. nested kind와 manager import는 해결됐으며 남은 불변식은 CONTRACT-FIX-03으로 회송.
 - 1462fb6의 별도 고정 폴더 contract-test-1462에서 전체 unittest discover 실행:342개,47.748초,errors2. 두 오류는 위 계약 테스트와 동일했고 기존287개 회귀에서 추가 실패는 없었다. Python3.14.6 저장소 venv, PYTHONPATH는 해당 고정 worktree/runtime로 확인했다. 수정 중인 gemini-a 파일은 이 전체 검증에 사용하지 않았다.
 - 각 실행 raw log/receipt는 해당 worktree의 ignored workspace/runs에 보존. 실제 개인DB·자동주문·원격배포 수행 없음. full pass 또는 공통계약 인수로 간주하지 않는다.
+# CONTRACT-FIX-03 결과 추가
+
+기준1462fb6→수정 fdd64f05e3c8eb717a6ed2444cc5fb4b9727559e. Gemini A 실행08:17:51–08:31:20UTC, exit0/denied0. 총괄 실측 계약74tests 중1FAIL(정상 SlotSpec fixture의 instrument 누락), 독립 원probe19PASS. 합성 DB 추가반례5FAIL: 값없는 evidence가 임의가격 snapshot 승인, 불완전 MarketQuote envelope가 typed evidence로 저장, counter/tail mismatch·missing history envelope·dangling pointer가 read에서 수락. scripts/workflow/contract-storage-probes.py에 재현을 보존했다. 최초 검사스크립트의 SQLite close 누락으로 temporary cleanup 오류가 있었으며 contextlib.closing 수정 후 같은5FAIL 확인. 실제 개인DB 사용 없음.
+
+FIX-03 인계의 '전수 해소/100% 정합'은 실행으로 확인된 결론이 아니므로 채택하지 않는다. CA01/02/06과 request fullscope를 CONTRACT-FIX-04로 A에 회송. 다른run DB 전체스캔은 필요하지 않으므로 제거 지시. 기존 감사 Codex는 별도 고정 fdd64f0에서 CA03/04/07 잔여를 CONTRACT-AUDIT-02로 확인 중이며 A 저장수정과 파일 충돌 없음. 통합과 B/C 본구현은 아직 대기.
