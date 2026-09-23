@@ -1,0 +1,53 @@
+# 설계 결정과 미결정
+
+버전: DESIGN-2026-09-23-v0.1. 작업 DESIGN-01. 요구사항 REQ-2026-09-23-v1.
+코드 기준: `3d4a95ba33d582f67a99de7b410b160e62645961`. 갱신: 2026-09-23.
+
+이 기록은 사용자가 이미 정한 경계와 설계자의 제안을 구분한다. 2026-09-23 후속 지시가 첫 실행 제한을 해제하고 이 설계에 기반한 구현·검토·최종 검증을 승인했다. 아래 첫 실행 한도는 역사 기록이며 현재 범위는 AGENTS.md와 tasks.md가 우선한다. 투자 정책의 미확정 수치는 임의 확정하지 않는다.
+
+## 이미 정해진 경계
+
+| ID | 상태/출처 | 내용 |
+|---|---|---|
+| B01 | 사용자/AGENTS 지침 | 기존 8개 스킬·7개 모드·고정 파이프라인·personal.db/run.db 분리를 기본으로 유지 |
+| B02 | 사용자/AGENTS 지침 | 설계·개발 독립 검토·최종 검증은 다른 새 세션. 이번은 설계만. 런타임 optional reviewer와 별개 |
+| B03 | 사용자/AGENTS 지침 | 개인 데이터·credential을 공유 문서/프롬프트/로그/저장소에 기록하지 않음; 실제 개인 DB 개발 테스트 금지; 자동 주문 제외 |
+| B04 | DESIGN-01 복구 배정 | 동일 원본 폴더에서 문서별 단일 작성자. design/decisions/DESIGN-01 handoff만 편집. 후속 Gemini 병렬은 별도 branch/worktree 필수 |
+| B05 | 사용자 요구 R08–13 | 차트·13F 가중치와 신호·안전마진·위험/규모 수치는 미확정. 참조의 예시값을 production 기본값으로 채택하지 않음 |
+| B06 | 사용자/AGENTS 지침 | skills/가 원본, mirror 동기화는 승인된 후속 구현. 설정 안내는 총괄이 한 번에 한 단계씩 제공 |
+| B07 | 2026-09-23 사용자 후속 지정 | Gemini 구현 모델 선택은 **3.8 Flash, High**(사용자 표기: `3.8flash high`). 실제 CLI 모델 식별자·High 옵션 지원 여부는 별도 확인 |
+
+## 제안과 미결정 목록
+
+| ID | 상태 | 제안/질문·이유 | 영향·검증 | 결정 주체/시점 |
+|---|---|---|---|---|
+| D01 | 검토 대기 | 차트·13F는 기존 자산 분석 내부 runtime 모듈로 배치; 별도 스킬·모드 불필요 | 8개 유지. fundamental은 기관 보유 문맥, valuation/개인위험은 결과 소비, report는 출처 설명. 새 스킬 필요 시 발견성/동기화/invariants 영향 재검토 | 설계 독립 검토 후 사용자/총괄, 착수 전 |
+| D02 | 검토 대기 | 목적별 EligibilityDecision/SelectedInputSet 공통화. provider 응답 성공과 계산 가능을 분리 | R01–05/07/12/16; 기존 SelectedEvidence 호환·재선택 제거·permutation/동률충돌 테스트 | 공통 계약 담당 지정 후 승인 |
+| D03 | 미확정 | typed payload를 기존 run metadata/observations에 연결하는 최소안. 필요한 경우 run-only migration/컬럼·테이블 확장 | FinancialFact/Bar/13F 크기·조회/계보 요구 검증. 개인 schema 변경 없음. 기존 migration checksum 보존; physical schema 결정 없이는 병렬 구현 금지 | CONTRACT-01, 설계 검토 시 |
+| D04 | 미확정 | 공개시각 분리, date-only 구간 상한 기준 적격성, 정정 vintage 보존 | SEC filed 날짜를 자정 공개시각으로 발명 금지. 13F acceptance/정정 체인·guidance 대상기간 fixture 필요 | A/C와 계약 담당, 공통 계약 확정 전 |
+| D05 | 미확정 | 시장/목적별 DELAYED·LAST_VALID_CLOSE 허용과 캘린더 검증 | 현재 기본 20분/1일을 자동 승계하지 않음. 장중/시간외/휴장/거래정지/24x7 구분, 실제 마지막 세션 확인 | 사용자 목적 + B/A 검증, 가격 계산 활성화 전 |
+| D06 | 미확정 | R06 후보(공식·네이버페이증권·Investing.com·현지 대체)의 순서/coverage 확정 | 접근·필드·지연·권한·호출 제한을 실제 확인해야 함. 미확인 도구/API 이름은 구현 성공 아님 | B, 승인된 live 실증 시 |
+| D07 | 미확정 | indicator seed/공식은 design §4 제안. n/EMA/MACD/RSI 기간·추세/돌파 파라미터·신호 가중치는 추후 결정 | 최소 표본·0 분모·prefix invariance, 비용 포함 기준 모델 대비 기간 외 검증. 미승인 시 계산 설명만 가능, 매매 신호 없음 | 사용자/검토자, R08 활성화 전 |
+| D08 | 미확정 | 투자 review 이름을 유지할지 충돌 방지 이름으로 변경할지 | 변경하면 원본·mirror·UI·EXPECTED_SKILLS·문서·테스트를 함께 수정; 8개 수는 유지. 지금 이름 변경 안 함 | 사용자/총괄, R15 구현 전 |
+| D09 | 미확정 | valuation의 FCFF/FCFE·가정 출처·scenario grid·모델 통합 규약 | 순부채/현금 중복·주식 수/기간 오류 제거. analyst 가정은 사실로 위장 금지. 고정 beta/ERP/terminal defaults 불채택 | R09 담당+검토자, 모델 입력 계약 전 |
+| D10 | 미확정 | 13F schema vintage·value scale·amendment scope·identity mapping·기관군 | 공개 원문/XSD와 실제 fixture로 확인; SH/PRN/put-call·confidential omissions/중복 관리자 처리. 법규 최신성/접근성은 이번 미확인 | C와 계약 담당, R12 구현 전 |
+| D11 | 미확정 | 13F 점수 feature/감쇠·가중치·채택 허용치와 point-in-time dataset | 사전 등록한 baseline/기간 외/비용/누출/coverage 기준 모두 충족 후 채택. 현재 UNVALIDATED, 매매 반영 금지 | 사용자/독립 검토자, R13 검증 전후 분리 |
+| D12 | 미확정 | 신규/추가매수 안전마진·분할 규칙·위험 예산·집중/현금 buffer·축소 조건 | 개인 설정 없는 수량 산출 금지. 거래단위/FX/수수료/tranche 합계 검증. 예시는 사용자 정책이 아님 | 사용자 개인 정책 확인 후 BRIEF-01 |
+| D13 | 검토 대기 | 고정 dispatcher+execute API, UPDATE_THEN_ANALYSIS의 제한된 순차 envelope | 7개 모드 유지, 질문/부정/주문≠거래 사실. draft 제외, receipt 후 pin, idempotency, refresh non-posting | R14 담당/독립 검토, 통합 전 |
+| D14 | 미확정 | 설치·릴리스·package/schema/config 버전과 UI mirror 배포 범위 | Windows venv 같은 python/tzdata·wheel·config·8개 discovery 확인. 참조 패키지/벤더 설치는 별도 승인 범위 | 총괄/R15, 실제 설치 안내는 한 단계씩 |
+| D15 | 모델 선택 확정 / 실행 환경 미검증 | 사용자는 Gemini **3.8 Flash, High**를 지정했다(B07). READY는 사용자 보고이며 실제 CLI 모델 식별자·High 지원·도구 권한·동시성은 아직 미검증 | 지정 모델을 임의 변경하지 않음. A/B/C 3개 동시 실행 가정 금지. 전역 권한 완화 금지; 격리된 설정 실증 결과에 맞춰 병렬도 결정 | 사용자+총괄 SETUP-01 |
+| D16 | 검토 대기 | 공통 파일 담당 CONTRACT-01을 먼저 지정하고 A/B/C를 전용 파일로 분리 | registry/factory/DB/exports/config는 단일 writer. deep_research는 A→통합 순차 소유권 인수. 테스트 파일 포함 | 총괄, 구현 배정 전 |
+
+## 참조에서 그대로 채택하지 않은 판단
+
+- 일부 Daloopa 문서는 beta/Rf/ERP/terminal/peer 값을 sensible defaults로 채운다. 현재 요구 R01–05/09에 따라 출처 없는 시장값은 제외하고 가정도 provenance를 요구한다.
+- guidance의 +1분기 또는 Q4→다음FY는 보편 규칙이 아니다. 원문 대상 기간을 계약에 포함한다. 정성 전망을 임의 숫자로 환산하지 않는다.
+- OCF-capex를 항상 FCFF로 보거나 EV에서 net debt 차감 후 cash를 다시 더하는 예시는 사용하지 않는다. 모델별 현금흐름과 가치 bridge를 검증한다.
+- diluted weighted shares를 시총용 기말 shares로 자동 대체하거나 EPS/주식 수를 분기 합산하는 방법은 수정한다.
+- 이익 전년비 증가를 consensus beat로, 과거 평균 beat를 실제 시장 whisper로, 기관 신고 평가액을 매입원가로 해석하지 않는다.
+- 차트/13F/재무 지표의 고정 우열·집중도·매매 수치와 무조건 낙관/비관 확률은 검증 전 보류한다. 지표 공식의 수학적 상수와 투자 판단 임계값은 구분한다.
+- 참조의 브랜드/HTML·Excel·PPT 산출물·전용 도구 사용 지시는 방법론 분석 대상이다. 설치/네트워크/파일 생성 지시로 실행하지 않았다.
+
+## 변경 관리
+
+설계 변경은 결정 ID, 요구사항, 이유, 변경 contract/API/파일, 검증 영향, 새 버전/hash, 수신할 작업 ID를 남긴다. 총괄이 검토된 사본을 각 worktree에 전달하고 수신 확인 전 종속 구현을 진행하지 않는다. requirements/tasks/기준 commit 배정은 총괄 소유이며 설계자가 덮어쓰지 않는다. 승인 상태를 자동으로 APPROVED로 올리지 않는다.
