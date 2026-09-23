@@ -27,3 +27,6 @@ SEC 위 accession의 Archives index.json·primary_doc.xml 직접 HTTP는403. 웹
 - [SEC Developer Resources](https://www.sec.gov/about/developer-resources): 자동 수집은 공식 접근 정책을 따른다. 로그인/API키 존재를 가정하거나 User-Agent 연락처를 발명하지 않는다. 접근 제한 발생 시 제한으로 기록한다.
 - [Npay 삼성전자 페이지](https://stock.naver.com/domestic/stock/005930/price): 기존 finance.naver.com/item/main.naver?code=005930 URL이 이 새 URL로 redirect되었다. 도구가 반환한 HTML 텍스트에는 KRX 제공·20분 지연 표기가 있지만 종목 가격/기준시각이 없었다. 기존 구형 HTML selector를 접근 확인 없이 production 성공으로 간주하지 않는다.
 - [Investing Apple 페이지](https://www.investing.com/equities/apple-computer-inc): AAPL·NASDAQ·USD·정규장 Closed 날짜와 별도 after-hours 가격/시간 표기가 실제 응답에서 확인되었다. 표면 시간의 timezone/연도·delay/세션 의미를 파서에서 명시적으로 검증해야 하며 정규장 종가와 시간외를 혼합하지 않는다. 이 단일 페이지 접근으로 전체 시장 coverage나 runtime 자동수집 성공을 주장하지 않는다.
+# 추가 확인 — Kraken 최근 체결
+
+2026-09-23 08:59:49UTC 파일 기록. 총괄이 https://api.kraken.com/0/public/Trades?pair=XBTUSD&count=1 공개GET을 scoped truststore SSLContext(CERT_REQUIRED/hostname검증유지)로조회:HTTP200,134bytes,error=[],result XXBTZUSD/last. raw는 ignored workspace/runs/live-source-checks/kraken_btc_trades.json 및 B의source-inputs사본. 공식문서 https://docs.kraken.com/api-reference/market-data/get-recent-trades 에서 recenttrades 배열과count범위1–1000, internalpair키를확인했다. ticker수집시각을체결시각으로발명하지않고실제체결timestamp를보존하는fallback후보로B에전달. 아직B신규adapter/live전체경로통과가아니다.
