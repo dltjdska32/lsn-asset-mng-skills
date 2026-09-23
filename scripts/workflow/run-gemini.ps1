@@ -19,6 +19,7 @@ $taskReceipt = [ordered]@{
 Push-Location -LiteralPath $taskDirectory
 try {
     $taskReceipt.baseCommit = (git rev-parse HEAD)
+    $taskPrompt = "Execution assignment: $RunId. Verified base commit: $($taskReceipt.baseCommit). Assigned worktree: $taskDirectory. This exact base supersedes any placeholder base in the assignment. Read and write only the assigned worktree files. Record this base in the handoff.`n`n" + $taskPrompt
     $taskReceipt | ConvertTo-Json | Set-Content -LiteralPath "$taskOutput/$RunId.receipt.json" -Encoding utf8
     & 'C:/Users/lsn/AppData/Local/agy/bin/agy.exe' --model gemini-3.8-flash-high --effort high --mode accept-edits --conversation $ConversationId --output-format json --log-file "$taskOutput/$RunId.log" --print $taskPrompt > "$taskOutput/$RunId.json"
     $taskExitCode = $LASTEXITCODE

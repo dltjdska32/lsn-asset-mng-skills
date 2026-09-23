@@ -8,7 +8,7 @@
 |---|---|---|---|
 | SETUP-02 | 총괄 / workflow 상태·배정·연결 증거 | 사용자 후속 승인 | 연결 probe 완료. 세 conversation ID·모델 생성·파일 read/write·동시 시간대 확인, handoffs/SETUP-02.md. 구현 병렬은 후속 단계 |
 | REVIEW-DESIGN-01 | 새 Codex / reviews/REVIEW-DESIGN-01.md | 설계 기준 사본 68fab98 | 완료. 별도 세션 01a0cd29-c54f-7020-a9ec-abe51921f3ee, P1 8건·16 자체테스트·합성반례. 수정계약 채택, 구현 검증과 구분 |
-| CONTRACT-01 | Gemini A / contracts/** 및 evidence/manager.py·providers/models.py 호환 확장·신규 계약 테스트 | 독립 검토 수정 계약 | 최초 결과 f1b9caa, 32계약테스트 OK이나 총괄의 unknown-kind/missing dimension·period/metadata tamper 반례 실패. CONTRACT-FIX-01 A 수정 중. 테스트·commit 전 B/C 구현 시작 금지 |
+| CONTRACT-01 | Gemini A / contracts/**·evidence/manager.py·providers/models.py·providers/contract_adapters.py·신규 계약 테스트 | 독립 검토 수정 계약 | 최초 f1b9caa(32테스트 OK, 별도반례 실패) → 73d376e(37테스트 중2fail/10error) → 1462fb6(55테스트 중2error, 독립반례17FAIL/2PASS). CONTRACT-FIX-03 A 수정 중. 계약 인수 전 B/C 본구현 대기 |
 | IMPL-A, ANALYSIS-09 | Gemini A / design §9의 A·R09 파일 및 A 전용 테스트 | CONTRACT-01 | 대기. R01–05·09, 현재 경로 연결과 적격성·계보 회귀 |
 | IMPL-B, ANALYSIS-08 | Gemini B / design §9의 B·R08 파일 및 B 전용 테스트 | CONTRACT-01 | 대기. R06–08, 실제 source 접근과 fixture 구분 |
 | IMPL-C, ANALYSIS-13 | Gemini C / design §9의 C·R13 파일 및 C 전용 테스트 | CONTRACT-01 | 대기. R12–13, 공개시점·정정·UNVALIDATED gate |
@@ -25,6 +25,8 @@
 2026-09-23 후속 실행: Antigravity print는 외부 worktree read_file 및 read_url을 soft-deny하면서 SUCCESS/빈 response를 반환함을 확인했다. driver가 denied_actions와 실제 응답까지 검사하도록 수정했다. 검토 문서를 자기 worktree로 복사하고 외부수집은 총괄이 수행하여 범위를 좁힌 뒤 A 수정 재개, B/C의 로컬 PREP는 exit0·denied0·실제 인계 작성 완료(07:52:47–07:54:09UTC). 전역 승인 설정 변경 없음. B/C runtime 구현은 아직 시작하지 않았다.
 
 공개 live 수집·TLS 진단은 source-checks-2026-09-23.md에 별도 기록. truststore0.10.4 scoped SSLContext로 TLS/hostname 검증 유지 상태에서 SEC CompanyFacts·submissions, Naver basic/OHLCV, Yahoo chart, Coinbase ticker HTTP200 확인. Investing와 SEC archive 원문은403. 전체 수집→계산 E2E 성공과 혼동하지 않는다.
+
+CONTRACT-AUDIT-01: 같은 별도 검토 세션이 고정 `73d376e32437bf78f8534d040c68db106e59acb7` 작업 폴더 C:/Users/lsn/lsn-asset-mng-worktrees/contract-audit를 직접 감사했다. 추가 P1 CA01–07, 보고서·인계와 scripts/workflow/contract-audit-probes.py를 인수했다. 검토자 자신의 실행은18FAIL/1BLOCKED, 총괄이 이후1462fb6에 실행한 것은17FAIL/2PASS다. 부정경계 감사 결과이며 전체 suite 통과 수가 아니다. 신뢰 가능한 canonical evidence와 전체 binding 대조·strict bool/enum/type·gate·저장 재개·lossless adapter·semantic scope를 FIX-03으로 회송했다. 전체 구현 후 새 REVIEW-CODE-01/VERIFY-01은 아직 미실행이다.
 
 ---
 

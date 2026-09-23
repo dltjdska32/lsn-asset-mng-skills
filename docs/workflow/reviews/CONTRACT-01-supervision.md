@@ -17,3 +17,10 @@
 - 공통 DTO의 decode는 snapshot/calculation 일부만 수동 지원하고 financial/bar/13F typed roundtrip과 unknown field 검증이 없다. bool('false') 같은 강제 변환 금지.
 
 판정: CHANGES_REQUIRED. 실행 기록은 32 pass와 위 세 actual counterexample, 나머지는 static finding으로 구분. 후속 1차 수정이 이 반례와 독립 리뷰 F01–F07을 충족해야 계약 baseline을 공유한다.
+
+## 후속 직접 실행
+
+- 최초 구현 commit f1b9caa. 1차 수정73d376e: 37개 contract 테스트, failures2/errors10. import와 중첩 wire/호출 API 불일치. 새 독립 CONTRACT-AUDIT-01에 이 고정 SHA를 전달했다.
+- 2차 수정1462fb6: contract55개, errors2(bound_value 필드 오타·cross-run fixture의 FK 위반). independent memory probes를 같은 수정본에 실행:17FAIL/2PASS. nested kind와 manager import는 해결됐으며 남은 불변식은 CONTRACT-FIX-03으로 회송.
+- 1462fb6의 별도 고정 폴더 contract-test-1462에서 전체 unittest discover 실행:342개,47.748초,errors2. 두 오류는 위 계약 테스트와 동일했고 기존287개 회귀에서 추가 실패는 없었다. Python3.14.6 저장소 venv, PYTHONPATH는 해당 고정 worktree/runtime로 확인했다. 수정 중인 gemini-a 파일은 이 전체 검증에 사용하지 않았다.
+- 각 실행 raw log/receipt는 해당 worktree의 ignored workspace/runs에 보존. 실제 개인DB·자동주문·원격배포 수행 없음. full pass 또는 공통계약 인수로 간주하지 않는다.
