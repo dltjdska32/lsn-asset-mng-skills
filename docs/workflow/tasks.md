@@ -1,5 +1,7 @@
 # 작업 상태표
 
+**최신 상태 — 2026-09-23 18:10 KST: Gemini 외부 사용량 한도로 중단.** 세 프로세스는429 재시도 후exit3으로모두종료. 자동화`gemini` ACTIVE,21:40 KST이전호출금지/매시45분확인으로21:45 KST부터재개예정. 상세인계는 handoffs/QUOTA-01.md가현재권위다. A49837ea/Bd2db94f/C377dbb4의WIP체크포인트보존. A99tests17ERROR, B25PASS, C26tests2FAIL. 연결·세병렬코드작성은실제로확인했지만전체통합·새전체독립검토·다른새최종검증은미완료. 아래진행중포인터는이력이다.
+
 최신 포인터(08:53UTC): 첫3Gemini병렬구현 실행완료, handoffs/PARALLEL-01.md의 실제교집합약298초/각코드버전확인. 전체인수는아님. A84633e5에서CONTRACT-FIX-05, B82310ef에서IMPL-B-FIX-01, C97db90d에서IMPL-C-FIX-01을각같은conversation으로다시병렬실행중. A계약84중17ERROR/추가storage5PASS, B23중1FAIL1ERROR+실제source반례3개, C8중1FAIL1ERROR. 독립Codex는고정84633e5의CA01/02/06만CONTRACT-AUDIT-03으로검토중. rootruntime통합없음; IMPL-A/BRIEF/INTEGRATE/PACKAGE/최종새REVIEW/VERIFY는미실행. 다음은각수정종료→담당테스트·반례→필요재수정→공통확정및도메인통합이다.
 
 CONTRACT-AUDIT-02 완료: 독립 고정 fdd64f0, 28개 메모리probe9PASS/19FAIL/0BLOCKED, P1 네 묶음(codecstrictness, typedgate/calculation, typedoutputs/diagnostics, providersemantics/units). reports/handoff/scripts를 인수하고 CONTRACT-FIX-05 배정 작성(아직 미실행). 저장FIX-04와 분리해 확인했으며 원주문/renderer/storage 우회까지 증명한 것으로 확대하지 않는다. 감사세션은idle; 이후 전체코드검토/최종검증은 각각새세션유지.
