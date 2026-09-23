@@ -1,5 +1,7 @@
 # 작업 상태표
 
+**최신 상태 — 2026-09-23 18:21 KST:** 제공자 한도 대기 중 A/B/C 고정 체크포인트의 독립 재검증 완료. `handoffs/PRE-RESUME-01.md` 및 신규 배정 CONTRACT-FIX-06 / IMPL-B-FIX-03 / IMPL-C-FIX-03 참조. A 49837ea의 별도 Codex typed-gate AUDIT-04 12개 중 10 PASS/2 FAIL(총괄 동일 재현), B d2db94f의 실제 provider 공개응답 오프라인 replay 6개 중 5 PASS/1 FAIL(BTC/EUR가 BTC/USD 가격 수용), C 377dbb4의 기존 26tests/2 FAIL 원인 확인. 셋 다 WIP이며 root runtime 통합·새 전체 독립 검토·다른 새 최종 검증은 아직 미완료. Gemini는 21:40 KST 이후 재개, 자동화 `gemini` ACTIVE.
+
 **최신 상태 — 2026-09-23 18:10 KST: Gemini 외부 사용량 한도로 중단.** 세 프로세스는429 재시도 후exit3으로모두종료. 자동화`gemini` ACTIVE,21:40 KST이전호출금지/매시45분확인으로21:45 KST부터재개예정. 상세인계는 handoffs/QUOTA-01.md가현재권위다. A49837ea/Bd2db94f/C377dbb4의WIP체크포인트보존. A99tests17ERROR, B25PASS, C26tests2FAIL. 연결·세병렬코드작성은실제로확인했지만전체통합·새전체독립검토·다른새최종검증은미완료. 아래진행중포인터는이력이다.
 
 최신 포인터(08:53UTC): 첫3Gemini병렬구현 실행완료, handoffs/PARALLEL-01.md의 실제교집합약298초/각코드버전확인. 전체인수는아님. A84633e5에서CONTRACT-FIX-05, B82310ef에서IMPL-B-FIX-01, C97db90d에서IMPL-C-FIX-01을각같은conversation으로다시병렬실행중. A계약84중17ERROR/추가storage5PASS, B23중1FAIL1ERROR+실제source반례3개, C8중1FAIL1ERROR. 독립Codex는고정84633e5의CA01/02/06만CONTRACT-AUDIT-03으로검토중. rootruntime통합없음; IMPL-A/BRIEF/INTEGRATE/PACKAGE/최종새REVIEW/VERIFY는미실행. 다음은각수정종료→담당테스트·반례→필요재수정→공통확정및도메인통합이다.
