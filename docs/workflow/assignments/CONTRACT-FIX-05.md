@@ -1,0 +1,14 @@
+# CONTRACT-FIX-05 — 공통 codec·gate·typed output 인수
+
+Gemini A, REQ-v1/실행v0.2, 현재 계약 소유권 유지. 실행 머리말의 확정 SHA가 기준. file read/write만, shell/web/git/pip/외부폴더 금지. 검토·probe 수정금지, handoffs/CONTRACT-FIX-05.md만 작성. tests/unit/test_contract_gate_audit.py 및 소유 계약 테스트 수정 허용. A의 FIX-04 결과는 유지하며 B/C parser 구현과 공통파일 소유 충돌 없음. 필요한 공개 API는 인계에 정확히 제공하라.
+
+독립 검토자가 실제 fdd64f0에서 실행한 결과: 로컬 docs/workflow/reviews/CONTRACT-AUDIT-02.md, workspace/runs/contract-gate-probes.py 참조. 28개9PASS/19FAIL; 보고서 P1-01~04를 해결한다. 기존 codec수정19PASS와 정상산술/명시scenario 유지. '전수해소/100%' 대신 실제 미실행과 남은제한을 명시한다.
+
+1. strict JSON 공용 parser: 중복key와 NaN/Infinity token은 문자열로 씻기 전에 거부. public decoder는 unknownkeys 허용목록, strictbool/int/str/enum 동일 적용. 특히 MarketQuote.is_trade, HoldingSet13F.is_amended, ProviderObservation.source_tier와 모든 선언필드. ProviderObservation.from_contract_envelope와 등록 decoder는 동일함수로 위임하며 official_confirmation_status/event_cluster_id/relevance_reason 포함 손실없는 roundtrip. free dict metadata 안의 JSON 비유한도 거부. 정상 raw 문자열 설명은 유지한다.
+2. gate는 purpose/ID 문자열키워드가 아니라 닫힌 purpose 및 신뢰된 formula requirement로 판단. policy_id에 'unapproved'가 포함되어도 상태와무관. 13F는승인+검증필수. CalculationRecord의 typed gate_refs/purpose/requirement/typed outputs를 lineage에 포함. 공용 validate_calculation_for_use(record,context) 또는 동등 API가 같은 run에 등록된 gate의 실제id/version/hash/purpose/state와 승인/검증자료를 대조한다. 임의 approval_ref 문자열 하나만으로 신뢰를 생성하지 않는다. 현재 공식정책registry없는조건은 disabled/unavailable로두고 테스트용 명시context는 합성정책을등록한다. FormulaRequirement는 허용목록/닫힌registry에서만 결정하고 caller override로 민감formula를ARITHMETIC으로 낮출수없어야한다. 단순산술2+3=5와명시ANALYST_SCENARIO conditional은 투자정책 승인없이가능.
+3. 숫자 출력을 typed outputs(kind/value/unit/currency)로 선언하고 진단을 분리. UNAVAILABLE/FAILED outputs빈값, result_numericNone. 기존 result_payload는 진단용으로만두고 compiler가 소비할 수 없음을 API로보장. 임의 nested/localized payload를 consumable output으로 받아들이지 말고 price_error 같은정상진단은허용. 재귀keyword금지로수치진단까지막지않는다. legacy result_numeric호환은typed output에정확히연결하되gatevalidator를우회하지않는다. 소비API는 검증된wrapper를반환, 미검증record는실제결과소비자에직접전달되지않게후속연결요구를인계한다. dict변조는재귀동결또는소비직전verify_lineage로차단; 설명도실제보장과일치.
+4. provider projection: normalized MONEY=currency, SHARES=shares, MONEY_PER_SHARE=currency/share(현재 DimensionKind실제enum확인); rawunit/scale은별도 metadata. quote에 evidence_id·publicavailability/locator·source_url 원본 typed envelope/ref를보존. projection계산진입은typed검증된근거를반드시참조; source tier승격금지. shares 2thousand→2000shares, EPS2USDthousand/share→2000USD/share roundtrip을검증.
+
+보고서 마지막 최소 API제안을 간결하게 구현. 별도서명/대규모권한시스템불필요. storage가 계산을persist할때도같은공용validator사용하고 gate없는legacy산술은유효한공용규칙으로처리. 미승인정책결과는저장시거부또는unavailable, 계산metadata에서gate상태를판별하지않는다. scope요구/typed outputs 변경 때문에 B/C가필요한API를문서화한다.
+
+필수 positive/negative: disabled gate, approval만있는13F, 검증gate정상, 용도/policy다른gate, unavailableoutput, 정상진단, 일반산술/명시scenario, duplicatekey/bool/unknownfield/provider모든필드roundtrip/단위. 새gateAPI 때문에 원probe의구조검사가BLOCKED면 숨기지말고 실제API검사테스트와후속재현명령을인계한다. independentprobe자체를수정하여PASS로만들지않는다.
