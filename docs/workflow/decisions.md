@@ -53,3 +53,8 @@
 2026-09-23 D17 (총괄 기술 확정, 사용자 자율구현 승인 범위): REVIEW-DESIGN-01 새 Codex의 직접 검토 중간 결과를 채택하여 `assignments/CONTRACT-01.md`에 실행 계약 v0.2를 고정했다. stdlib-only strict versioned typed codec, finite Decimal 정규 문자열, EXACT/DATE_INTERVAL/UNKNOWN 공개시점, coherent SlotSpec coverage, 슬롯별 bound selected snapshot/hash, 단일 transaction·expected revision CAS·불변 selection history를 기존 run JSON에 저장한다. 기존 market FK selection/evidence 상태는 호환 projection이다. 개인 schema와 기존 migration은 변경하지 않는다. 정책 미승인 UNAVAILABLE, 명시 가정 검증된 경우만 CONDITIONAL. B/C는 계약 commit과 테스트 후 시작. 이는 투자 가중치·위험수치 확정이 아니다. D01/02/03/04/13의 기술적 구현 방향을 이 범위에서 해소하며 최종 검토가 제기하는 추가 문제는 추적한다.
 
 설계 변경은 결정 ID, 요구사항, 이유, 변경 contract/API/파일, 검증 영향, 새 버전/hash, 수신할 작업 ID를 남긴다. 총괄이 검토된 사본을 각 worktree에 전달하고 수신 확인 전 종속 구현을 진행하지 않는다. requirements/tasks/기준 commit 배정은 총괄 소유이며 설계자가 덮어쓰지 않는다. 승인 상태를 자동으로 APPROVED로 올리지 않는다.
+# D18 — 격리 초안 구현과 공통계약 인수를 분리
+
+2026-09-23 총괄 실행 결정. CONTRACT-FIX-03 fdd64f0에서 MarketQuote/Bar/Holding13F의 원19개 메모리반례는 통과했으나 저장/evidence/fullscope 및 gate/codec 잔여감사로 전체계약 인수는 미완료다. A가 공통계약을 계속 수정하는 동안 B/C의 독립 source parser·기술지표·13F 비교 구현을 fdd64f0의 명시적 **미인수 초안 기준**에서 병행한다. B/C는 contracts/storage/공통gate를 편집하지 않으며 임시 DTO 우회나 검증 약화를 하지 않는다. 후속 확정 계약과 충돌하는 연결은 소유자에게 요청하고 최종 계약으로 갱신·재검증한 뒤에만 통합한다.
+
+이유: 기존 일괄 의존성이 파서와 수학식 구현까지 저장 재개 검증에 묶어 대기시키고 있었다. 파일 소유권과 실제 소비 의존성을 나누어 세 Gemini 세션이 독립 구현을 병행하게 한다. 영향: 계약 변경에 따른 B/C 재연결 검증이 필수이며 초안 테스트 통과를 공통계약 인수·전체 완료로 보고하지 않는다. 8스킬/7모드/DB분리·미승인 정책 차단 기준은 변하지 않는다. 사용자 추가 승인 없이 진행하는 기존 자율 구현 범위의 일정 조정이다.

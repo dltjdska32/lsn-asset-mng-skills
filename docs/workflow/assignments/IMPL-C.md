@@ -1,5 +1,7 @@
 # IMPL-C / ANALYSIS-13
 
+실행 의존성 보완(D18, 08:43UTC): 총괄이 전달한 fdd64f0는 공통계약 미인수 초안이다. A가 storage/evidence/fullscope/gate/codec 보완 중이지만 C의 SEC source parser·공개시점/정정·보유 비교·검증 harness는 독립 구현 가능하므로 지금 착수한다. 공통 파일 변경·계약 검증 우회 금지. 현재 Holding13F DTO를 쓰고 후속 확정계약 sync 후 재검증한다. 13F weight/score는 UNVALIDATED·매매 비사용을 명시. 통합·완료 승인은 계약 인수 후다. source-inputs의 SEC submissions 공개 사본과 source-checks 문서 사용. SEC archive403 원문 live미확인은 제한으로 남기며 로컬fixture parsing과 구분.
+
 담당: Antigravity Gemini C, gemini-3.8-flash-high, effort high. 브랜치 codex/gemini-c. 작업 폴더 C:/Users/lsn/lsn-asset-mng-worktrees/gemini-c.
 요구사항 REQ-2026-09-23-v1 R12–13·16. 설계 DESIGN-2026-09-23-v0.1 및 CONTRACT-01 검토 반영 계약. 기준 SHA는 총괄 실행 메시지의 검증된 계약 commit. 의존성 CONTRACT-01 통합·테스트.
 

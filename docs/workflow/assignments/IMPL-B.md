@@ -1,5 +1,7 @@
 # IMPL-B / ANALYSIS-08
 
+실행 의존성 보완(D18, 08:43UTC): 총괄이 전달한 fdd64f0는 공통계약 미인수 초안이다. 현재 A가 storage/evidence/fullscope/gate/codec 보완 중이지만 B의 source parser·OHLCV·명시 기간 기술지표는 독립적으로 구현 가능하므로 지금 착수한다. 공통 파일 변경·계약 검증 우회 금지. 현재 MarketQuote/Bar/BarSet DTO로 구현하고 최종 contract sync 후 재검증한다. 미승인 signal은 항상 unavailable/disabled. 결과 통합·완료 승인은 계약 인수 후다. workspace/runs/source-inputs 및 docs/workflow/source-checks-2026-09-23.md를 사용한다.
+
 담당: Antigravity Gemini B, gemini-3.8-flash-high, effort high. 브랜치 codex/gemini-b. 작업 폴더 C:/Users/lsn/lsn-asset-mng-worktrees/gemini-b.
 요구사항 REQ-2026-09-23-v1 R06–08·16. 설계 DESIGN-2026-09-23-v0.1 및 CONTRACT-01 검토 반영 계약. 기준 SHA는 총괄 실행 메시지의 검증된 계약 commit. 의존성 CONTRACT-01 통합·테스트.
 
