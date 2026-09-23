@@ -1,5 +1,7 @@
 # CONTRACT-FIX-05 — 공통 codec·gate·typed output 인수
 
+FIX-04 총괄실행: 추가storage5probe 모두PASS이나 계약84tests중17ERROR. 대부분 새fixture에서 존재하지 않는 PublicAvailability.instant(now)를 호출함. 실제 PublicAvailability.exact(available_at=aware_datetime,locator=sourceURL) API를 사용하고 생성자에 실제필드로 유효quote작성. test_selection_request_compute_hash는 SlotSpec 필수metric 누락. workspace/runs/CONTRACT-FIX-04-check.tests.log를 읽어 이 오류를 우선수정하고 아래gate를 구현하라. positive storage경로는 아직실행되지않았으므로 통과라말하지않는다. 콜백추가후 check가 또드러낼실제오류도 스스로 API검토하여 제거하라.
+
 Gemini A, REQ-v1/실행v0.2, 현재 계약 소유권 유지. 실행 머리말의 확정 SHA가 기준. file read/write만, shell/web/git/pip/외부폴더 금지. 검토·probe 수정금지, handoffs/CONTRACT-FIX-05.md만 작성. tests/unit/test_contract_gate_audit.py 및 소유 계약 테스트 수정 허용. A의 FIX-04 결과는 유지하며 B/C parser 구현과 공통파일 소유 충돌 없음. 필요한 공개 API는 인계에 정확히 제공하라.
 
 독립 검토자가 실제 fdd64f0에서 실행한 결과: 로컬 docs/workflow/reviews/CONTRACT-AUDIT-02.md, workspace/runs/contract-gate-probes.py 참조. 28개9PASS/19FAIL; 보고서 P1-01~04를 해결한다. 기존 codec수정19PASS와 정상산술/명시scenario 유지. '전수해소/100%' 대신 실제 미실행과 남은제한을 명시한다.

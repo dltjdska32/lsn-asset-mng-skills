@@ -1,5 +1,7 @@
 # 작업 상태표
 
+최신 포인터(08:53UTC): 첫3Gemini병렬구현 실행완료, handoffs/PARALLEL-01.md의 실제교집합약298초/각코드버전확인. 전체인수는아님. A84633e5에서CONTRACT-FIX-05, B82310ef에서IMPL-B-FIX-01, C97db90d에서IMPL-C-FIX-01을각같은conversation으로다시병렬실행중. A계약84중17ERROR/추가storage5PASS, B23중1FAIL1ERROR+실제source반례3개, C8중1FAIL1ERROR. 독립Codex는고정84633e5의CA01/02/06만CONTRACT-AUDIT-03으로검토중. rootruntime통합없음; IMPL-A/BRIEF/INTEGRATE/PACKAGE/최종새REVIEW/VERIFY는미실행. 다음은각수정종료→담당테스트·반례→필요재수정→공통확정및도메인통합이다.
+
 CONTRACT-AUDIT-02 완료: 독립 고정 fdd64f0, 28개 메모리probe9PASS/19FAIL/0BLOCKED, P1 네 묶음(codecstrictness, typedgate/calculation, typedoutputs/diagnostics, providersemantics/units). reports/handoff/scripts를 인수하고 CONTRACT-FIX-05 배정 작성(아직 미실행). 저장FIX-04와 분리해 확인했으며 원주문/renderer/storage 우회까지 증명한 것으로 확대하지 않는다. 감사세션은idle; 이후 전체코드검토/최종검증은 각각새세션유지.
 
 최신 포인터(08:43UTC, D18): A의 CONTRACT-FIX-04와 B의 IMPL-B, C의 IMPL-C를 실제 동시 실행 중. B 시작08:42:53.445UTC/PID29560/conversation f358e983-746e-4dd7-92f6-26a0fea2cb12, C 시작08:42:54.540UTC/PID13456/conversation a0efd37f-f4f2-4e2b-b7bc-8378c4a29926. A는08:34:48UTC 시작/PID6000. 세 모델 gemini-3.8-flash-high high, 별도 브랜치/worktree, 기준 fdd64f05e3c8eb717a6ed2444cc5fb4b9727559e. B/C의 독립 parser/계산 구현만 초안 계약에서 진행하며 저장·공통gate를 우회하지 않는다. 완료/통합은 공통계약 인수와 수정본 재검증 후. IMPL-A 도메인, BRIEF/INTEGRATE/PACKAGE 및 최종새REVIEW/VERIFY는 아직 미실행.
