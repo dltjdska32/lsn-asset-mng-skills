@@ -6,9 +6,9 @@
 
 | 작업 | 담당·파일 소유 | 의존성 | 현재 상태/완료 조건 |
 |---|---|---|---|
-| SETUP-02 | 총괄 / workflow 상태·배정·연결 증거 | 사용자 후속 승인 | 진행. Antigravity CLI 1.2.9 모델 조회 성공, `gemini-3.8-flash-high` 확인. 실제 생성·도구·병렬 실행은 아직 미검증 |
-| REVIEW-DESIGN-01 | 새 Codex / reviews/REVIEW-DESIGN-01.md | 설계 기준 사본 | 대기. C01–C07 및 구현 계약의 차단 문제 검토 |
-| CONTRACT-01 | Gemini A / contracts/** 및 공통 계약 파일 | 설계 검토 | 대기. 공통 계약·roundtrip 검증 후 새 기준 commit을 B/C에 전달 |
+| SETUP-02 | 총괄 / workflow 상태·배정·연결 증거 | 사용자 후속 승인 | 연결 probe 완료. 세 conversation ID·모델 생성·파일 read/write·동시 시간대 확인, handoffs/SETUP-02.md. 구현 병렬은 후속 단계 |
+| REVIEW-DESIGN-01 | 새 Codex / reviews/REVIEW-DESIGN-01.md | 설계 기준 사본 68fab98 | 별도 세션 01a0cd29-c54f-7020-a9ec-abe51921f3ee 직접 검토 중. 중간 P1 계약 모호성 수정안 수신·기술적 채택, 최종 문서 대기 |
+| CONTRACT-01 | Gemini A / contracts/** 및 evidence/manager.py·providers/models.py 호환 확장·신규 계약 테스트 | 독립 검토 중간 수정 계약 | 구현 중. 기준 68fab98, 배정 assignments/CONTRACT-01.md(실행 계약 v0.2). 테스트·commit 전 B/C 구현 시작 금지 |
 | IMPL-A, ANALYSIS-09 | Gemini A / design §9의 A·R09 파일 및 A 전용 테스트 | CONTRACT-01 | 대기. R01–05·09, 현재 경로 연결과 적격성·계보 회귀 |
 | IMPL-B, ANALYSIS-08 | Gemini B / design §9의 B·R08 파일 및 B 전용 테스트 | CONTRACT-01 | 대기. R06–08, 실제 source 접근과 fixture 구분 |
 | IMPL-C, ANALYSIS-13 | Gemini C / design §9의 C·R13 파일 및 C 전용 테스트 | CONTRACT-01 | 대기. R12–13, 공개시점·정정·UNVALIDATED gate |

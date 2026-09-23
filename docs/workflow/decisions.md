@@ -50,4 +50,6 @@
 
 ## 변경 관리
 
+2026-09-23 D17 (총괄 기술 확정, 사용자 자율구현 승인 범위): REVIEW-DESIGN-01 새 Codex의 직접 검토 중간 결과를 채택하여 `assignments/CONTRACT-01.md`에 실행 계약 v0.2를 고정했다. stdlib-only strict versioned typed codec, finite Decimal 정규 문자열, EXACT/DATE_INTERVAL/UNKNOWN 공개시점, coherent SlotSpec coverage, 슬롯별 bound selected snapshot/hash, 단일 transaction·expected revision CAS·불변 selection history를 기존 run JSON에 저장한다. 기존 market FK selection/evidence 상태는 호환 projection이다. 개인 schema와 기존 migration은 변경하지 않는다. 정책 미승인 UNAVAILABLE, 명시 가정 검증된 경우만 CONDITIONAL. B/C는 계약 commit과 테스트 후 시작. 이는 투자 가중치·위험수치 확정이 아니다. D01/02/03/04/13의 기술적 구현 방향을 이 범위에서 해소하며 최종 검토가 제기하는 추가 문제는 추적한다.
+
 설계 변경은 결정 ID, 요구사항, 이유, 변경 contract/API/파일, 검증 영향, 새 버전/hash, 수신할 작업 ID를 남긴다. 총괄이 검토된 사본을 각 worktree에 전달하고 수신 확인 전 종속 구현을 진행하지 않는다. requirements/tasks/기준 commit 배정은 총괄 소유이며 설계자가 덮어쓰지 않는다. 승인 상태를 자동으로 APPROVED로 올리지 않는다.
