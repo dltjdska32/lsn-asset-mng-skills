@@ -7,8 +7,8 @@
 | 작업 | 담당·파일 소유 | 의존성 | 현재 상태/완료 조건 |
 |---|---|---|---|
 | SETUP-02 | 총괄 / workflow 상태·배정·연결 증거 | 사용자 후속 승인 | 연결 probe 완료. 세 conversation ID·모델 생성·파일 read/write·동시 시간대 확인, handoffs/SETUP-02.md. 구현 병렬은 후속 단계 |
-| REVIEW-DESIGN-01 | 새 Codex / reviews/REVIEW-DESIGN-01.md | 설계 기준 사본 68fab98 | 별도 세션 01a0cd29-c54f-7020-a9ec-abe51921f3ee 직접 검토 중. 중간 P1 계약 모호성 수정안 수신·기술적 채택, 최종 문서 대기 |
-| CONTRACT-01 | Gemini A / contracts/** 및 evidence/manager.py·providers/models.py 호환 확장·신규 계약 테스트 | 독립 검토 중간 수정 계약 | 구현 중. 기준 68fab98, 배정 assignments/CONTRACT-01.md(실행 계약 v0.2). 테스트·commit 전 B/C 구현 시작 금지 |
+| REVIEW-DESIGN-01 | 새 Codex / reviews/REVIEW-DESIGN-01.md | 설계 기준 사본 68fab98 | 완료. 별도 세션 01a0cd29-c54f-7020-a9ec-abe51921f3ee, P1 8건·16 자체테스트·합성반례. 수정계약 채택, 구현 검증과 구분 |
+| CONTRACT-01 | Gemini A / contracts/** 및 evidence/manager.py·providers/models.py 호환 확장·신규 계약 테스트 | 독립 검토 수정 계약 | 최초 결과 f1b9caa, 32계약테스트 OK이나 총괄의 unknown-kind/missing dimension·period/metadata tamper 반례 실패. CONTRACT-FIX-01 A 수정 중. 테스트·commit 전 B/C 구현 시작 금지 |
 | IMPL-A, ANALYSIS-09 | Gemini A / design §9의 A·R09 파일 및 A 전용 테스트 | CONTRACT-01 | 대기. R01–05·09, 현재 경로 연결과 적격성·계보 회귀 |
 | IMPL-B, ANALYSIS-08 | Gemini B / design §9의 B·R08 파일 및 B 전용 테스트 | CONTRACT-01 | 대기. R06–08, 실제 source 접근과 fixture 구분 |
 | IMPL-C, ANALYSIS-13 | Gemini C / design §9의 C·R13 파일 및 C 전용 테스트 | CONTRACT-01 | 대기. R12–13, 공개시점·정정·UNVALIDATED gate |
@@ -21,6 +21,10 @@
 각 Gemini는 별도 `codex/gemini-a`, `codex/gemini-b`, `codex/gemini-c` 브랜치와 worktree를 사용한다. 총괄만 commit·cherry-pick·공유 문서 갱신을 한다. 세션은 지정 파일과 자신의 인계만 편집하며 공통 파일 변경 요청은 인계로 전달한다. 정확한 worktree·배정 기준 SHA·세션 결과는 SETUP-02 및 개별 assignment에 기록한다. 테스트는 임시 합성 DB만 사용한다. 과거 별도 승인 문구는 이번 사용자 승인으로 대체되며, 미확정 투자 정책은 출력 불가/조건부 상태로 구현하고 임의 값을 정하지 않는다.
 
 설정 중 최초 sandbox 조회는 로그 쓰기/인증 접근 제한으로 실패했다. 동일 `agy models`를 권한 경계 밖에서 재조회하여 모델 목록을 받았다. 전역 권한 정책은 변경하지 않았다. 아직 구현 성공·3개 병렬 실행 성공으로 간주하지 않는다.
+
+2026-09-23 후속 실행: Antigravity print는 외부 worktree read_file 및 read_url을 soft-deny하면서 SUCCESS/빈 response를 반환함을 확인했다. driver가 denied_actions와 실제 응답까지 검사하도록 수정했다. 검토 문서를 자기 worktree로 복사하고 외부수집은 총괄이 수행하여 범위를 좁힌 뒤 A 수정 재개, B/C의 로컬 PREP는 exit0·denied0·실제 인계 작성 완료(07:52:47–07:54:09UTC). 전역 승인 설정 변경 없음. B/C runtime 구현은 아직 시작하지 않았다.
+
+공개 live 수집·TLS 진단은 source-checks-2026-09-23.md에 별도 기록. truststore0.10.4 scoped SSLContext로 TLS/hostname 검증 유지 상태에서 SEC CompanyFacts·submissions, Naver basic/OHLCV, Yahoo chart, Coinbase ticker HTTP200 확인. Investing와 SEC archive 원문은403. 전체 수집→계산 E2E 성공과 혼동하지 않는다.
 
 ---
 

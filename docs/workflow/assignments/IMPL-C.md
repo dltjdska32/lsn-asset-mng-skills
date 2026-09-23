@@ -12,3 +12,5 @@ R13은 point-in-time feature·검증 harness를 구현하되 실제 검증 데�
 완료 조건: design §8 R12–13 원본/정정 cutoff, addition/restatement·중복·confidential/notice·missing identity·units/split/coverage fixtures; future leakage와 미승인 점수 gate 실제 소비 경로 테스트. 신규 테스트는 tests/unit 아래 discover 가능. Gemini shell/git/pip 실행 금지, 파일 read/write와 허용된 공개 웹 도구만 사용. 총괄이 실행·검증 후 피드백한다. 미실행 테스트 통과 주장 금지.
 
 수정은 소유 파일과 docs/workflow/handoffs/IMPL-C.md만. 개인DB/credentials 접근·자동주문·commit/push/타 worktree 수정 금지. 인계에 API·A/B 연결 요구·검증/미검증·남은 제한·기준SHA·변경 파일 포함.
+
+실행환경 보완: print mode read_url이 실제 soft-deny되므로 현재 Gemini는 자기 worktree의 file read/write만 사용한다. 웹/셸/외부폴더 도구 금지. 총괄의 로컬 source-checks 및 workspace/runs/source-inputs 공개 응답을 사용하고 추가 live endpoint는 인계 요청한다. 총괄 조회와 본인 검증을 구분한다. TLS 검증 비활성화나 인증정보 발명 금지.

@@ -12,3 +12,5 @@ OHLCV: finite Decimal, ordered completed bars, duplicate/gap/calendar/adjustment
 완료 조건: design §8 R06–08 assertions, 독립 손계산 fixture, minimal samples/seed/0 denominator, prefix invariance, invalid/future/incomplete/mixed adjustment 배제. fixture와 live를 분리한다. 신규 테스트는 tests/unit 아래 discover 가능. Gemini shell/git/pip 실행 금지, 파일 read/write와 허용된 공개 웹 도구만 사용. 총괄이 테스트를 실행하고 결과를 되돌린다. 미실행 테스트 통과 주장 금지.
 
 수정은 소유 파일과 docs/workflow/handoffs/IMPL-B.md만. 개인DB/credentials 접근·자동 주문·commit/push/타 worktree 수정 금지. 인계에 API·A/C 연결 요구·검증/미검증·남은 제한·기준SHA·변경 파일 포함.
+
+실행환경 보완: print mode의 read_url이 실제 soft-deny되어 현재 Gemini는 file read/write만 사용한다. 웹/셸/외부 작업폴더 읽기 금지. 총괄이 수집한 로컬 source-checks 문서와 workspace/runs/source-inputs의 공개 응답 사본으로 구현하고, 필요한 추가 live endpoint는 인계하면 총괄이 조회한다. 총괄 live와 자신의 fixture 검증을 구분한다. 호스트 Python TLS 오류는 truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)로 CERT_REQUIRED/check_hostname=True를 유지하여 Naver basic·SEC companyfacts HTTP200 확인했으며 공통 HTTP 연결은 통합 담당이 수행한다. TLS 검증 끄기·전역 ssl monkeypatch 금지.

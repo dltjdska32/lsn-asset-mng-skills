@@ -22,6 +22,15 @@ try {
     $taskReceipt | ConvertTo-Json | Set-Content -LiteralPath "$taskOutput/$RunId.receipt.json" -Encoding utf8
     & 'C:/Users/lsn/AppData/Local/agy/bin/agy.exe' --model gemini-3.8-flash-high --effort high --mode accept-edits --conversation $ConversationId --output-format json --log-file "$taskOutput/$RunId.log" --print $taskPrompt > "$taskOutput/$RunId.json"
     $taskExitCode = $LASTEXITCODE
+    if ($taskExitCode -eq 0) {
+        $taskResult = Get-Content -LiteralPath "$taskOutput/$RunId.json" -Raw | ConvertFrom-Json
+        $taskReceipt['providerStatus'] = $taskResult.status
+        $taskReceipt['deniedActionCount'] = @($taskResult.denied_actions | Where-Object { $null -ne $_ }).Count
+        $taskReceipt['responseCharacters'] = ([string]$taskResult.response).Length
+        if ($taskResult.status -ne 'SUCCESS' -or $taskReceipt.deniedActionCount -gt 0 -or $taskReceipt.responseCharacters -eq 0) {
+            $taskExitCode = 2
+        }
+    }
     $taskReceipt.exitCode = $taskExitCode
 } finally {
     $taskReceipt.endedUtc = [DateTime]::UtcNow.ToString('o')
