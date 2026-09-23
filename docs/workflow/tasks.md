@@ -1,5 +1,7 @@
 # 작업 상태표
 
+**최신 상태 — 사용자 모델·담당 변경:** Gemini 구현을 별도 Codex GPT-6 Luna 작업 A/B/C로 이관 요청. `handoffs/CODEX-TRANSFER-01.md`에 각 원 WIP SHA, 새 branch/worktree, 준비 client ID 기록. Gemini 재개 자동화 `gemini`는 PAUSED. 세 새 branch/worktree 생성은 확인했으나 create_thread가 실제 threadId를 아직 반환하지 않아 Codex 세션 실행·모델 적용·병렬 구현은 **미확인**. 기존 18:21 KST 포인터의 Gemini 재개 계획은 이력으로만 읽는다. 다음은 실제 task ID·cwd·모델·실행 로그 확인 후 각 수정 검증 및 후속 도메인/통합/새 독립 검토/새 최종 검증이다.
+
 **최신 상태 — 2026-09-23 18:21 KST:** 제공자 한도 대기 중 A/B/C 고정 체크포인트의 독립 재검증 완료. `handoffs/PRE-RESUME-01.md` 및 신규 배정 CONTRACT-FIX-06 / IMPL-B-FIX-03 / IMPL-C-FIX-03 참조. A 49837ea의 별도 Codex typed-gate AUDIT-04 12개 중 10 PASS/2 FAIL(총괄 동일 재현), B d2db94f의 실제 provider 공개응답 오프라인 replay 6개 중 5 PASS/1 FAIL(BTC/EUR가 BTC/USD 가격 수용), C 377dbb4의 기존 26tests/2 FAIL 원인 확인. 셋 다 WIP이며 root runtime 통합·새 전체 독립 검토·다른 새 최종 검증은 아직 미완료. Gemini는 21:40 KST 이후 재개, 자동화 `gemini` ACTIVE.
 
 **최신 상태 — 2026-09-23 18:10 KST: Gemini 외부 사용량 한도로 중단.** 세 프로세스는429 재시도 후exit3으로모두종료. 자동화`gemini` ACTIVE,21:40 KST이전호출금지/매시45분확인으로21:45 KST부터재개예정. 상세인계는 handoffs/QUOTA-01.md가현재권위다. A49837ea/Bd2db94f/C377dbb4의WIP체크포인트보존. A99tests17ERROR, B25PASS, C26tests2FAIL. 연결·세병렬코드작성은실제로확인했지만전체통합·새전체독립검토·다른새최종검증은미완료. 아래진행중포인터는이력이다.
