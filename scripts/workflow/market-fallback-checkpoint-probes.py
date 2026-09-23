@@ -16,13 +16,14 @@ from pathlib import Path
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", type=Path, required=True)
+    parser.add_argument("--source-inputs", type=Path)
     args = parser.parse_args()
     repo = args.repo.resolve()
     sys.path.insert(0, str(repo / "runtime"))
     from investment_stack.providers.market_quotes import MarketQuoteProvider
     from investment_stack.providers.models import ProviderStatus
 
-    inputs = repo / "workspace" / "runs" / "source-inputs"
+    inputs = (args.source_inputs or repo / "workspace" / "runs" / "source-inputs").resolve()
     coinbase = (inputs / "coinbase_btc_ticker.json").read_bytes()
     kraken = (inputs / "kraken_btc_trades.json").read_bytes()
     as_of = datetime(2026, 9, 23, 9, 30, tzinfo=timezone.utc)

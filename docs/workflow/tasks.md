@@ -1,5 +1,9 @@
 # 작업 상태표
 
+**최신 상태 — B/C 담당 수정 직접 재검증:** B `codex/luna-b` HEAD `9252038100cf748e77f35996fde1cd1ae4d53cfd`에서 담당 unittest 19 PASS와 공개응답 사본 fallback probe 6 PASS를 총괄 재실행. C `codex/luna-c` HEAD `e2b185f847a02aeb3cab313cef102981f4cf1967`에서 담당 unittest 26 PASS 재실행. 각 결과·미실행 live/전체 suite는 `handoffs/CODEX-B-FIX-01.md`, `CODEX-C-FIX-01.md` 및 `CODEX-TRANSFER-01.md` 참조. A 공통계약 `codex/impl-a-luna`는 AUDIT-03 저장 잔여 수정 중이므로 B/C를 root runtime에 통합하지 않았다. 전체 7모드·스킬셋 패키지·새 전체 독립 검토·다른 새 최종 검증도 미완료.
+
+**최신 상태 — 중복 세션 정리 및 C 첫 수정 확인:** 관리형 준비 ID도 뒤늦게 실제 세션으로 활성화됐음을 확인. 후속 주 담당은 관리형 A `01a0cd99-1059-7d73-b623-be991696c65d` (`codex/impl-a-luna`), 복구 B `01a0cd9c-aff9-7122-b0cc-bd638dbf7f81` (`codex/luna-b`), 복구 C `01a0cd9c-e908-7f30-9991-75cbd9d2004f` (`codex/luna-c`). 중복 복구 A는 중단 후 archive, 관리형 B/C는 종료 후 archive. 상세 매핑은 `handoffs/CODEX-TRANSFER-01.md`. C commit `e2b185f`의 26 담당 unittest를 총괄도 26 PASS 재실행; root 통합은 미완료. B 진행 중, A 공통계약 감사 잔여 수정 중. B 초안 두 갈래 모두 root 독립 오프라인 probe 6/6 PASS이나 전체 인수 전. 새로운 전체 독립 검토/다른 새 최종 검증은 아직 시작하지 않았다.
+
 **최신 상태 — Codex Luna 복구 세션 병렬 시작:** 관리형 worktree 준비 ID 3개가 실제 task ID로 전환되지 않아, 다른 별도 worktree/branch에서 projectless Codex `gpt-6-luna` A/B/C 세 task를 생성했다. 실제 ID `01a0cd9c-71fc-7b93-a08b-60eba72d8d01` / `01a0cd9c-aff9-7122-b0cc-bd638dbf7f81` / `01a0cd9c-e908-7f30-9991-75cbd9d2004f`; `wait_threads`에서 세 작업 active/inProgress 확인. 각 기준 SHA/branch/worktree는 `handoffs/CODEX-TRANSFER-01.md`. 코드 변경·테스트 통과는 아직 미확인. 준비 ID가 뒤늦게 활성화되면 중복 작업을 중단하고 복구 세션만 인수한다.
 
 **최신 상태 — 사용자 모델·담당 변경:** Gemini 구현을 별도 Codex GPT-6 Luna 작업 A/B/C로 이관 요청. `handoffs/CODEX-TRANSFER-01.md`에 각 원 WIP SHA, 새 branch/worktree, 준비 client ID 기록. Gemini 재개 자동화 `gemini`는 PAUSED. 세 새 branch/worktree 생성은 확인했으나 create_thread가 실제 threadId를 아직 반환하지 않아 Codex 세션 실행·모델 적용·병렬 구현은 **미확인**. 기존 18:21 KST 포인터의 Gemini 재개 계획은 이력으로만 읽는다. 다음은 실제 task ID·cwd·모델·실행 로그 확인 후 각 수정 검증 및 후속 도메인/통합/새 독립 검토/새 최종 검증이다.
