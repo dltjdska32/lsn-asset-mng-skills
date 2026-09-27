@@ -92,9 +92,11 @@ class Phase5EquityValuationTests(unittest.TestCase):
         self.assertIsNotNone(metrics["dcf_scenario_conservative"].value)
         self.assertEqual(metrics["dcf_scenario_conservative"].evidence_ids, ("evidence:assumptions-1",))
         self.assertIsNotNone(metrics["dcf_scenario_base"].value)
+        self.assertIsNone(metrics["dcf_scenario_optimistic"].value)
         self.assertIsNotNone(metrics["dcf_sensitivity_0"].value)
         self.assertIsNone(metrics["dcf_sensitivity_1"].value)  # terminal growth exceeds discount rate
         self.assertIn("growth=0.02", metrics["dcf_scenario_conservative"].formula)
+        self.assertEqual(result.status.value, "PARTIAL")
 
 
     def test_high_growth_valuation_requires_explicit_scenarios(self):

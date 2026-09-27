@@ -35,12 +35,36 @@ class DcfAssumptions:
     net_debt: Decimal
     shares_outstanding: Decimal
 
+    def __post_init__(self) -> None:
+        values = (
+            self.starting_fcf, self.annual_growth_rate, self.discount_rate,
+            self.terminal_growth_rate, self.net_debt, self.shares_outstanding,
+        )
+        if any(not isinstance(value, Decimal) or not value.is_finite() for value in values):
+            raise ValueError("DCF assumptions must use finite Decimal values")
+        if isinstance(self.years, bool) or not isinstance(self.years, int) or self.years <= 0:
+            raise ValueError("DCF years must be a positive integer")
+        if self.shares_outstanding <= 0:
+            raise ValueError("DCF shares_outstanding must be positive")
+        if self.discount_rate <= self.terminal_growth_rate:
+            raise ValueError("DCF discount_rate must exceed terminal_growth_rate")
+        if min(self.annual_growth_rate, self.discount_rate, self.terminal_growth_rate) <= Decimal("-1"):
+            raise ValueError("DCF rates must exceed -100 percent")
+
 
 @dataclass(frozen=True, slots=True)
 class DcfScenario:
     name: str
     assumptions: DcfAssumptions
     assumption_evidence_ids: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not self.name.strip():
+            raise ValueError("DCF scenario name is required")
+        if not isinstance(self.assumptions, DcfAssumptions):
+            raise ValueError("DCF scenario assumptions must use DcfAssumptions")
+        if not isinstance(self.assumption_evidence_ids, tuple) or not self.assumption_evidence_ids or any(not isinstance(item, str) or not item.strip() for item in self.assumption_evidence_ids):
+            raise ValueError("DCF scenario assumptions require evidence references")
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,6 +144,9 @@ class EquityValuationAnalyzer:
 
         if model is ValuationModel.DCF_MULTIPLES:
             if data.dcf_scenarios:
+                scenario_names = {scenario.name.casefold() for scenario in data.dcf_scenarios}
+                if len(scenario_names) != len(data.dcf_scenarios):
+                    raise ValueError("DCF scenario names must be unique")
                 for scenario in data.dcf_scenarios:
                     assumptions = scenario.assumptions
                     formula = (
@@ -129,6 +156,9 @@ class EquityValuationAnalyzer:
                     )
                     add(f"dcf_scenario_{scenario.name}", self._dcf_per_share(assumptions), formula,
                         f"{data.currency or 'currency'}/share", scenario.assumption_evidence_ids)
+                for required_name in ("conservative", "base", "optimistic"):
+                    if required_name not in scenario_names:
+                        add(f"dcf_scenario_{required_name}", None, f"explicit {required_name} scenario assumptions unavailable", f"{data.currency or 'currency'}/share")
             else:
                 dcf_value = self._dcf_per_share(data.dcf)
                 add("dcf_value_per_share", dcf_value, "explicit discounted FCF + terminal value - net debt / shares", data.currency or "currency/share")
@@ -141,7 +171,9 @@ class EquityValuationAnalyzer:
                     value = self._dcf_per_share(replace(data.dcf, discount_rate=discount_rate, terminal_growth_rate=terminal_growth_rate))
                 except ValueError:
                     value = None
-                add(f"dcf_sensitivity_{index}", value, formula, f"{data.currency or 'currency'}/share")
+                base_scenario = next((scenario for scenario in data.dcf_scenarios if scenario.name.casefold() == "base"), None)
+                add(f"dcf_sensitivity_{index}", value, formula, f"{data.currency or 'currency'}/share",
+                    base_scenario.assumption_evidence_ids if base_scenario else data.evidence_ids)
         elif model is ValuationModel.FINANCIAL_PB_ROE_DIVIDEND:
             add("roe", data.roe, "reported_or_calculated_roe", "ratio")
         elif model is ValuationModel.HIGH_GROWTH_SCENARIO:
