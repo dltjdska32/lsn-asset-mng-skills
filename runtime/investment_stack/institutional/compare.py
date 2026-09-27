@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import date
+import calendar
 from decimal import Decimal
 
 from investment_stack.contracts.codec import parse_finite_decimal
@@ -27,6 +29,26 @@ from investment_stack.institutional.models import (
 from investment_stack.institutional.normalize import apply_split_adjustment
 
 
+def is_consecutive_quarter_periods(prior_period: str, current_period: str) -> bool:
+    """True only for ordered, adjacent calendar-quarter end dates."""
+    try:
+        prior = date.fromisoformat(prior_period)
+        current = date.fromisoformat(current_period)
+    except (TypeError, ValueError):
+        return False
+
+    def quarter_index(period: date) -> int | None:
+        quarter = (period.month - 1) // 3
+        end_month = (quarter + 1) * 3
+        if period.month != end_month or period.day != calendar.monthrange(period.year, end_month)[1]:
+            return None
+        return period.year * 4 + quarter
+
+    prior_index = quarter_index(prior)
+    current_index = quarter_index(current)
+    return prior_index is not None and current_index == prior_index + 1
+
+
 def compare_portfolios(
     prior_set: HoldingSet13F | EffectiveHoldingSet,
     current_set: HoldingSet13F | EffectiveHoldingSet,
@@ -44,7 +66,7 @@ def compare_portfolios(
       Under confidential omission or uncertain coverage, absent positions are NOT_REPORTED.
     - Strict Comparability Checks:
       - Manager mismatch -> is_comparable = False
-      - Observation period mismatch / identical quarter -> is_comparable = False
+    - Reversed, non-quarter-end, identical, or non-adjacent observation periods -> is_comparable = False
       - Notice-only filing -> is_comparable = False
       - Instrument kind / unit mismatch (e.g. PRN vs SH, Put/Call option vs equity, class mismatch)
         for the same CUSIP -> classified as INCOMPARABLE, never assumed sold.
@@ -61,12 +83,18 @@ def compare_portfolios(
             f"Manager mismatch: {prior_set.manager_cik} vs {current_set.manager_cik}"
         )
 
-    # 2. Period check
-    if prior_set.report_period == current_set.report_period:
+    # 2. Period check: a quarter-over-quarter change must use adjacent quarter ends.
+    if not is_consecutive_quarter_periods(prior_set.report_period, current_set.report_period):
         is_comparable = False
-        incomparable_reasons.append(
-            f"Observation periods must be distinct, got identical period: {prior_set.report_period}"
-        )
+        if prior_set.report_period == current_set.report_period:
+            incomparable_reasons.append(
+                f"Observation periods must be distinct, got identical period: {prior_set.report_period}"
+            )
+        else:
+            incomparable_reasons.append(
+                "Observation periods must be ordered adjacent calendar quarter ends: "
+                f"{prior_set.report_period} -> {current_set.report_period}"
+            )
 
     # 3. Empty holdings check
     if not prior_set.holdings and not current_set.holdings:
@@ -361,4 +389,4 @@ def compare_portfolios(
     )
 
 
-__all__ = ["compare_portfolios"]
+__all__ = ["compare_portfolios", "is_consecutive_quarter_periods"]

@@ -19,6 +19,10 @@ class TestInstitutionalScoringPointInTime(unittest.TestCase):
     cutoff = datetime(2026, 9, 27, tzinfo=timezone.utc)
 
     def comparison(self, period: str, availability: PublicAvailability | None) -> InstitutionalPortfolioComparison:
+        prior_period = {
+            "2026-06-30": "2026-03-31",
+            "2026-09-30": "2026-06-30",
+        }.get(period, "2026-03-31")
         change = HoldingChange13F(
             manager_cik="0000000001", cusip="037833100", issuer_name="APPLE",
             security_class="COM", quantity_type=QuantityType.SH, put_call=PutCall.NONE,
@@ -29,7 +33,7 @@ class TestInstitutionalScoringPointInTime(unittest.TestCase):
             notice_status=NoticeStatus.COMPLETE,
         )
         return InstitutionalPortfolioComparison(
-            manager_cik="0000000001", prior_period="2026-06-30", current_period=period,
+            manager_cik="0000000001", prior_period=prior_period, current_period=period,
             prior_filing_id="prior", current_filing_id="current", changes=(change,),
             total_eligible_value_prior=Decimal("1"), total_eligible_value_current=Decimal("1"),
             is_comparable=True, prior_public_availability=availability,

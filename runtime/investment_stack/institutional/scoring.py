@@ -15,6 +15,7 @@ from investment_stack.contracts.errors import (
     UnapprovedPolicyError,
 )
 from investment_stack.contracts.institutional import NoticeStatus
+from investment_stack.institutional.compare import is_consecutive_quarter_periods
 from investment_stack.institutional.models import (
     HoldingChangeStatus,
     InstitutionalFeatureSet,
@@ -40,6 +41,12 @@ def compute_institutional_features(
 
     target_cusip = target_cusip.upper().strip()
     mgr_comparisons = [c for c in comparisons if c.manager_cik == manager_cik and c.is_comparable]
+
+    # A point-in-time quarterly signal cannot infer a continuous history from
+    # reversed, overlapping, duplicated, or skipped comparison edges.
+    if not _valid_comparison_chain(mgr_comparisons):
+        return _unavailable_features(manager_cik, target_cusip, as_of)
+
     def available_at_cutoff(comp: InstitutionalPortfolioComparison) -> bool:
         try:
             # A report period is an observation date, and must itself precede the run cutoff.
@@ -55,24 +62,12 @@ def compute_institutional_features(
         )
 
     mgr_comparisons = [c for c in mgr_comparisons if available_at_cutoff(c)]
+    if not _valid_comparison_chain(mgr_comparisons):
+        return _unavailable_features(manager_cik, target_cusip, as_of)
     mgr_comparisons.sort(key=lambda c: c.current_period)
 
     if not mgr_comparisons:
-        return InstitutionalFeatureSet(
-            manager_cik=manager_cik,
-            target_cusip=target_cusip,
-            as_of=as_of,
-            holding_period="",
-            quarterly_share_change_pct=None,
-            portfolio_weight_current=None,
-            portfolio_weight_change=None,
-            institutional_consensus_direction=None,
-            consecutive_quarters_held=0,
-            information_lag_days=None,
-            coverage_quality_score=None,
-            is_point_in_time=False,
-            score_status="UNAVAILABLE",
-        )
+        return _unavailable_features(manager_cik, target_cusip, as_of)
 
     latest_comp = mgr_comparisons[-1]
     holding_period = latest_comp.current_period
@@ -120,8 +115,8 @@ def compute_institutional_features(
         if observed_count else None
     )
 
-    # Comparison records currently do not carry the filing's verified public timestamp.
-    # Quarter-end is not publication time, so information age stays unavailable.
+    # Actual publication availability is cutoff-validated above; this DTO does not
+    # provide a verified filing timestamp for a meaningful information-age value.
     lag_days = None
 
     return InstitutionalFeatureSet(
@@ -150,11 +145,12 @@ def calculate_consensus_direction(
     This is an unvalidated research feature only; it is not an investment score.
     """
     target_cusip = target_cusip.upper().strip()
+    comparable = [comp for comp in manager_comparisons if comp.is_comparable]
+    if not _valid_comparison_chain(comparable):
+        return None
     net_score = 0
     observed = False
-    for comp in manager_comparisons:
-        if not comp.is_comparable:
-            continue
+    for comp in comparable:
         ch = next((c for c in comp.changes if c.cusip == target_cusip), None)
         if ch is None:
             continue
@@ -175,6 +171,39 @@ def calculate_consensus_direction(
     if net_score < 0:
         return -1
     return 0
+
+
+def _valid_comparison_chain(comparisons: Sequence[InstitutionalPortfolioComparison]) -> bool:
+    if not comparisons:
+        return True
+    if len({comp.manager_cik for comp in comparisons}) != 1:
+        return False
+    pairs: set[tuple[str, str]] = set()
+    for comp in comparisons:
+        pair = (comp.prior_period, comp.current_period)
+        if pair in pairs or not is_consecutive_quarter_periods(*pair):
+            return False
+        pairs.add(pair)
+    ordered = sorted(comparisons, key=lambda comp: (comp.prior_period, comp.current_period))
+    return all(left.current_period == right.prior_period for left, right in zip(ordered, ordered[1:]))
+
+
+def _unavailable_features(manager_cik: str, target_cusip: str, as_of: datetime) -> InstitutionalFeatureSet:
+    return InstitutionalFeatureSet(
+        manager_cik=manager_cik,
+        target_cusip=target_cusip,
+        as_of=as_of,
+        holding_period="",
+        quarterly_share_change_pct=None,
+        portfolio_weight_current=None,
+        portfolio_weight_change=None,
+        institutional_consensus_direction=None,
+        consecutive_quarters_held=0,
+        information_lag_days=None,
+        coverage_quality_score=None,
+        is_point_in_time=False,
+        score_status="UNAVAILABLE",
+    )
 
 
 def check_13f_trade_gate(
