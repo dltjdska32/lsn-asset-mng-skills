@@ -18,7 +18,7 @@ from investment_stack.execution import Availability, ModeRequest, equity_analysi
 from investment_stack.materiality import MaterialityConfig, MaterialityEngine
 from investment_stack.pipelines import FixedPipelinePlanner
 from investment_stack.reporting.runtime import Phase6ReportReviewRuntime
-from investment_stack.reporting.models import Availability as ReportAvailability
+from investment_stack.reporting.models import Availability as ReportAvailability, ReportSectionInput
 from investment_stack.routing import RequestMode
 from investment_stack.web_research import WebResearchAdapter, WebResearchBundleBackend
 from investment_stack.providers import EnvironmentCredentials, ProviderFallbackExecutor, build_default_provider_executor
@@ -190,6 +190,34 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
         self.assertTrue({"FANUC_fundamental", "FANUC_valuation", "data_quality"}.issubset(
             {section["section_name"] for section in context["report_sections"]}))
         self.assertTrue(any(row["task_name"].startswith("execute:SINGLE_ASSET_ANALYSIS:") for row in context["task_states"]))
+
+    def test_new_report_manifest_uses_only_its_own_content_addressed_sections(self) -> None:
+        specs = self.specs()[:1]
+        run, services = self.make_services("r14-multiple-report-builds", specs)
+        phase6 = Phase6ReportReviewRuntime(run)
+        earlier = phase6.report.build(
+            title="Earlier report",
+            sections=(ReportSectionInput("FANUC_fundamental", "Earlier", ("old content",)),),
+            review=phase6.review.evaluate(),
+        )
+        old_ref = next(ref for name, _, ref in earlier.persisted_section_refs if name == "FANUC_fundamental")
+
+        result = execute_mode(ModeRequest(
+            run.run_id, RequestMode.SINGLE_ASSET_ANALYSIS, {"research_specs": specs},
+        ), services)
+        self.assertTrue(result.report_refs)
+        context = run.fetch_phase6_context()
+        report_row = next(row for row in context["task_states"] if row["task_name"].startswith("report:"))
+        manifest = json.loads(report_row["metadata_json"])
+        refs = manifest["section_refs"]
+        self.assertEqual(len(refs), len({item["section_name"] for item in refs}))
+        current_ref = next(item["content_reference"] for item in refs
+                           if item["section_name"] == "FANUC_fundamental")
+        self.assertNotEqual(old_ref, current_ref)
+        stored_refs = {row["content_reference"] for row in context["report_sections"]
+                       if row["section_name"] == "FANUC_fundamental"}
+        self.assertIn(old_ref, stored_refs)
+        self.assertIn(current_ref, stored_refs)
 
     def test_request_typed_price_cannot_claim_persisted_ids_without_value_binding(self) -> None:
         specs = self.specs()[:1]

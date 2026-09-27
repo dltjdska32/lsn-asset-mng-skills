@@ -543,14 +543,40 @@ def equity_analysis_services(
                 content_reference=f"inline-sha256:{briefing_digest}",
                 metadata=briefing_payload,
             )
-        expected_names = {section.name for section in report.sections}
-        stored_sections = run_db.fetch_phase6_context()["report_sections"]
-        persisted_sections = [
-            row for row in stored_sections
-            if row["section_name"] in expected_names
-        ]
-        if {row["section_name"] for row in persisted_sections} != expected_names:
+        expected_sections = {section.name: section for section in report.sections}
+        refs = report.persisted_section_refs
+        if (
+            len(refs) != len(expected_sections)
+            or len({name for name, _, _ in refs}) != len(refs)
+            or {name for name, _, _ in refs} != set(expected_sections)
+            or len({section_id for _, section_id, _ in refs}) != len(refs)
+        ):
             return StepResult(Availability.FAILED, output={"report_persisted": False})
+        stored_sections = run_db.fetch_phase6_context()["report_sections"]
+        stored_by_id = {row["section_id"]: row for row in stored_sections}
+        persisted_sections = []
+        for name, section_id, content_ref in refs:
+            row = stored_by_id.get(section_id)
+            section = expected_sections[name]
+            if row is None or row["section_name"] != name or row["section_status"] != section.status.value:
+                return StepResult(Availability.FAILED, output={"report_persisted": False})
+            try:
+                payload = json.loads(row["metadata_json"] or "")
+                canonical = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
+                expected_ref = "inline-sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+            except (TypeError, ValueError):
+                return StepResult(Availability.FAILED, output={"report_persisted": False})
+            if (
+                row["content_reference"] != content_ref
+                or content_ref != expected_ref
+                or payload.get("title") != section.title
+                or payload.get("lines") != list(section.lines)
+                or payload.get("evidence_ids") != list(section.evidence_ids)
+                or payload.get("calculation_ids") != list(section.calculation_ids)
+                or payload.get("analysis_as_of") != report.as_of.analysis_as_of
+            ):
+                return StepResult(Availability.FAILED, output={"report_persisted": False})
+            persisted_sections.append(row)
         if briefing_section_id is not None:
             stored_briefing = next((row for row in stored_sections if row["section_id"] == briefing_section_id), None)
             if stored_briefing is None:
