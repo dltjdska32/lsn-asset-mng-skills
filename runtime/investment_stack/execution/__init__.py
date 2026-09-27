@@ -1,6 +1,7 @@
 """Fixed request-mode execution API."""
 
 from investment_stack.execution.asset_update import asset_update_services
+from investment_stack.execution.analysis_modes import equity_analysis_services
 from investment_stack.execution.dispatcher import (
     RuntimeServices,
     StepHandler,
@@ -21,5 +22,5 @@ from investment_stack.execution.models import (
 __all__ = [
     "Availability", "ModeRequest", "ModeResult", "RuntimeServices", "StepContext", "StepHandler",
     "StepResult", "StepState", "UpdateThenAnalysisResult", "asset_update_services",
-    "execute_mode", "execute_text_request", "execute_update_then_analysis",
+    "equity_analysis_services", "execute_mode", "execute_text_request", "execute_update_then_analysis",
 ]
