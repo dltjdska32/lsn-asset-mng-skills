@@ -20,3 +20,5 @@
 
 - Integration with the assigned B/C and decision-layer work remains for the coordinator; this worktree intentionally does not modify `decisions/briefing.py` or `execution/analysis_modes.py`.
 - Integration review verified that final `report_ref` identity and immutable `final_briefing` storage are owned by the mode runtime, while the generic builder retains its section persistence contract.
+- Full `unittest discover -s tests -v` run from this worktree executed 604 tests and found five failures: three report wording compatibility checks (STALE label, MISSING_CREDENTIAL label, and `계산 근거:` heading) and two packaging checks because this worktree had no built wheel/sdist. Fixed the three reporting regressions while retaining Korean explanations and detailed-only calculation IDs. The two packaging checks require build artifacts and are outside reporting ownership.
+- Re-ran the affected acceptance, reporting, phase 8, equity/portfolio mode integration, and unit modules: 35 passed. Full-suite output captured in `FINISH-C-suite.log` for coordinator inspection.

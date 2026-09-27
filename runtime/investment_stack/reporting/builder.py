@@ -210,7 +210,7 @@ class InvestmentReportBuilder:
             status = row.get("provider_status")
             label = {"MISSING_CREDENTIAL": "인증 정보가 없어 자료를 가져오지 못했습니다", "UNAVAILABLE": "자료 제공처에 연결할 수 없습니다", "ERROR": "자료 제공 중 오류가 발생했습니다", "PARTIAL": "일부 자료만 확인했습니다"}.get(status, "자료 상태를 확인할 수 없습니다")
             area = {"MARKET": "시세", "FUNDAMENTALS": "재무", "NEWS": "뉴스"}.get(capability, "일부 자료")
-            messages.append(f"{area}: {label}.")
+            messages.append(f"{area}: {label}. 상태 코드: {status}.")
         selected_bad = [
             row for row in snapshot["evidence"]
             if row.get("selection_state") == "SELECTED" and row.get("freshness_status") in {"STALE", "UNKNOWN", "UNAVAILABLE"}
@@ -280,7 +280,7 @@ class InvestmentReportBuilder:
             if evidence_id in evidence_by_id and evidence_by_id[evidence_id].get("evidence_type") == "market"
         }
         if market_states and market_states != {"FRESH"}:
-            lines.append("- 시세 상태: " + ", ".join(ko_status(state) for state in sorted(market_states)))
+            lines.append("- 시세 상태: " + ", ".join(f"{ko_status(state)} ({state})" for state in sorted(market_states)))
         if report.review_triggers:
             labels = {"SOURCE_CONFLICT": "자료 간 값 차이", "HIGH_MATERIALITY": "판단 영향이 큼", "NEWS_REPORTED_OR_RUMOR_MATERIAL": "확인되지 않은 중요 소식", "STALE_OR_UNKNOWN_INPUT": "자료 기준시점 불확실"}
             lines.append("- 검토가 필요한 이유: " + ", ".join(labels.get(reason, "추가 확인 필요") for reason in report.review_triggers))
@@ -304,7 +304,7 @@ class InvestmentReportBuilder:
                 details.append(f"- 근거 `{evidence_id}` — {source}; 자료 시각: {data_time}; 시세 상태: {ko_status(row.get('freshness_status'))}")
             if section.calculation_ids:
                 details.append("### 상세 계산 근거")
-                details.append("- 계산 ID: " + ", ".join(f"`{cid}`" for cid in section.calculation_ids))
+                details.append("- 계산 근거: " + ", ".join(f"계산 ID `{cid}`" for cid in section.calculation_ids))
         if details:
             lines.extend(("", "## 상세 근거", *details))
         return "\n".join(lines) + "\n"
