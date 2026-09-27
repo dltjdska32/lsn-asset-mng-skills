@@ -81,5 +81,7 @@ class WebResearchBundleBackend:
             source_kind=str(item.get("source_kind", "web_page")),
             official_confirmation_status=None if item.get("official_confirmation_status") is None else str(item.get("official_confirmation_status")),
             event_cluster_id=None if item.get("event_cluster_id") is None else str(item.get("event_cluster_id")),
+            quote_kind=None if item.get("quote_kind") is None else str(item.get("quote_kind")),
+            is_complete=None if item.get("is_complete") is None else bool(item.get("is_complete")),
             metadata=dict(metadata),
         )

@@ -20,6 +20,10 @@ from investment_stack.reporting.models import (
 from investment_stack.review.models import ReviewResult
 from investment_stack.security.redaction import SecretRedactor
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from investment_stack.decisions.briefing import NonPostingBriefing
+
 
 _BAD_CURRENT_FRESHNESS = {"STALE", "UNKNOWN", "UNAVAILABLE"}
 _BAD_BASE_CASE_CONFIRMATION = {"RUMOR", "UNVERIFIED"}
@@ -56,6 +60,7 @@ class InvestmentReportBuilder:
         title: str,
         sections: tuple[ReportSectionInput, ...],
         review: ReviewResult,
+        briefing: "NonPostingBriefing | None" = None,
     ) -> InvestmentReport:
         if not title.strip():
             raise ValueError("report title is required")
@@ -129,6 +134,28 @@ class InvestmentReportBuilder:
             availability = Availability.AVAILABLE
         confidence = self._report_confidence(review.confidence, availability)
         as_of = self._as_of(snapshot)
+        briefing_md = None
+        if briefing:
+            table_md = "\n".join(f"    - {k}: {v}" for k, v in briefing.section_table.items())
+            core_md = "\n".join(f"    - {c}" for c in briefing.section_core) if briefing.section_core else "    - 확인 불가"
+            cond_md = "\n".join(f"    - {c}" for c in briefing.section_conditions) if briefing.section_conditions else "    - 확인 불가"
+            det_md = "\n".join(f"    - {c}" for c in briefing.section_details) if briefing.section_details else "    - 확인 불가"
+
+            briefing_lines = [
+                "",
+                "## 최종 판단 브리핑",
+                f"1. **지금 판단**: {briefing.section_judgement}",
+                "2. **가격·행동 표**:",
+                table_md,
+                "3. **핵심 근거**:",
+                core_md,
+                "4. **판단 변경 조건**:",
+                cond_md,
+                "5. **상세 근거**:",
+                det_md
+            ]
+            briefing_md = "\n".join(briefing_lines)
+
         report = InvestmentReport(
             title=safe_title,
             availability=availability,
@@ -139,6 +166,7 @@ class InvestmentReportBuilder:
             review_triggers=tuple(trigger.value for trigger in review.triggers),
             unknowns=tuple(unknowns),
             markdown="",
+            briefing=briefing_md,
         )
         markdown = self._render(replace(report, markdown=""), evidence_by_id)
         report = replace(report, markdown=markdown)
@@ -234,6 +262,8 @@ class InvestmentReportBuilder:
         ]
         if report.review_triggers:
             lines.append("- 내부 검토 사유: " + ", ".join(report.review_triggers))
+        if report.briefing:
+            lines.extend(report.briefing.split("\n"))
         for section in report.sections:
             lines.extend(("", f"## {section.title}", f"상태: **{ko_status(section.status)}**"))
             if section.lines:

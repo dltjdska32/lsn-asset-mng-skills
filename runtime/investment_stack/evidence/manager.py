@@ -6,6 +6,7 @@ import json
 import os
 import sqlite3
 import uuid
+from decimal import Decimal
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -38,6 +39,38 @@ from investment_stack.storage.sqlite import (
     _sqlite_write_connection,
     sqlite_readonly_connection,
     sqlite_transaction,
+)
+from investment_stack.contracts.calculation import CalculationRecord, CalculationStatus
+from investment_stack.contracts.codec import (
+    MAX_PAYLOAD_BYTES,
+    compute_semantic_hash,
+    decode_contract,
+    decode_envelope,
+    encode_envelope,
+    format_decimal,
+    to_canonical_dict,
+)
+from investment_stack.contracts.errors import (
+    AmbiguousSnapshotError,
+    ContractValidationError,
+    CorruptedStorageError,
+    EvidenceNotFoundError,
+    HistoryPreservationError,
+    InputIntegrityError,
+    RevisionConflictError,
+    TamperDetectionError,
+)
+from investment_stack.contracts.slots import BoundSlotInput, SelectedInputSet
+from investment_stack.contracts.storage import (
+    CONTRACT_STORAGE_KEY,
+    build_canonical_binding_projection,
+    deserialize_calculation_envelope,
+    deserialize_snapshot_envelope,
+    empty_contract_storage,
+    extract_contract_storage,
+    serialize_calculation_envelope,
+    serialize_snapshot_envelope,
+    validate_metadata_update_preservation,
 )
 
 
@@ -136,6 +169,15 @@ def validate_run_database(path: Path, *, expected_run_id: str) -> RunValidationR
     return RunValidationReport(not errors, database, tuple(errors))
 
 
+def _validate_bound_slot_match(
+    calc_id: str, bound_slot: BoundSlotInput, snap_slot: BoundSlotInput
+) -> None:
+    if to_canonical_dict(bound_slot) != to_canonical_dict(snap_slot):
+        raise InputIntegrityError(
+            f"Calculation '{calc_id}' bound slot '{bound_slot.slot_id}' does not match referenced snapshot slot"
+        )
+
+
 class RunDatabaseManager:
     """A run-local manager whose failure never changes personal DB status."""
 
@@ -214,12 +256,51 @@ class RunDatabaseManager:
             if report.valid:
                 try:
                     self._database_identity = get_path_identity(database_path)
+                    with _sqlite_verified_read_connection(
+                        database_path, expected_identity=self._database_identity
+                    ) as connection:
+                        row = connection.execute(
+                            "SELECT metadata_json FROM run_metadata WHERE run_id = ?",
+                            (self.run_id,),
+                        ).fetchone()
+                        if row is None:
+                            raise CorruptedStorageError("run metadata disappeared during open")
+                        extract_contract_storage(row["metadata_json"], expected_run_id=self.run_id)
+                        evidence_rows = connection.execute(
+                            "SELECT evidence_id, metadata_json FROM evidence WHERE run_id = ?",
+                            (self.run_id,),
+                        ).fetchall()
+                        for evidence_row in evidence_rows:
+                            if not evidence_row["metadata_json"]:
+                                continue
+                            try:
+                                evidence_meta = json.loads(evidence_row["metadata_json"])
+                                typed_envelope = evidence_meta.get("contract_envelope")
+                                cached = evidence_meta.get("canonical_payload")
+                                if typed_envelope is None and cached is None:
+                                    continue
+                                if not isinstance(typed_envelope, dict) or not isinstance(cached, dict):
+                                    raise ValueError("typed envelope or projection missing")
+                                kind, _ = decode_envelope(typed_envelope)
+                                dto = decode_contract(typed_envelope, expected_kind=kind)
+                                if build_canonical_binding_projection(dto) != cached:
+                                    raise ValueError("cached projection differs from typed source")
+                                if build_canonical_binding_projection(dto).get("evidence_id") != evidence_row["evidence_id"]:
+                                    raise ValueError("typed evidence identity differs from row id")
+                            except Exception as exc:
+                                raise CorruptedStorageError(
+                                    f"Evidence '{evidence_row['evidence_id']}' integrity validation failed: {exc}"
+                                ) from exc
                 except (OSError, StorageIdentityError, ValueError) as exc:
                     report = RunValidationReport(
                         False,
                         database_path,
                         (f"run identity validation error: {exc}",),
                     )
+                    self.status = RunDatabaseStatus.INVALID
+                    self._database_identity = None
+                except CorruptedStorageError as exc:
+                    report = RunValidationReport(False, database_path, (f"contract ledger validation failed: {exc}",))
                     self.status = RunDatabaseStatus.INVALID
                     self._database_identity = None
             return report
@@ -274,13 +355,21 @@ class RunDatabaseManager:
         metadata: dict[str, Any] | None = None,
     ) -> None:
         with self._mutation_connection() as connection:
+            row = connection.execute(
+                "SELECT metadata_json FROM run_metadata WHERE run_id = ?",
+                (self.run_id,),
+            ).fetchone()
+            existing_metadata_json = row["metadata_json"] if row else None
+            merged_metadata = validate_metadata_update_preservation(
+                existing_metadata_json, metadata
+            )
             cursor = connection.execute(
                 "UPDATE run_metadata SET run_status = ?, request_mode = ?, metadata_json = ? "
                 "WHERE run_id = ?",
                 (
                     run_status,
                     request_mode,
-                    json.dumps(metadata, sort_keys=True) if metadata is not None else None,
+                    json.dumps(merged_metadata, sort_keys=True) if merged_metadata else None,
                     self.run_id,
                 ),
             )
@@ -342,6 +431,39 @@ class RunDatabaseManager:
             )
             if cursor.rowcount != 1:
                 raise RuntimeError("evidence insert did not affect exactly one row")
+
+    def add_contract_evidence(
+        self,
+        *,
+        evidence_id: str,
+        contract_envelope: dict[str, Any],
+        source_uri: str | None = None,
+        content_hash: str | None = None,
+        evidence_type: str = "contract_envelope",
+    ) -> None:
+        """Persist evidence containing a validated typed contract envelope."""
+        kind, payload = decode_envelope(contract_envelope)
+        envelope_json = json.dumps(contract_envelope, sort_keys=True)
+        if len(envelope_json.encode("utf-8")) > MAX_PAYLOAD_BYTES:
+            raise InputIntegrityError(f"Envelope exceeds {MAX_PAYLOAD_BYTES} bytes budget")
+
+        # Strict typed decoding of the contract envelope
+        dto = decode_contract(contract_envelope, expected_kind=kind)
+        projection = build_canonical_binding_projection(dto)
+
+        c_hash = content_hash or compute_semantic_hash(payload)
+        metadata = {
+            "contract_envelope": contract_envelope,
+            "canonical_payload": projection,
+            "contract_kind": kind,
+        }
+        self.add_evidence(
+            evidence_id=evidence_id,
+            evidence_type=evidence_type,
+            source_uri=source_uri,
+            content_hash=c_hash,
+            metadata=metadata,
+        )
 
     def initialize_run_context(
         self,
@@ -779,3 +901,767 @@ class RunDatabaseManager:
                     datetime.now(timezone.utc).isoformat(),
                 ),
             )
+
+    def persist_contract_snapshot(
+        self,
+        snapshot: SelectedInputSet,
+        *,
+        expected_revision: int | None = None,
+        calculations: tuple[CalculationRecord, ...] = (),
+        project_compatible: bool = True,
+    ) -> int:
+        """Persist a typed selection snapshot and optional calculations atomically in run.db.
+
+        Enforces:
+        - Atomic sqlite transaction (rollback on any failure)
+        - Run ID match between snapshot and manager
+        - Snapshot hash integrity and payload budget check (< 256 KB)
+        - Expected revision compare-and-swap (CAS) check
+        - Snapshot selection_version == cur_rev + 1
+        - Referenced evidence existence in this run's evidence table
+        - Referenced observation existence in this run's market_observations table
+        - Cross-run reference rejection
+        - Calculation run_id, lineage hash, status-numeric coherence, and bound input consistency
+        - Append-only snapshot hash chain and tamper verification
+        - Active selection tracking via active_selections pointer
+        - Idempotent retry handling for identical snapshot
+        - Backward-compatible projections to evidence.selection_state, observation_selections, calculations
+        """
+        if snapshot.request_hash is not None and (
+            len(snapshot.request_hash) != 64
+            or any(ch not in "0123456789abcdef" for ch in snapshot.request_hash.lower())
+        ):
+            raise InputIntegrityError("Snapshot request_hash is not a resolvable SHA-256 request identity")
+        if snapshot.run_id != self.run_id:
+            raise InputIntegrityError(
+                f"Snapshot run_id '{snapshot.run_id}' does not match manager run_id '{self.run_id}'"
+            )
+        if not snapshot.verify_hash():
+            raise TamperDetectionError("Snapshot hash verification failed against its slots")
+
+        snapshot_envelope = serialize_snapshot_envelope(snapshot)
+
+        with self._mutation_connection() as connection:
+            row = connection.execute(
+                "SELECT metadata_json FROM run_metadata WHERE run_id = ?",
+                (self.run_id,),
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("run metadata disappeared")
+
+            storage = extract_contract_storage(row["metadata_json"], expected_run_id=self.run_id)
+            meta_dict = json.loads(row["metadata_json"]) if row["metadata_json"] else {}
+
+            # Idempotent retry check: if identical snapshot already committed
+            for entry in storage.get("history", []):
+                if entry.get("snapshot_hash") == snapshot.snapshot_hash:
+                    existing_snap = deserialize_snapshot_envelope(entry["envelope"])
+                    if existing_snap == snapshot:
+                        return entry["revision"]
+                    raise InputIntegrityError(
+                        f"Snapshot hash '{snapshot.snapshot_hash}' collides with existing entry but content differs"
+                    )
+
+            cur_rev = storage.get("latest_revision", 0)
+            if expected_revision is not None and expected_revision != cur_rev:
+                raise RevisionConflictError(
+                    f"Revision conflict for run {self.run_id}: expected {expected_revision}, current is {cur_rev}"
+                )
+            if snapshot.selection_version != cur_rev + 1:
+                raise RevisionConflictError(
+                    f"Snapshot selection_version {snapshot.selection_version} must equal cur_rev + 1 ({cur_rev + 1})"
+                )
+
+            # Resolve and verify request descriptor
+            resolved_request = None
+            if snapshot.request_hash is not None:
+                from investment_stack.contracts.storage import deserialize_request_envelope
+                for req_entry in storage.get("requests", []):
+                    if req_entry.get("request_hash") == snapshot.request_hash:
+                        req_envelope = req_entry.get("envelope")
+                        if req_envelope:
+                            resolved_request = deserialize_request_envelope(req_envelope)
+                            if resolved_request.compute_request_hash() != snapshot.request_hash:
+                                raise InputIntegrityError(f"Request descriptor hash mismatch in storage for '{snapshot.request_hash}'")
+                        break
+                if resolved_request is None:
+                    raise InputIntegrityError(f"Snapshot references unregistered request_hash '{snapshot.request_hash}'")
+
+                if snapshot.purpose != str(resolved_request.purpose):
+                    raise InputIntegrityError(f"Snapshot purpose '{snapshot.purpose}' does not match request '{resolved_request.purpose}'")
+                if snapshot.instrument_id != resolved_request.instrument_id:
+                    raise InputIntegrityError(f"Snapshot instrument '{snapshot.instrument_id}' does not match request '{resolved_request.instrument_id}'")
+
+            request_slots_by_id = {s.slot_id: s for s in resolved_request.slots} if resolved_request else {}
+
+            # Strict evidence and observation verification in DB for this run
+            for slot in snapshot.slots:
+                canonical: dict[str, Any] = {}
+                proj_inst = None
+
+                if slot.evidence_id:
+                    ev_row = connection.execute(
+                        "SELECT evidence_id, run_id, metadata_json, evidence_type, content_hash FROM evidence WHERE evidence_id = ?",
+                        (slot.evidence_id,),
+                    ).fetchone()
+                    if ev_row is None:
+                        raise EvidenceNotFoundError(
+                            f"Evidence '{slot.evidence_id}' referenced in slot '{slot.slot_id}' does not exist in run.db"
+                        )
+                    if ev_row["run_id"] != self.run_id:
+                        raise InputIntegrityError(
+                            f"Evidence '{slot.evidence_id}' belongs to run '{ev_row['run_id']}', cross-run references are rejected"
+                        )
+                    if not ev_row["metadata_json"]:
+                        raise InputIntegrityError(
+                            f"Evidence '{slot.evidence_id}' has no canonical binding projection; raw untyped evidence cannot authorize bound calculation slots"
+                        )
+                    try:
+                        ev_meta = json.loads(ev_row["metadata_json"])
+                    except Exception as exc:
+                        raise InputIntegrityError(
+                            f"Evidence '{slot.evidence_id}' metadata is invalid JSON: {exc}"
+                        ) from exc
+                    canonical = ev_meta.get("canonical_payload") if isinstance(ev_meta, dict) else {}
+                    typed_envelope = ev_meta.get("contract_envelope") if isinstance(ev_meta, dict) else None
+                    if not canonical or not isinstance(canonical, dict) or not typed_envelope:
+                        raise InputIntegrityError(
+                            f"Evidence '{slot.evidence_id}' lacks canonical binding projection; raw untyped evidence cannot authorize bound calculation slots"
+                        )
+                    try:
+                        kind, _ = decode_envelope(typed_envelope)
+                        typed_dto = decode_contract(typed_envelope, expected_kind=kind)
+                        verified_projection = build_canonical_binding_projection(typed_dto)
+                    except Exception as exc:
+                        raise InputIntegrityError(
+                            f"Evidence '{slot.evidence_id}' typed source is invalid: {exc}"
+                        ) from exc
+                    if canonical != verified_projection:
+                        raise InputIntegrityError(
+                            f"Evidence '{slot.evidence_id}' cached projection does not match its typed source"
+                        )
+                    if verified_projection.get("evidence_id") != slot.evidence_id:
+                        raise InputIntegrityError(
+                            f"Evidence row id '{slot.evidence_id}' does not match typed source identity"
+                        )
+                    if slot.input_fingerprint and slot.input_fingerprint != ev_row["content_hash"]:
+                        raise InputIntegrityError(
+                            f"Slot '{slot.slot_id}' input fingerprint does not match registered evidence content hash"
+                        )
+                    if slot.eligibility_id:
+                        eligibility = ev_meta.get("eligibility_decisions", {})
+                        decision = eligibility.get(slot.eligibility_id) if isinstance(eligibility, dict) else None
+                        if not isinstance(decision, dict) or decision.get("status") != "ELIGIBLE":
+                            raise InputIntegrityError(
+                                f"Slot '{slot.slot_id}' references unresolved or non-eligible decision '{slot.eligibility_id}'"
+                            )
+                        if resolved_request:
+                            if decision.get("policy_version") != resolved_request.policy_version:
+                                raise InputIntegrityError(f"Slot '{slot.slot_id}' policy_version '{decision.get('policy_version')}' does not match request '{resolved_request.policy_version}'")
+
+                    # Compare canonical_value
+                    if "canonical_value" not in canonical or slot.canonical_value is None:
+                        raise InputIntegrityError(f"Slot '{slot.slot_id}' lacks a verifiable canonical value")
+                    if "canonical_value" in canonical and slot.canonical_value is not None:
+                        proj_val = Decimal(str(canonical["canonical_value"]))
+                        if slot.canonical_value != proj_val:
+                            raise InputIntegrityError(
+                                f"Slot '{slot.slot_id}' canonical_value '{slot.canonical_value}' does not match evidence '{slot.evidence_id}' projection value '{proj_val}'"
+                            )
+
+                    # Compare currency
+                    proj_curr = canonical.get("canonical_currency") or canonical.get("currency")
+                    if proj_curr is None or slot.canonical_currency is None:
+                        raise InputIntegrityError(f"Slot '{slot.slot_id}' lacks a verifiable currency")
+                    if proj_curr is not None and slot.canonical_currency is not None:
+                        if proj_curr != slot.canonical_currency:
+                            raise InputIntegrityError(
+                                f"Slot '{slot.slot_id}' canonical_currency '{slot.canonical_currency}' does not match evidence '{slot.evidence_id}' currency '{proj_curr}'"
+                            )
+                    if canonical.get("canonical_unit") != slot.canonical_unit:
+                        raise InputIntegrityError(
+                            f"Slot '{slot.slot_id}' canonical_unit '{slot.canonical_unit}' does not match evidence unit '{canonical.get('canonical_unit')}'"
+                        )
+                    if slot.public_available_at is not None and slot.public_available_at != canonical.get("public_available_at"):
+                        raise InputIntegrityError(
+                            f"Slot '{slot.slot_id}' public availability does not match typed evidence"
+                        )
+
+                    # Compare instrument_id if present in snapshot/slot and projection
+                    proj_inst = canonical.get("instrument_id")
+                    if proj_inst is not None and snapshot.instrument_id is not None:
+                        if proj_inst != snapshot.instrument_id:
+                            raise InputIntegrityError(
+                                f"Snapshot instrument_id '{snapshot.instrument_id}' does not match evidence '{slot.evidence_id}' instrument '{proj_inst}'"
+                            )
+
+                # Verify against SelectionRequest constraints if specified (even if evidence_id is missing)
+                if request_slots_by_id:
+                    req_slot = request_slots_by_id.get(slot.slot_id)
+                    if req_slot is None:
+                        raise InputIntegrityError(f"Snapshot slot '{slot.slot_id}' is not requested by the selection request")
+
+                    meta_for_match = dict(canonical) if canonical else {}
+                    if "canonical_currency" in meta_for_match:
+                        meta_for_match["currency"] = meta_for_match["canonical_currency"]
+                    if "availability_interval_end" in meta_for_match:
+                        meta_for_match["period_end"] = meta_for_match["availability_interval_end"]
+                    if "availability_interval_start" in meta_for_match:
+                        meta_for_match["period_start"] = meta_for_match["availability_interval_start"]
+
+                    match_ok, match_err = req_slot.matches_candidate(
+                        candidate_currency=slot.canonical_currency,
+                        candidate_instrument_id=proj_inst,
+                        candidate_metadata=meta_for_match,
+                    )
+                    if not match_ok:
+                        raise InputIntegrityError(f"Slot '{slot.slot_id}' does not match request constraints: {match_err}")
+
+                    if req_slot.metric != meta_for_match.get("metric"):
+                        raise InputIntegrityError(f"Slot '{slot.slot_id}' metric '{meta_for_match.get('metric')}' does not match request metric '{req_slot.metric}'")
+
+                    if resolved_request.as_of and canonical.get("public_available_at"):
+                        try:
+                            dt_avail = datetime.fromisoformat(canonical["public_available_at"].replace("Z", "+00:00"))
+                            dt_asof = datetime.fromisoformat(resolved_request.as_of.replace("Z", "+00:00"))
+                            if dt_avail.tzinfo is None or dt_asof.tzinfo is None:
+                                raise ValueError
+                            if dt_avail > dt_asof:
+                                raise InputIntegrityError(f"Slot '{slot.slot_id}' typed evidence available_at '{canonical['public_available_at']}' is after request as_of '{resolved_request.as_of}'")
+                        except ValueError:
+                            # If they aren't valid aware ISO8601 strings, fallback to string compare or fail.
+                            # Instructions: "timezone-aware 시각으로 하며 ISO 문자열의 사전식 비교에 의존하지 않는다."
+                            raise InputIntegrityError("as_of and public_available_at must be valid timezone-aware datetimes")
+
+            if resolved_request:
+                provided_slot_ids = {s.slot_id for s in snapshot.slots}
+                missing_slots = set(request_slots_by_id.keys()) - provided_slot_ids
+                if missing_slots:
+                    raise InputIntegrityError(f"Snapshot missing requested slots: {sorted(missing_slots)}")
+
+                if slot.observation_id:
+                    obs_row = connection.execute(
+                        "SELECT observation_id, run_id, evidence_id FROM market_observations WHERE observation_id = ?",
+                        (slot.observation_id,),
+                    ).fetchone()
+                    if obs_row is None:
+                        raise InputIntegrityError(
+                            f"Observation '{slot.observation_id}' referenced in slot '{slot.slot_id}' does not exist in run.db"
+                        )
+                    if obs_row["run_id"] != self.run_id:
+                        raise InputIntegrityError(
+                            f"Observation '{slot.observation_id}' belongs to run '{obs_row['run_id']}', cross-run references are rejected"
+                        )
+                    if slot.evidence_id and obs_row["evidence_id"] and obs_row["evidence_id"] != slot.evidence_id:
+                        raise InputIntegrityError(
+                            f"Observation '{slot.observation_id}' evidence_id '{obs_row['evidence_id']}' does not match slot evidence_id '{slot.evidence_id}'"
+                        )
+
+            # Verify calculations
+            snapshot_slots_by_id = {s.slot_id: s for s in snapshot.slots}
+            calc_entries = list(storage.get("calculations", []))
+            for calc in calculations:
+                if calc.run_id != self.run_id:
+                    raise InputIntegrityError(
+                        f"Calculation '{calc.calculation_id}' run_id '{calc.run_id}' does not match manager run_id '{self.run_id}'"
+                    )
+                if not calc.verify_lineage():
+                    raise InputIntegrityError(
+                        f"Calculation '{calc.calculation_id}' lineage hash verification failed"
+                    )
+                if calc.status in (CalculationStatus.UNAVAILABLE, CalculationStatus.FAILED) and calc.result_numeric is not None:
+                    raise InputIntegrityError(
+                        f"Calculation '{calc.calculation_id}' has status {calc.status} but non-None result_numeric"
+                    )
+                if calc.selection_snapshot_hash != snapshot.snapshot_hash:
+                    known_map = {h["snapshot_hash"]: h for h in storage.get("history", [])}
+                    if calc.selection_snapshot_hash not in known_map:
+                        raise InputIntegrityError(
+                            f"Calculation '{calc.calculation_id}' references unknown snapshot hash '{calc.selection_snapshot_hash}'"
+                        )
+                    ref_snap = deserialize_snapshot_envelope(known_map[calc.selection_snapshot_hash]["envelope"])
+                    ref_slots_by_id = {s.slot_id: s for s in ref_snap.slots}
+                else:
+                    ref_slots_by_id = snapshot_slots_by_id
+
+                # Verify calculation bound inputs match referenced snapshot slots
+                seen_calc_slot_ids: set[str] = set()
+                for bound_slot in calc.bound_inputs:
+                    if bound_slot.slot_id in seen_calc_slot_ids:
+                        raise InputIntegrityError(
+                            f"Calculation '{calc.calculation_id}' contains duplicate bound input slot '{bound_slot.slot_id}'"
+                        )
+                    seen_calc_slot_ids.add(bound_slot.slot_id)
+                    if bound_slot.slot_id not in ref_slots_by_id:
+                        raise InputIntegrityError(
+                            f"Calculation '{calc.calculation_id}' bound input slot '{bound_slot.slot_id}' not found in snapshot"
+                        )
+                    snap_slot = ref_slots_by_id[bound_slot.slot_id]
+                    _validate_bound_slot_match(calc.calculation_id, bound_slot, snap_slot)
+
+                # Check preceding calculations
+                existing_calc_ids = {c["calculation_id"] for c in calc_entries}
+                for prec_id in calc.preceding_calculation_ids:
+                    if prec_id not in existing_calc_ids:
+                        raise InputIntegrityError(
+                            f"Calculation '{calc.calculation_id}' references non-existent preceding calculation '{prec_id}'"
+                        )
+
+                calc_envelope = serialize_calculation_envelope(calc)
+                calc_entries.append(
+                    {
+                        "calculation_id": calc.calculation_id,
+                        "committed_at": datetime.now(timezone.utc).isoformat(),
+                        "envelope": calc_envelope,
+                    }
+                )
+                if project_compatible:
+                    connection.execute(
+                        "INSERT INTO calculations "
+                        "(calculation_id, run_id, calculation_name, formula, inputs_json, result_json, created_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            calc.calculation_id,
+                            self.run_id,
+                            calc.calculation_name,
+                            f"{calc.formula_id}:{calc.formula_version}",
+                            json.dumps(
+                                [to_canonical_dict(s) for s in calc.bound_inputs], sort_keys=True
+                            ),
+                            json.dumps(
+                                {
+                                    "numeric": format_decimal(calc.result_numeric)
+                                    if calc.result_numeric is not None
+                                    else None,
+                                    "unit": calc.result_unit,
+                                    "currency": calc.result_currency,
+                                    "payload": to_canonical_dict(calc.result_payload),
+                                    "status": str(calc.status),
+                                    "lineage_hash": calc.lineage_hash,
+                                },
+                                sort_keys=True,
+                            ),
+                            calc.calculated_at or datetime.now(timezone.utc).isoformat(),
+                        ),
+                    )
+
+            # Project compatible selection states
+            if project_compatible:
+                for slot in snapshot.slots:
+                    if slot.evidence_id:
+                        connection.execute(
+                            "UPDATE evidence SET selection_state = ?, selection_reason = ? "
+                            "WHERE evidence_id = ? AND run_id = ?",
+                            (
+                                "SELECTED",
+                                f"bound_to_slot:{slot.slot_id}",
+                                slot.evidence_id,
+                                self.run_id,
+                            ),
+                        )
+                    if slot.observation_id:
+                        obs_row = connection.execute(
+                            "SELECT observation_id FROM market_observations WHERE observation_id = ? AND run_id = ?",
+                            (slot.observation_id, self.run_id),
+                        ).fetchone()
+                        if obs_row is not None:
+                            connection.execute(
+                                "INSERT OR REPLACE INTO observation_selections "
+                                "(selection_id, run_id, observation_id, selection_reason, selected_at) "
+                                "VALUES (?, ?, ?, ?, ?)",
+                                (
+                                    f"sel:{slot.slot_id}:{snapshot.selection_version}",
+                                    self.run_id,
+                                    slot.observation_id,
+                                    f"bound_to_slot:{slot.slot_id}",
+                                    datetime.now(timezone.utc).isoformat(),
+                                ),
+                            )
+
+            # Append to history and update active selections pointer
+            new_rev = cur_rev + 1
+            prev_hash = storage.get("latest_snapshot_hash", "")
+            history_entry = {
+                "revision": new_rev,
+                "previous_snapshot_hash": prev_hash,
+                "snapshot_hash": snapshot.snapshot_hash,
+                "committed_at": datetime.now(timezone.utc).isoformat(),
+                "envelope": snapshot_envelope,
+            }
+            history = list(storage.get("history", []))
+            history.append(history_entry)
+
+            active_selections = storage.setdefault("active_selections", {})
+            active_selections[snapshot.active_key] = snapshot.snapshot_hash
+
+            storage["latest_revision"] = new_rev
+            storage["latest_snapshot_hash"] = snapshot.snapshot_hash
+            storage["history"] = history
+            storage["calculations"] = calc_entries
+            meta_dict[CONTRACT_STORAGE_KEY] = storage
+
+            connection.execute(
+                "UPDATE run_metadata SET metadata_json = ? WHERE run_id = ?",
+                (json.dumps(meta_dict, sort_keys=True), self.run_id),
+            )
+            return new_rev
+
+    def fetch_contract_snapshots(
+        self,
+        purpose: str | None = None,
+        *,
+        instrument_id: str | None = None,
+        request_hash: str | None = None,
+    ) -> tuple[SelectedInputSet, ...]:
+        """Retrieve and strictly verify all SelectedInputSet snapshots, optionally filtered."""
+        meta = self.fetch_metadata()
+        storage = extract_contract_storage(meta.get("metadata_json"), expected_run_id=self.run_id)
+        history = storage.get("history", [])
+        snapshots: list[SelectedInputSet] = []
+        for entry in history:
+            envelope = entry.get("envelope")
+            if envelope:
+                snap = deserialize_snapshot_envelope(envelope)
+                if purpose is not None and snap.purpose != purpose:
+                    continue
+                if instrument_id is not None and snap.instrument_id != instrument_id:
+                    continue
+                if request_hash is not None and snap.request_hash != request_hash:
+                    continue
+                snapshots.append(snap)
+        return tuple(snapshots)
+
+    def fetch_active_contract_snapshot(
+        self,
+        purpose: str,
+        *,
+        instrument_id: str | None = None,
+        request_hash: str | None = None,
+    ) -> SelectedInputSet | None:
+        """Retrieve the active SelectedInputSet snapshot for a given purpose via active_selections pointer.
+
+        Supports multi-part request scoping (purpose:instrument:request_hash).
+        Rejects ambiguous partial matches with AmbiguousSnapshotError.
+        """
+        meta = self.fetch_metadata()
+        storage = extract_contract_storage(meta.get("metadata_json"), expected_run_id=self.run_id)
+        active_map = storage.get("active_selections", {})
+
+        matching_keys: list[str] = []
+        for key in active_map:
+            parts = key.split(":")
+            p = parts[0]
+            if p != purpose:
+                continue
+            key_inst = parts[1] if len(parts) > 1 else None
+            key_req = parts[2] if len(parts) > 2 else None
+
+            # Match instrument
+            if instrument_id is not None:
+                if key_inst is not None and key_inst != "*" and key_inst != instrument_id:
+                    continue
+
+            # Match request_hash
+            if request_hash is not None:
+                if key_req is not None and key_req != "*" and key_req != request_hash:
+                    continue
+
+            matching_keys.append(key)
+
+        if len(matching_keys) > 1:
+            target_hashes = {active_map[k] for k in matching_keys}
+            if len(target_hashes) > 1:
+                scope_desc = f"purpose '{purpose}'"
+                if instrument_id:
+                    scope_desc += f", instrument '{instrument_id}'"
+                if request_hash:
+                    scope_desc += f", request_hash '{request_hash}'"
+                raise AmbiguousSnapshotError(
+                    f"Ambiguous active snapshot query for {scope_desc}: found multiple active entries "
+                    f"({sorted(matching_keys)}). Must specify narrower scope."
+                )
+            target_hash = target_hashes.pop()
+        elif len(matching_keys) == 1:
+            target_hash = active_map[matching_keys[0]]
+        else:
+            return None
+
+        history = storage.get("history", [])
+        for entry in history:
+            if entry.get("snapshot_hash") == target_hash:
+                envelope = entry.get("envelope")
+                if envelope:
+                    snap = deserialize_snapshot_envelope(envelope)
+                    if snap.active_key != matching_keys[0]:
+                        raise CorruptedStorageError(
+                            f"Active pointer scope '{matching_keys[0]}' targets snapshot scope '{snap.active_key}'"
+                        )
+                    if snap.purpose != purpose:
+                        raise CorruptedStorageError("Active pointer target purpose does not match query")
+                    if instrument_id is not None and snap.instrument_id != instrument_id:
+                        raise CorruptedStorageError("Active pointer target instrument does not match query")
+                    if request_hash is not None and snap.request_hash != request_hash:
+                        raise CorruptedStorageError("Active pointer target request does not match query")
+                    return snap
+        return None
+
+    def fetch_latest_contract_snapshot(
+        self,
+        purpose: str,
+        *,
+        instrument_id: str | None = None,
+        request_hash: str | None = None,
+    ) -> SelectedInputSet | None:
+        """Retrieve the latest/active valid SelectedInputSet snapshot for a given purpose."""
+        active = self.fetch_active_contract_snapshot(
+            purpose, instrument_id=instrument_id, request_hash=request_hash
+        )
+        if active is not None:
+            return active
+        snapshots = self.fetch_contract_snapshots(
+            purpose=purpose, instrument_id=instrument_id, request_hash=request_hash
+        )
+        return snapshots[-1] if snapshots else None
+
+    def persist_contract_calculation(
+        self, record: CalculationRecord, *, project_compatible: bool = True
+    ) -> None:
+        """Persist a single CalculationRecord into the run contract storage and optional projection.
+
+        Enforces:
+        - Atomic sqlite transaction
+        - Run ID match between record and manager
+        - Lineage hash integrity
+        - Result numeric is None when status is UNAVAILABLE or FAILED
+        - Referenced snapshot hash exists in history
+        - Bound inputs match referenced snapshot slots (no duplicate slots)
+        - Preceding calculations exist in current run
+        - Idempotent retry for identical calculation
+        - Payload budget (< 256 KB)
+        """
+        if record.run_id != self.run_id:
+            raise InputIntegrityError(
+                f"Calculation run_id '{record.run_id}' does not match manager run_id '{self.run_id}'"
+            )
+        if not record.verify_lineage():
+            raise InputIntegrityError(
+                f"Calculation '{record.calculation_id}' lineage hash verification failed"
+            )
+        if record.status in (CalculationStatus.UNAVAILABLE, CalculationStatus.FAILED) and record.result_numeric is not None:
+            raise InputIntegrityError(
+                f"Calculation '{record.calculation_id}' has status {record.status} but non-None result_numeric"
+            )
+
+        calc_envelope = serialize_calculation_envelope(record)
+
+        with self._mutation_connection() as connection:
+            row = connection.execute(
+                "SELECT metadata_json FROM run_metadata WHERE run_id = ?",
+                (self.run_id,),
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("run metadata disappeared")
+
+            storage = extract_contract_storage(row["metadata_json"], expected_run_id=self.run_id)
+            meta_dict = json.loads(row["metadata_json"]) if row["metadata_json"] else {}
+
+            calc_entries = list(storage.get("calculations", []))
+            # Idempotent retry check
+            for entry in calc_entries:
+                if entry.get("calculation_id") == record.calculation_id:
+                    existing = deserialize_calculation_envelope(entry["envelope"])
+                    if existing == record:
+                        return
+                    raise InputIntegrityError(
+                        f"Calculation '{record.calculation_id}' already exists with differing payload"
+                    )
+
+            # Snapshot reference check
+            matching_snap_entry = None
+            for h_entry in storage.get("history", []):
+                if h_entry.get("snapshot_hash") == record.selection_snapshot_hash:
+                    matching_snap_entry = h_entry
+                    break
+            if matching_snap_entry is None:
+                raise InputIntegrityError(
+                    f"Referenced selection snapshot hash '{record.selection_snapshot_hash}' does not exist in run contract history"
+                )
+
+            snap = deserialize_snapshot_envelope(matching_snap_entry["envelope"])
+            snap_slots_by_id = {s.slot_id: s for s in snap.slots}
+
+            seen_calc_slot_ids: set[str] = set()
+            for bound_slot in record.bound_inputs:
+                if bound_slot.slot_id in seen_calc_slot_ids:
+                    raise InputIntegrityError(
+                        f"Calculation '{record.calculation_id}' contains duplicate bound input slot '{bound_slot.slot_id}'"
+                    )
+                seen_calc_slot_ids.add(bound_slot.slot_id)
+                if bound_slot.slot_id not in snap_slots_by_id:
+                    raise InputIntegrityError(
+                        f"Calculation '{record.calculation_id}' bound input slot '{bound_slot.slot_id}' not found in referenced snapshot"
+                    )
+                snap_slot = snap_slots_by_id[bound_slot.slot_id]
+                _validate_bound_slot_match(record.calculation_id, bound_slot, snap_slot)
+
+            # Check preceding calculations
+            existing_calc_ids = {c["calculation_id"] for c in calc_entries}
+            for prec_id in record.preceding_calculation_ids:
+                if prec_id not in existing_calc_ids:
+                    raise InputIntegrityError(
+                        f"Calculation '{record.calculation_id}' references non-existent preceding calculation '{prec_id}'"
+                    )
+
+            calc_entries.append(
+                {
+                    "calculation_id": record.calculation_id,
+                    "committed_at": datetime.now(timezone.utc).isoformat(),
+                    "envelope": calc_envelope,
+                }
+            )
+            storage["calculations"] = calc_entries
+            meta_dict[CONTRACT_STORAGE_KEY] = storage
+
+            if project_compatible:
+                connection.execute(
+                    "INSERT INTO calculations "
+                    "(calculation_id, run_id, calculation_name, formula, inputs_json, result_json, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        record.calculation_id,
+                        self.run_id,
+                        record.calculation_name,
+                        f"{record.formula_id}:{record.formula_version}",
+                        json.dumps(
+                            [to_canonical_dict(s) for s in record.bound_inputs], sort_keys=True
+                        ),
+                        json.dumps(
+                            {
+                                "numeric": format_decimal(record.result_numeric)
+                                if record.result_numeric is not None
+                                else None,
+                                "unit": record.result_unit,
+                                "currency": record.result_currency,
+                                "payload": to_canonical_dict(record.result_payload),
+                                "status": str(record.status),
+                                "lineage_hash": record.lineage_hash,
+                            },
+                            sort_keys=True,
+                        ),
+                        record.calculated_at or datetime.now(timezone.utc).isoformat(),
+                    ),
+                )
+
+            connection.execute(
+                "UPDATE run_metadata SET metadata_json = ? WHERE run_id = ?",
+                (json.dumps(meta_dict, sort_keys=True), self.run_id),
+            )
+
+    def persist_selection_request(self, request: Any) -> None:
+        """Persist a SelectionRequest into the run contract storage."""
+        # Local import to avoid circular dependency
+        from investment_stack.contracts.slots import SelectionRequest
+        from investment_stack.contracts.storage import serialize_request_envelope
+
+        if not isinstance(request, SelectionRequest):
+            raise TypeError("Expected a SelectionRequest instance")
+
+        req_hash = request.compute_request_hash()
+        req_envelope = serialize_request_envelope(request)
+
+        with self._mutation_connection() as connection:
+            row = connection.execute(
+                "SELECT metadata_json FROM run_metadata WHERE run_id = ?",
+                (self.run_id,),
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("run metadata disappeared")
+
+            storage = extract_contract_storage(row["metadata_json"], expected_run_id=self.run_id)
+            meta_dict = json.loads(row["metadata_json"]) if row["metadata_json"] else {}
+
+            requests = list(storage.get("requests", []))
+            for entry in requests:
+                if entry.get("request_hash") == req_hash:
+                    return  # Idempotent retry
+
+            requests.append(
+                {
+                    "request_hash": req_hash,
+                    "committed_at": datetime.now(timezone.utc).isoformat(),
+                    "envelope": req_envelope,
+                }
+            )
+            storage["requests"] = requests
+            meta_dict[CONTRACT_STORAGE_KEY] = storage
+
+            connection.execute(
+                "UPDATE run_metadata SET metadata_json = ? WHERE run_id = ?",
+                (json.dumps(meta_dict, sort_keys=True), self.run_id),
+            )
+
+    def fetch_contract_calculations(self) -> tuple[CalculationRecord, ...]:
+        """Retrieve and strictly verify all CalculationRecords from the run contract storage."""
+        meta = self.fetch_metadata()
+        storage = extract_contract_storage(meta.get("metadata_json"), expected_run_id=self.run_id)
+        calc_entries = storage.get("calculations", [])
+        calcs: list[CalculationRecord] = []
+        for entry in calc_entries:
+            envelope = entry.get("envelope")
+            if envelope:
+                calcs.append(deserialize_calculation_envelope(envelope))
+        return tuple(calcs)
+
+    def verify_contract_storage_integrity(self) -> bool:
+        """Verify hash chaining, revisions, active pointers, and content integrity across the entire contract history."""
+        meta = self.fetch_metadata()
+        storage = extract_contract_storage(meta.get("metadata_json"), expected_run_id=self.run_id)
+        history = storage.get("history", [])
+        expected_prev_hash = ""
+        expected_rev = 1
+        known_snapshot_hashes: set[str] = set()
+
+        for entry in history:
+            if entry.get("revision") != expected_rev:
+                return False
+            expected_rev += 1
+
+            prev_hash = entry.get("previous_snapshot_hash", "")
+            if prev_hash != expected_prev_hash:
+                return False
+            envelope = entry.get("envelope")
+            if not envelope:
+                return False
+            try:
+                snap = deserialize_snapshot_envelope(envelope)
+                if snap.snapshot_hash != entry.get("snapshot_hash"):
+                    return False
+                if not snap.verify_hash():
+                    return False
+                expected_prev_hash = snap.snapshot_hash
+                known_snapshot_hashes.add(snap.snapshot_hash)
+            except Exception:
+                return False
+
+        # Verify active_selections pointers point to existing snapshots in history
+        active_selections = storage.get("active_selections", {})
+        if not isinstance(active_selections, dict):
+            return False
+        for purpose, active_h in active_selections.items():
+            if active_h not in known_snapshot_hashes:
+                return False
+
+        # Verify calculations
+        for c_entry in storage.get("calculations", []):
+            c_envelope = c_entry.get("envelope")
+            if not c_envelope:
+                return False
+            try:
+                calc = deserialize_calculation_envelope(c_envelope)
+                if not calc.verify_lineage():
+                    return False
+                if calc.selection_snapshot_hash not in known_snapshot_hashes:
+                    return False
+            except Exception:
+                return False
+        return True

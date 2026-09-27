@@ -12,6 +12,7 @@ license = "LicenseRef-Proprietary"
 authors = [{ name = "investment-stack contributors" }]
 dependencies = [
     "tzdata; sys_platform == 'win32'",
+    "truststore>=0.9.1; python_version >= '3.10'",
 ]
 
 [project.scripts]
@@ -19,6 +20,8 @@ investment-stack = "investment_stack.cli:main"
 
 [tool.setuptools]
 package-dir = { "" = "runtime" }
+include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["runtime"]
+include = ["investment_stack*"]

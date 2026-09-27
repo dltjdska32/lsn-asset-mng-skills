@@ -128,5 +128,11 @@ class WebResearchAdapter:
             headline=hit.title,
             official_confirmation_status=hit.official_confirmation_status,
             event_cluster_id=hit.event_cluster_id,
-            metadata={"source_kind": hit.source_kind, "snippet": hit.snippet, **hit.metadata},
+            metadata={
+                "source_kind": hit.source_kind,
+                "snippet": hit.snippet,
+                **({"quote_kind": hit.quote_kind} if hit.quote_kind is not None else {}),
+                **({"is_complete": hit.is_complete} if hit.is_complete is not None else {}),
+                **hit.metadata,
+            },
         )

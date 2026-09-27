@@ -30,6 +30,8 @@ class WebResearchHit:
     source_kind: str = "web_page"
     official_confirmation_status: str | None = None
     event_cluster_id: str | None = None
+    quote_kind: str | None = None
+    is_complete: bool | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 

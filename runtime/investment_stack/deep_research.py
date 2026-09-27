@@ -336,11 +336,17 @@ class LiveDeepResearchRuntime:
                 web_query=spec.news_query,
             )
 
-        current_price = self._current_price(market, target_currency=spec.currency)
-        metrics, normalization_warnings = self._normalize_financials(
+        current_price, price_warning = self._current_price(
+            market, target_currency=spec.currency, instrument_id=spec.instrument_id
+        )
+        metrics, normalization_warnings_tup = self._normalize_financials(
             fundamentals,
             target_currency=spec.currency,
         )
+        normalization_warnings = list(normalization_warnings_tup)
+        if price_warning:
+            normalization_warnings.append(price_warning)
+
         evidence_ids = self._selected_evidence_ids(spec.instrument_id)
         fundamental_evidence = tuple(
             evidence_id for evidence_id in evidence_ids if self._evidence_type(evidence_id) == "financial"
@@ -427,23 +433,40 @@ class LiveDeepResearchRuntime:
             valuation_evidence,
         )
 
-    def _current_price(self, outcome: ResearchOutcome, *, target_currency: str) -> Decimal | None:
+    def _current_price(
+        self, outcome: ResearchOutcome, *, target_currency: str, instrument_id: str
+    ) -> tuple[Decimal | None, str | None]:
         observation = outcome.selected.observation
         if observation is None:
-            return None
+            return None, "price: No valid price observation selected"
+
+        if observation.instrument_id and observation.instrument_id != instrument_id:
+            return None, f"price: instrument mismatch {observation.instrument_id} != {instrument_id}"
+
+        timestamp = observation_time(observation)
+        if not timestamp:
+            return None, "price: missing observation time"
+
         assessment = self.freshness.assess(observation, analysis_as_of=self.analysis_as_of)
-        if assessment.status in {FreshnessStatus.UNKNOWN, FreshnessStatus.UNAVAILABLE}:
-            return None
+        if assessment.status != FreshnessStatus.FRESH:
+            return None, f"price: freshness assessment resulted in {assessment.status.name}, not FRESH"
+
         parsed = _decimal(observation.value)
         if parsed is None:
-            return None
+            return None, "price: missing or invalid numeric value"
+
         declared_currency = _declared_currency(observation)
-        if declared_currency is not None and declared_currency != target_currency.strip().upper():
-            return None
+        if declared_currency is None:
+            return None, "price: missing currency"
+        wanted_currency = target_currency.strip().upper()
+        if declared_currency != wanted_currency:
+            return None, f"price: currency mismatch {declared_currency} != {wanted_currency}"
+
         scale = _unit_scale(observation)
         if scale is None:
-            return None
-        return parsed * scale
+            return None, "price: invalid unit scale"
+
+        return parsed * scale, None
 
     def _normalize_financials(
         self,

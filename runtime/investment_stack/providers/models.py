@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import Decimal
 from enum import StrEnum
 from typing import Any
 
+from investment_stack.contracts.errors import ContractValidationError
 from investment_stack.providers.registry import ProviderCapability
 
 
@@ -52,6 +54,31 @@ class ProviderObservation:
     event_cluster_id: str | None = None
     relevance_reason: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if isinstance(self.source_tier, bool) or not isinstance(self.source_tier, int):
+            raise ContractValidationError(
+                f"source_tier must be integer, got {type(self.source_tier).__name__}"
+            )
+        if isinstance(self.metadata, dict):
+            for k, v in self.metadata.items():
+                if isinstance(v, float):
+                    raise ContractValidationError(f"Float/non-finite value in metadata for key {k!r}: {v}")
+                if isinstance(v, Decimal) and not v.is_finite():
+                    raise ContractValidationError(f"Non-finite Decimal in metadata for key {k!r}: {v}")
+
+    def to_contract_envelope(self) -> dict[str, Any]:
+        """Wrap observation into a versioned contract envelope."""
+        from investment_stack.providers.contract_adapters import observation_to_contract_envelope
+
+        return observation_to_contract_envelope(self)
+
+    @classmethod
+    def from_contract_envelope(cls, envelope: dict[str, Any]) -> ProviderObservation:
+        """Reconstruct a ProviderObservation from a versioned contract envelope."""
+        from investment_stack.contracts.codec import decode_contract
+
+        return decode_contract(envelope, expected_kind="ProviderObservation")
 
 
 @dataclass(frozen=True, slots=True)
