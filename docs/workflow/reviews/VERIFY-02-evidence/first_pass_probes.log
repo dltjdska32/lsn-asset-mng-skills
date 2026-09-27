@@ -1,0 +1,10 @@
+test_rc01_fx_equivalent_portfolio_has_same_risk (__main__.IndependentFirstPass.test_rc01_fx_equivalent_portfolio_has_same_risk) ... ok
+test_rc02_explicit_yahoo_delay_requires_approved_policy (__main__.IndependentFirstPass.test_rc02_explicit_yahoo_delay_requires_approved_policy) ... ok
+test_rc03_posted_receipt_survives_projection_and_log_failure (__main__.IndependentFirstPass.test_rc03_posted_receipt_survives_projection_and_log_failure) ... ok
+test_rc04_annual_usgaap_and_quarter_ifrs_are_not_comparable (__main__.IndependentFirstPass.test_rc04_annual_usgaap_and_quarter_ifrs_are_not_comparable) ... ok
+test_rc05_future_13f_period_cannot_be_point_in_time (__main__.IndependentFirstPass.test_rc05_future_13f_period_cannot_be_point_in_time) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 1.644s
+
+OK

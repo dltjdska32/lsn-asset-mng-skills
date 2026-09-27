@@ -1,0 +1,13 @@
+{
+  "target_sha": "2a078da91ddfd761a1785ee482f3cd23eb1acaf7",
+  "tracked_files_match_archive_with_crlf_normalized": 453,
+  "runtime_files_match_installed_wheel": 116,
+  "installed_data_files_match": 37,
+  "archive_and_clone_wheel_payload_identical": true,
+  "artifacts": {
+    "investment_stack-0.1.0-py3-none-any.whl": "9054c10d29035211edc9cee8577129812144dfc4df0cef7280517567f983df12",
+    "investment_stack-0.1.0.tar.gz": "73057a2cc4bb0504636bf3a1288c561f2c230da2d80d99b8b71a025ee7979bfd"
+  },
+  "python": "3.14.6 (tags/v3.14.6:c63aec6, Jun 10 2026, 10:26:10) [MSC v.1944 64 bit (AMD64)]",
+  "executable": "C:\\Users\\lsn\\Documents\\Codex\\2026-09-28\\investment-stack-verify-01\\work\\clean-venv\\Scripts\\python.exe"
+}

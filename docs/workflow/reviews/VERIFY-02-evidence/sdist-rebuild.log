@@ -1,0 +1,578 @@
+* Getting build dependencies for wheel...
+running egg_info
+writing runtime\investment_stack.egg-info\PKG-INFO
+writing dependency_links to runtime\investment_stack.egg-info\dependency_links.txt
+writing entry points to runtime\investment_stack.egg-info\entry_points.txt
+writing requirements to runtime\investment_stack.egg-info\requires.txt
+writing top-level names to runtime\investment_stack.egg-info\top_level.txt
+reading manifest file 'runtime\investment_stack.egg-info\SOURCES.txt'
+reading manifest template 'MANIFEST.in'
+warning: no previously-included files matching 'personal.db' found anywhere in distribution
+warning: no previously-included files matching 'run.db' found anywhere in distribution
+warning: no previously-included files matching '*.db*' found anywhere in distribution
+warning: no previously-included files matching '*.sqlite*' found anywhere in distribution
+no previously-included directories found matching 'workspace\runs'
+no previously-included directories found matching 'workspace\cache'
+no previously-included directories found matching '.git'
+no previously-included directories found matching '.venv'
+no previously-included directories found matching 'logs'
+warning: no previously-included files matching '.env' found anywhere in distribution
+warning: no previously-included files matching '.env.*' found anywhere in distribution
+warning: no previously-included files matching '*.pem' found anywhere in distribution
+warning: no previously-included files matching '*.key' found anywhere in distribution
+warning: no previously-included files matching '*.p12' found anywhere in distribution
+warning: no previously-included files matching '*.pfx' found anywhere in distribution
+warning: no previously-included files matching '*.log' found anywhere in distribution
+warning: no previously-included files matching '__pycache__' found anywhere in distribution
+warning: no previously-included files matching '*.py[cod]' found anywhere in distribution
+writing manifest file 'runtime\investment_stack.egg-info\SOURCES.txt'
+* Building wheel...
+running bdist_wheel
+running build
+running build_py
+creating build\lib\investment_stack
+copying runtime\investment_stack\asset_analysis.py -> build\lib\investment_stack
+copying runtime\investment_stack\cli.py -> build\lib\investment_stack
+copying runtime\investment_stack\deep_research.py -> build\lib\investment_stack
+copying runtime\investment_stack\invariants.py -> build\lib\investment_stack
+copying runtime\investment_stack\research.py -> build\lib\investment_stack
+copying runtime\investment_stack\__init__.py -> build\lib\investment_stack
+copying runtime\investment_stack\__main__.py -> build\lib\investment_stack
+creating build\lib\investment_stack\calculations
+copying runtime\investment_stack\calculations\allocation.py -> build\lib\investment_stack\calculations
+copying runtime\investment_stack\calculations\alternative.py -> build\lib\investment_stack\calculations
+copying runtime\investment_stack\calculations\common.py -> build\lib\investment_stack\calculations
+copying runtime\investment_stack\calculations\equity.py -> build\lib\investment_stack\calculations
+copying runtime\investment_stack\calculations\fund.py -> build\lib\investment_stack\calculations
+copying runtime\investment_stack\calculations\instruments.py -> build\lib\investment_stack\calculations
+copying runtime\investment_stack\calculations\reconciliation.py -> build\lib\investment_stack\calculations
+copying runtime\investment_stack\calculations\risk.py -> build\lib\investment_stack\calculations
+copying runtime\investment_stack\calculations\technical.py -> build\lib\investment_stack\calculations
+copying runtime\investment_stack\calculations\valuation.py -> build\lib\investment_stack\calculations
+copying runtime\investment_stack\calculations\__init__.py -> build\lib\investment_stack\calculations
+creating build\lib\investment_stack\contracts
+copying runtime\investment_stack\contracts\adapters.py -> build\lib\investment_stack\contracts
+copying runtime\investment_stack\contracts\calculation.py -> build\lib\investment_stack\contracts
+copying runtime\investment_stack\contracts\codec.py -> build\lib\investment_stack\contracts
+copying runtime\investment_stack\contracts\context.py -> build\lib\investment_stack\contracts
+copying runtime\investment_stack\contracts\errors.py -> build\lib\investment_stack\contracts
+copying runtime\investment_stack\contracts\financial.py -> build\lib\investment_stack\contracts
+copying runtime\investment_stack\contracts\institutional.py -> build\lib\investment_stack\contracts
+copying runtime\investment_stack\contracts\market.py -> build\lib\investment_stack\contracts
+copying runtime\investment_stack\contracts\slots.py -> build\lib\investment_stack\contracts
+copying runtime\investment_stack\contracts\storage.py -> build\lib\investment_stack\contracts
+copying runtime\investment_stack\contracts\__init__.py -> build\lib\investment_stack\contracts
+creating build\lib\investment_stack\decisions
+copying runtime\investment_stack\decisions\action.py -> build\lib\investment_stack\decisions
+copying runtime\investment_stack\decisions\briefing.py -> build\lib\investment_stack\decisions
+copying runtime\investment_stack\decisions\__init__.py -> build\lib\investment_stack\decisions
+creating build\lib\investment_stack\evidence
+copying runtime\investment_stack\evidence\manager.py -> build\lib\investment_stack\evidence
+copying runtime\investment_stack\evidence\paths.py -> build\lib\investment_stack\evidence
+copying runtime\investment_stack\evidence\research.py -> build\lib\investment_stack\evidence
+copying runtime\investment_stack\evidence\__init__.py -> build\lib\investment_stack\evidence
+creating build\lib\investment_stack\execution
+copying runtime\investment_stack\execution\analysis_modes.py -> build\lib\investment_stack\execution
+copying runtime\investment_stack\execution\asset_update.py -> build\lib\investment_stack\execution
+copying runtime\investment_stack\execution\dispatcher.py -> build\lib\investment_stack\execution
+copying runtime\investment_stack\execution\models.py -> build\lib\investment_stack\execution
+copying runtime\investment_stack\execution\portfolio_thesis_modes.py -> build\lib\investment_stack\execution
+copying runtime\investment_stack\execution\service_composition.py -> build\lib\investment_stack\execution
+copying runtime\investment_stack\execution\__init__.py -> build\lib\investment_stack\execution
+creating build\lib\investment_stack\freshness
+copying runtime\investment_stack\freshness\calendar.py -> build\lib\investment_stack\freshness
+copying runtime\investment_stack\freshness\engine.py -> build\lib\investment_stack\freshness
+copying runtime\investment_stack\freshness\models.py -> build\lib\investment_stack\freshness
+copying runtime\investment_stack\freshness\__init__.py -> build\lib\investment_stack\freshness
+creating build\lib\investment_stack\institutional
+copying runtime\investment_stack\institutional\compare.py -> build\lib\investment_stack\institutional
+copying runtime\investment_stack\institutional\models.py -> build\lib\investment_stack\institutional
+copying runtime\investment_stack\institutional\normalize.py -> build\lib\investment_stack\institutional
+copying runtime\investment_stack\institutional\scoring.py -> build\lib\investment_stack\institutional
+copying runtime\investment_stack\institutional\validation.py -> build\lib\investment_stack\institutional
+copying runtime\investment_stack\institutional\__init__.py -> build\lib\investment_stack\institutional
+creating build\lib\investment_stack\materiality
+copying runtime\investment_stack\materiality\config.py -> build\lib\investment_stack\materiality
+copying runtime\investment_stack\materiality\engine.py -> build\lib\investment_stack\materiality
+copying runtime\investment_stack\materiality\__init__.py -> build\lib\investment_stack\materiality
+creating build\lib\investment_stack\migrations
+copying runtime\investment_stack\migrations\__init__.py -> build\lib\investment_stack\migrations
+creating build\lib\investment_stack\personal
+copying runtime\investment_stack\personal\backup.py -> build\lib\investment_stack\personal
+copying runtime\investment_stack\personal\decimal.py -> build\lib\investment_stack\personal
+copying runtime\investment_stack\personal\errors.py -> build\lib\investment_stack\personal
+copying runtime\investment_stack\personal\intent.py -> build\lib\investment_stack\personal
+copying runtime\investment_stack\personal\interpretation.py -> build\lib\investment_stack\personal
+copying runtime\investment_stack\personal\ledger.py -> build\lib\investment_stack\personal
+copying runtime\investment_stack\personal\manager.py -> build\lib\investment_stack\personal
+copying runtime\investment_stack\personal\paths.py -> build\lib\investment_stack\personal
+copying runtime\investment_stack\personal\projection.py -> build\lib\investment_stack\personal
+copying runtime\investment_stack\personal\validation.py -> build\lib\investment_stack\personal
+copying runtime\investment_stack\personal\__init__.py -> build\lib\investment_stack\personal
+creating build\lib\investment_stack\pipelines
+copying runtime\investment_stack\pipelines\planner.py -> build\lib\investment_stack\pipelines
+copying runtime\investment_stack\pipelines\__init__.py -> build\lib\investment_stack\pipelines
+creating build\lib\investment_stack\providers
+copying runtime\investment_stack\providers\adapters.py -> build\lib\investment_stack\providers
+copying runtime\investment_stack\providers\contract_adapters.py -> build\lib\investment_stack\providers
+copying runtime\investment_stack\providers\credentials.py -> build\lib\investment_stack\providers
+copying runtime\investment_stack\providers\execution.py -> build\lib\investment_stack\providers
+copying runtime\investment_stack\providers\factory.py -> build\lib\investment_stack\providers
+copying runtime\investment_stack\providers\http.py -> build\lib\investment_stack\providers
+copying runtime\investment_stack\providers\market_quotes.py -> build\lib\investment_stack\providers
+copying runtime\investment_stack\providers\models.py -> build\lib\investment_stack\providers
+copying runtime\investment_stack\providers\ohlcv.py -> build\lib\investment_stack\providers
+copying runtime\investment_stack\providers\registry.py -> build\lib\investment_stack\providers
+copying runtime\investment_stack\providers\sec_13f.py -> build\lib\investment_stack\providers
+copying runtime\investment_stack\providers\__init__.py -> build\lib\investment_stack\providers
+creating build\lib\investment_stack\reporting
+copying runtime\investment_stack\reporting\builder.py -> build\lib\investment_stack\reporting
+copying runtime\investment_stack\reporting\display.py -> build\lib\investment_stack\reporting
+copying runtime\investment_stack\reporting\models.py -> build\lib\investment_stack\reporting
+copying runtime\investment_stack\reporting\portfolio_modes.py -> build\lib\investment_stack\reporting
+copying runtime\investment_stack\reporting\runtime.py -> build\lib\investment_stack\reporting
+copying runtime\investment_stack\reporting\thesis_refresh.py -> build\lib\investment_stack\reporting
+copying runtime\investment_stack\reporting\__init__.py -> build\lib\investment_stack\reporting
+creating build\lib\investment_stack\review
+copying runtime\investment_stack\review\engine.py -> build\lib\investment_stack\review
+copying runtime\investment_stack\review\models.py -> build\lib\investment_stack\review
+copying runtime\investment_stack\review\__init__.py -> build\lib\investment_stack\review
+creating build\lib\investment_stack\routing
+copying runtime\investment_stack\routing\models.py -> build\lib\investment_stack\routing
+copying runtime\investment_stack\routing\router.py -> build\lib\investment_stack\routing
+copying runtime\investment_stack\routing\__init__.py -> build\lib\investment_stack\routing
+creating build\lib\investment_stack\security
+copying runtime\investment_stack\security\logging.py -> build\lib\investment_stack\security
+copying runtime\investment_stack\security\redaction.py -> build\lib\investment_stack\security
+copying runtime\investment_stack\security\__init__.py -> build\lib\investment_stack\security
+creating build\lib\investment_stack\storage
+copying runtime\investment_stack\storage\identity.py -> build\lib\investment_stack\storage
+copying runtime\investment_stack\storage\migrations.py -> build\lib\investment_stack\storage
+copying runtime\investment_stack\storage\permissions.py -> build\lib\investment_stack\storage
+copying runtime\investment_stack\storage\schema.py -> build\lib\investment_stack\storage
+copying runtime\investment_stack\storage\sqlite.py -> build\lib\investment_stack\storage
+copying runtime\investment_stack\storage\__init__.py -> build\lib\investment_stack\storage
+creating build\lib\investment_stack\web_research
+copying runtime\investment_stack\web_research\adapter.py -> build\lib\investment_stack\web_research
+copying runtime\investment_stack\web_research\bundle.py -> build\lib\investment_stack\web_research
+copying runtime\investment_stack\web_research\models.py -> build\lib\investment_stack\web_research
+copying runtime\investment_stack\web_research\quote_sources.py -> build\lib\investment_stack\web_research
+copying runtime\investment_stack\web_research\__init__.py -> build\lib\investment_stack\web_research
+creating build\lib\investment_stack\migrations\personal
+copying runtime\investment_stack\migrations\personal\v0001_initial.py -> build\lib\investment_stack\migrations\personal
+copying runtime\investment_stack\migrations\personal\v0002_storage_indexes.py -> build\lib\investment_stack\migrations\personal
+copying runtime\investment_stack\migrations\personal\v0003_ledger_projection.py -> build\lib\investment_stack\migrations\personal
+copying runtime\investment_stack\migrations\personal\__init__.py -> build\lib\investment_stack\migrations\personal
+creating build\lib\investment_stack\migrations\run
+copying runtime\investment_stack\migrations\run\v0001_initial.py -> build\lib\investment_stack\migrations\run
+copying runtime\investment_stack\migrations\run\v0002_phase4_evidence.py -> build\lib\investment_stack\migrations\run
+copying runtime\investment_stack\migrations\run\__init__.py -> build\lib\investment_stack\migrations\run
+running egg_info
+writing runtime\investment_stack.egg-info\PKG-INFO
+writing dependency_links to runtime\investment_stack.egg-info\dependency_links.txt
+writing entry points to runtime\investment_stack.egg-info\entry_points.txt
+writing requirements to runtime\investment_stack.egg-info\requires.txt
+writing top-level names to runtime\investment_stack.egg-info\top_level.txt
+reading manifest file 'runtime\investment_stack.egg-info\SOURCES.txt'
+reading manifest template 'MANIFEST.in'
+warning: no previously-included files matching 'personal.db' found anywhere in distribution
+warning: no previously-included files matching 'run.db' found anywhere in distribution
+warning: no previously-included files matching '*.db*' found anywhere in distribution
+warning: no previously-included files matching '*.sqlite*' found anywhere in distribution
+no previously-included directories found matching 'workspace\runs'
+no previously-included directories found matching 'workspace\cache'
+no previously-included directories found matching '.git'
+no previously-included directories found matching '.venv'
+no previously-included directories found matching 'logs'
+warning: no previously-included files matching '.env' found anywhere in distribution
+warning: no previously-included files matching '.env.*' found anywhere in distribution
+warning: no previously-included files matching '*.pem' found anywhere in distribution
+warning: no previously-included files matching '*.key' found anywhere in distribution
+warning: no previously-included files matching '*.p12' found anywhere in distribution
+warning: no previously-included files matching '*.pfx' found anywhere in distribution
+warning: no previously-included files matching '*.log' found anywhere in distribution
+warning: no previously-included files matching '__pycache__' found anywhere in distribution
+warning: no previously-included files matching '*.py[cod]' found anywhere in distribution
+writing manifest file 'runtime\investment_stack.egg-info\SOURCES.txt'
+warning: build_py: byte-compiling is disabled, skipping.
+
+installing to build\bdist.win-amd64\wheel
+running install
+running install_lib
+creating build\bdist.win-amd64\wheel
+creating build\bdist.win-amd64\wheel\investment_stack
+copying build\lib\investment_stack\asset_analysis.py -> build\bdist.win-amd64\wheel\.\investment_stack
+creating build\bdist.win-amd64\wheel\investment_stack\calculations
+copying build\lib\investment_stack\calculations\allocation.py -> build\bdist.win-amd64\wheel\.\investment_stack\calculations
+copying build\lib\investment_stack\calculations\alternative.py -> build\bdist.win-amd64\wheel\.\investment_stack\calculations
+copying build\lib\investment_stack\calculations\common.py -> build\bdist.win-amd64\wheel\.\investment_stack\calculations
+copying build\lib\investment_stack\calculations\equity.py -> build\bdist.win-amd64\wheel\.\investment_stack\calculations
+copying build\lib\investment_stack\calculations\fund.py -> build\bdist.win-amd64\wheel\.\investment_stack\calculations
+copying build\lib\investment_stack\calculations\instruments.py -> build\bdist.win-amd64\wheel\.\investment_stack\calculations
+copying build\lib\investment_stack\calculations\reconciliation.py -> build\bdist.win-amd64\wheel\.\investment_stack\calculations
+copying build\lib\investment_stack\calculations\risk.py -> build\bdist.win-amd64\wheel\.\investment_stack\calculations
+copying build\lib\investment_stack\calculations\technical.py -> build\bdist.win-amd64\wheel\.\investment_stack\calculations
+copying build\lib\investment_stack\calculations\valuation.py -> build\bdist.win-amd64\wheel\.\investment_stack\calculations
+copying build\lib\investment_stack\calculations\__init__.py -> build\bdist.win-amd64\wheel\.\investment_stack\calculations
+copying build\lib\investment_stack\cli.py -> build\bdist.win-amd64\wheel\.\investment_stack
+creating build\bdist.win-amd64\wheel\investment_stack\contracts
+copying build\lib\investment_stack\contracts\adapters.py -> build\bdist.win-amd64\wheel\.\investment_stack\contracts
+copying build\lib\investment_stack\contracts\calculation.py -> build\bdist.win-amd64\wheel\.\investment_stack\contracts
+copying build\lib\investment_stack\contracts\codec.py -> build\bdist.win-amd64\wheel\.\investment_stack\contracts
+copying build\lib\investment_stack\contracts\context.py -> build\bdist.win-amd64\wheel\.\investment_stack\contracts
+copying build\lib\investment_stack\contracts\errors.py -> build\bdist.win-amd64\wheel\.\investment_stack\contracts
+copying build\lib\investment_stack\contracts\financial.py -> build\bdist.win-amd64\wheel\.\investment_stack\contracts
+copying build\lib\investment_stack\contracts\institutional.py -> build\bdist.win-amd64\wheel\.\investment_stack\contracts
+copying build\lib\investment_stack\contracts\market.py -> build\bdist.win-amd64\wheel\.\investment_stack\contracts
+copying build\lib\investment_stack\contracts\slots.py -> build\bdist.win-amd64\wheel\.\investment_stack\contracts
+copying build\lib\investment_stack\contracts\storage.py -> build\bdist.win-amd64\wheel\.\investment_stack\contracts
+copying build\lib\investment_stack\contracts\__init__.py -> build\bdist.win-amd64\wheel\.\investment_stack\contracts
+creating build\bdist.win-amd64\wheel\investment_stack\decisions
+copying build\lib\investment_stack\decisions\action.py -> build\bdist.win-amd64\wheel\.\investment_stack\decisions
+copying build\lib\investment_stack\decisions\briefing.py -> build\bdist.win-amd64\wheel\.\investment_stack\decisions
+copying build\lib\investment_stack\decisions\__init__.py -> build\bdist.win-amd64\wheel\.\investment_stack\decisions
+copying build\lib\investment_stack\deep_research.py -> build\bdist.win-amd64\wheel\.\investment_stack
+creating build\bdist.win-amd64\wheel\investment_stack\evidence
+copying build\lib\investment_stack\evidence\manager.py -> build\bdist.win-amd64\wheel\.\investment_stack\evidence
+copying build\lib\investment_stack\evidence\paths.py -> build\bdist.win-amd64\wheel\.\investment_stack\evidence
+copying build\lib\investment_stack\evidence\research.py -> build\bdist.win-amd64\wheel\.\investment_stack\evidence
+copying build\lib\investment_stack\evidence\__init__.py -> build\bdist.win-amd64\wheel\.\investment_stack\evidence
+creating build\bdist.win-amd64\wheel\investment_stack\execution
+copying build\lib\investment_stack\execution\analysis_modes.py -> build\bdist.win-amd64\wheel\.\investment_stack\execution
+copying build\lib\investment_stack\execution\asset_update.py -> build\bdist.win-amd64\wheel\.\investment_stack\execution
+copying build\lib\investment_stack\execution\dispatcher.py -> build\bdist.win-amd64\wheel\.\investment_stack\execution
+copying build\lib\investment_stack\execution\models.py -> build\bdist.win-amd64\wheel\.\investment_stack\execution
+copying build\lib\investment_stack\execution\portfolio_thesis_modes.py -> build\bdist.win-amd64\wheel\.\investment_stack\execution
+copying build\lib\investment_stack\execution\service_composition.py -> build\bdist.win-amd64\wheel\.\investment_stack\execution
+copying build\lib\investment_stack\execution\__init__.py -> build\bdist.win-amd64\wheel\.\investment_stack\execution
+creating build\bdist.win-amd64\wheel\investment_stack\freshness
+copying build\lib\investment_stack\freshness\calendar.py -> build\bdist.win-amd64\wheel\.\investment_stack\freshness
+copying build\lib\investment_stack\freshness\engine.py -> build\bdist.win-amd64\wheel\.\investment_stack\freshness
+copying build\lib\investment_stack\freshness\models.py -> build\bdist.win-amd64\wheel\.\investment_stack\freshness
+copying build\lib\investment_stack\freshness\__init__.py -> build\bdist.win-amd64\wheel\.\investment_stack\freshness
+creating build\bdist.win-amd64\wheel\investment_stack\institutional
+copying build\lib\investment_stack\institutional\compare.py -> build\bdist.win-amd64\wheel\.\investment_stack\institutional
+copying build\lib\investment_stack\institutional\models.py -> build\bdist.win-amd64\wheel\.\investment_stack\institutional
+copying build\lib\investment_stack\institutional\normalize.py -> build\bdist.win-amd64\wheel\.\investment_stack\institutional
+copying build\lib\investment_stack\institutional\scoring.py -> build\bdist.win-amd64\wheel\.\investment_stack\institutional
+copying build\lib\investment_stack\institutional\validation.py -> build\bdist.win-amd64\wheel\.\investment_stack\institutional
+copying build\lib\investment_stack\institutional\__init__.py -> build\bdist.win-amd64\wheel\.\investment_stack\institutional
+copying build\lib\investment_stack\invariants.py -> build\bdist.win-amd64\wheel\.\investment_stack
+creating build\bdist.win-amd64\wheel\investment_stack\materiality
+copying build\lib\investment_stack\materiality\config.py -> build\bdist.win-amd64\wheel\.\investment_stack\materiality
+copying build\lib\investment_stack\materiality\engine.py -> build\bdist.win-amd64\wheel\.\investment_stack\materiality
+copying build\lib\investment_stack\materiality\__init__.py -> build\bdist.win-amd64\wheel\.\investment_stack\materiality
+creating build\bdist.win-amd64\wheel\investment_stack\migrations
+creating build\bdist.win-amd64\wheel\investment_stack\migrations\personal
+copying build\lib\investment_stack\migrations\personal\v0001_initial.py -> build\bdist.win-amd64\wheel\.\investment_stack\migrations\personal
+copying build\lib\investment_stack\migrations\personal\v0002_storage_indexes.py -> build\bdist.win-amd64\wheel\.\investment_stack\migrations\personal
+copying build\lib\investment_stack\migrations\personal\v0003_ledger_projection.py -> build\bdist.win-amd64\wheel\.\investment_stack\migrations\personal
+copying build\lib\investment_stack\migrations\personal\__init__.py -> build\bdist.win-amd64\wheel\.\investment_stack\migrations\personal
+creating build\bdist.win-amd64\wheel\investment_stack\migrations\run
+copying build\lib\investment_stack\migrations\run\v0001_initial.py -> build\bdist.win-amd64\wheel\.\investment_stack\migrations\run
+copying build\lib\investment_stack\migrations\run\v0002_phase4_evidence.py -> build\bdist.win-amd64\wheel\.\investment_stack\migrations\run
+copying build\lib\investment_stack\migrations\run\__init__.py -> build\bdist.win-amd64\wheel\.\investment_stack\migrations\run
+copying build\lib\investment_stack\migrations\__init__.py -> build\bdist.win-amd64\wheel\.\investment_stack\migrations
+creating build\bdist.win-amd64\wheel\investment_stack\personal
+copying build\lib\investment_stack\personal\backup.py -> build\bdist.win-amd64\wheel\.\investment_stack\personal
+copying build\lib\investment_stack\personal\decimal.py -> build\bdist.win-amd64\wheel\.\investment_stack\personal
+copying build\lib\investment_stack\personal\errors.py -> build\bdist.win-amd64\wheel\.\investment_stack\personal
+copying build\lib\investment_stack\personal\intent.py -> build\bdist.win-amd64\wheel\.\investment_stack\personal
+copying build\lib\investment_stack\personal\interpretation.py -> build\bdist.win-amd64\wheel\.\investment_stack\personal
+copying build\lib\investment_stack\personal\ledger.py -> build\bdist.win-amd64\wheel\.\investment_stack\personal
+copying build\lib\investment_stack\personal\manager.py -> build\bdist.win-amd64\wheel\.\investment_stack\personal
+copying build\lib\investment_stack\personal\paths.py -> build\bdist.win-amd64\wheel\.\investment_stack\personal
+copying build\lib\investment_stack\personal\projection.py -> build\bdist.win-amd64\wheel\.\investment_stack\personal
+copying build\lib\investment_stack\personal\validation.py -> build\bdist.win-amd64\wheel\.\investment_stack\personal
+copying build\lib\investment_stack\personal\__init__.py -> build\bdist.win-amd64\wheel\.\investment_stack\personal
+creating build\bdist.win-amd64\wheel\investment_stack\pipelines
+copying build\lib\investment_stack\pipelines\planner.py -> build\bdist.win-amd64\wheel\.\investment_stack\pipelines
+copying build\lib\investment_stack\pipelines\__init__.py -> build\bdist.win-amd64\wheel\.\investment_stack\pipelines
+creating build\bdist.win-amd64\wheel\investment_stack\providers
+copying build\lib\investment_stack\providers\adapters.py -> build\bdist.win-amd64\wheel\.\investment_stack\providers
+copying build\lib\investment_stack\providers\contract_adapters.py -> build\bdist.win-amd64\wheel\.\investment_stack\providers
+copying build\lib\investment_stack\providers\credentials.py -> build\bdist.win-amd64\wheel\.\investment_stack\providers
+copying build\lib\investment_stack\providers\execution.py -> build\bdist.win-amd64\wheel\.\investment_stack\providers
+copying build\lib\investment_stack\providers\factory.py -> build\bdist.win-amd64\wheel\.\investment_stack\providers
+copying build\lib\investment_stack\providers\http.py -> build\bdist.win-amd64\wheel\.\investment_stack\providers
+copying build\lib\investment_stack\providers\market_quotes.py -> build\bdist.win-amd64\wheel\.\investment_stack\providers
+copying build\lib\investment_stack\providers\models.py -> build\bdist.win-amd64\wheel\.\investment_stack\providers
+copying build\lib\investment_stack\providers\ohlcv.py -> build\bdist.win-amd64\wheel\.\investment_stack\providers
+copying build\lib\investment_stack\providers\registry.py -> build\bdist.win-amd64\wheel\.\investment_stack\providers
+copying build\lib\investment_stack\providers\sec_13f.py -> build\bdist.win-amd64\wheel\.\investment_stack\providers
+copying build\lib\investment_stack\providers\__init__.py -> build\bdist.win-amd64\wheel\.\investment_stack\providers
+creating build\bdist.win-amd64\wheel\investment_stack\reporting
+copying build\lib\investment_stack\reporting\builder.py -> build\bdist.win-amd64\wheel\.\investment_stack\reporting
+copying build\lib\investment_stack\reporting\display.py -> build\bdist.win-amd64\wheel\.\investment_stack\reporting
+copying build\lib\investment_stack\reporting\models.py -> build\bdist.win-amd64\wheel\.\investment_stack\reporting
+copying build\lib\investment_stack\reporting\portfolio_modes.py -> build\bdist.win-amd64\wheel\.\investment_stack\reporting
+copying build\lib\investment_stack\reporting\runtime.py -> build\bdist.win-amd64\wheel\.\investment_stack\reporting
+copying build\lib\investment_stack\reporting\thesis_refresh.py -> build\bdist.win-amd64\wheel\.\investment_stack\reporting
+copying build\lib\investment_stack\reporting\__init__.py -> build\bdist.win-amd64\wheel\.\investment_stack\reporting
+copying build\lib\investment_stack\research.py -> build\bdist.win-amd64\wheel\.\investment_stack
+creating build\bdist.win-amd64\wheel\investment_stack\review
+copying build\lib\investment_stack\review\engine.py -> build\bdist.win-amd64\wheel\.\investment_stack\review
+copying build\lib\investment_stack\review\models.py -> build\bdist.win-amd64\wheel\.\investment_stack\review
+copying build\lib\investment_stack\review\__init__.py -> build\bdist.win-amd64\wheel\.\investment_stack\review
+creating build\bdist.win-amd64\wheel\investment_stack\routing
+copying build\lib\investment_stack\routing\models.py -> build\bdist.win-amd64\wheel\.\investment_stack\routing
+copying build\lib\investment_stack\routing\router.py -> build\bdist.win-amd64\wheel\.\investment_stack\routing
+copying build\lib\investment_stack\routing\__init__.py -> build\bdist.win-amd64\wheel\.\investment_stack\routing
+creating build\bdist.win-amd64\wheel\investment_stack\security
+copying build\lib\investment_stack\security\logging.py -> build\bdist.win-amd64\wheel\.\investment_stack\security
+copying build\lib\investment_stack\security\redaction.py -> build\bdist.win-amd64\wheel\.\investment_stack\security
+copying build\lib\investment_stack\security\__init__.py -> build\bdist.win-amd64\wheel\.\investment_stack\security
+creating build\bdist.win-amd64\wheel\investment_stack\storage
+copying build\lib\investment_stack\storage\identity.py -> build\bdist.win-amd64\wheel\.\investment_stack\storage
+copying build\lib\investment_stack\storage\migrations.py -> build\bdist.win-amd64\wheel\.\investment_stack\storage
+copying build\lib\investment_stack\storage\permissions.py -> build\bdist.win-amd64\wheel\.\investment_stack\storage
+copying build\lib\investment_stack\storage\schema.py -> build\bdist.win-amd64\wheel\.\investment_stack\storage
+copying build\lib\investment_stack\storage\sqlite.py -> build\bdist.win-amd64\wheel\.\investment_stack\storage
+copying build\lib\investment_stack\storage\__init__.py -> build\bdist.win-amd64\wheel\.\investment_stack\storage
+creating build\bdist.win-amd64\wheel\investment_stack\web_research
+copying build\lib\investment_stack\web_research\adapter.py -> build\bdist.win-amd64\wheel\.\investment_stack\web_research
+copying build\lib\investment_stack\web_research\bundle.py -> build\bdist.win-amd64\wheel\.\investment_stack\web_research
+copying build\lib\investment_stack\web_research\models.py -> build\bdist.win-amd64\wheel\.\investment_stack\web_research
+copying build\lib\investment_stack\web_research\quote_sources.py -> build\bdist.win-amd64\wheel\.\investment_stack\web_research
+copying build\lib\investment_stack\web_research\__init__.py -> build\bdist.win-amd64\wheel\.\investment_stack\web_research
+copying build\lib\investment_stack\__init__.py -> build\bdist.win-amd64\wheel\.\investment_stack
+copying build\lib\investment_stack\__main__.py -> build\bdist.win-amd64\wheel\.\investment_stack
+warning: install_lib: byte-compiling is disabled, skipping.
+
+running install_data
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\investment-orchestrator
+copying skills\investment-orchestrator\SKILL.md -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\investment-orchestrator
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\investment-orchestrator\agents
+copying skills\investment-orchestrator\agents\openai.yaml -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\investment-orchestrator\agents
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\fundamental-analysis
+copying skills\fundamental-analysis\SKILL.md -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\fundamental-analysis
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\fundamental-analysis\agents
+copying skills\fundamental-analysis\agents\openai.yaml -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\fundamental-analysis\agents
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\valuation
+copying skills\valuation\SKILL.md -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\valuation
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\valuation\agents
+copying skills\valuation\agents\openai.yaml -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\valuation\agents
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\fund-analysis
+copying skills\fund-analysis\SKILL.md -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\fund-analysis
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\fund-analysis\agents
+copying skills\fund-analysis\agents\openai.yaml -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\fund-analysis\agents
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\alternative-asset-analysis
+copying skills\alternative-asset-analysis\SKILL.md -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\alternative-asset-analysis
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\alternative-asset-analysis\agents
+copying skills\alternative-asset-analysis\agents\openai.yaml -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\alternative-asset-analysis\agents
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\personal-asset-analysis
+copying skills\personal-asset-analysis\SKILL.md -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\personal-asset-analysis
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\personal-asset-analysis\agents
+copying skills\personal-asset-analysis\agents\openai.yaml -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\personal-asset-analysis\agents
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\investment-report
+copying skills\investment-report\SKILL.md -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\investment-report
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\investment-report\agents
+copying skills\investment-report\agents\openai.yaml -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\investment-report\agents
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\review
+copying skills\review\SKILL.md -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\review
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\review\agents
+copying skills\review\agents\openai.yaml -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\skills\review\agents
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\investment-orchestrator
+copying .agents\skills\investment-orchestrator\SKILL.md -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\investment-orchestrator
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\investment-orchestrator\agents
+copying .agents\skills\investment-orchestrator\agents\openai.yaml -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\investment-orchestrator\agents
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\fundamental-analysis
+copying .agents\skills\fundamental-analysis\SKILL.md -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\fundamental-analysis
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\fundamental-analysis\agents
+copying .agents\skills\fundamental-analysis\agents\openai.yaml -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\fundamental-analysis\agents
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\valuation
+copying .agents\skills\valuation\SKILL.md -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\valuation
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\valuation\agents
+copying .agents\skills\valuation\agents\openai.yaml -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\valuation\agents
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\fund-analysis
+copying .agents\skills\fund-analysis\SKILL.md -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\fund-analysis
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\fund-analysis\agents
+copying .agents\skills\fund-analysis\agents\openai.yaml -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\fund-analysis\agents
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\alternative-asset-analysis
+copying .agents\skills\alternative-asset-analysis\SKILL.md -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\alternative-asset-analysis
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\alternative-asset-analysis\agents
+copying .agents\skills\alternative-asset-analysis\agents\openai.yaml -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\alternative-asset-analysis\agents
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\personal-asset-analysis
+copying .agents\skills\personal-asset-analysis\SKILL.md -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\personal-asset-analysis
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\personal-asset-analysis\agents
+copying .agents\skills\personal-asset-analysis\agents\openai.yaml -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\personal-asset-analysis\agents
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\investment-report
+copying .agents\skills\investment-report\SKILL.md -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\investment-report
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\investment-report\agents
+copying .agents\skills\investment-report\agents\openai.yaml -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\investment-report\agents
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\review
+copying .agents\skills\review\SKILL.md -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\review
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\review\agents
+copying .agents\skills\review\agents\openai.yaml -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\.agents\skills\review\agents
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\config
+copying config\freshness.yaml -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\config
+copying config\materiality.yaml -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\config
+copying config\providers.yaml -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\config
+copying config\reconciliation.yaml -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\config
+copying config\web_research.yaml -> build\bdist.win-amd64\wheel\investment_stack-0.1.0.data\data\config
+running install_egg_info
+Copying runtime\investment_stack.egg-info to build\bdist.win-amd64\wheel\.\investment_stack-0.1.0-py3.14.egg-info
+running install_scripts
+creating build\bdist.win-amd64\wheel\investment_stack-0.1.0.dist-info\WHEEL
+creating 'C:\\Users\\lsn\\Documents\\Codex\\2026-09-28\\investment-stack-verify-01\\work\\sdist-unpacked\\investment_stack-0.1.0\\dist\\.tmp-7z_tidlj\\investment_stack-0.1.0-py3-none-any.whl' and adding 'build\\bdist.win-amd64\\wheel' to it
+adding 'investment_stack/__init__.py'
+adding 'investment_stack/__main__.py'
+adding 'investment_stack/asset_analysis.py'
+adding 'investment_stack/cli.py'
+adding 'investment_stack/deep_research.py'
+adding 'investment_stack/invariants.py'
+adding 'investment_stack/research.py'
+adding 'investment_stack/calculations/__init__.py'
+adding 'investment_stack/calculations/allocation.py'
+adding 'investment_stack/calculations/alternative.py'
+adding 'investment_stack/calculations/common.py'
+adding 'investment_stack/calculations/equity.py'
+adding 'investment_stack/calculations/fund.py'
+adding 'investment_stack/calculations/instruments.py'
+adding 'investment_stack/calculations/reconciliation.py'
+adding 'investment_stack/calculations/risk.py'
+adding 'investment_stack/calculations/technical.py'
+adding 'investment_stack/calculations/valuation.py'
+adding 'investment_stack/contracts/__init__.py'
+adding 'investment_stack/contracts/adapters.py'
+adding 'investment_stack/contracts/calculation.py'
+adding 'investment_stack/contracts/codec.py'
+adding 'investment_stack/contracts/context.py'
+adding 'investment_stack/contracts/errors.py'
+adding 'investment_stack/contracts/financial.py'
+adding 'investment_stack/contracts/institutional.py'
+adding 'investment_stack/contracts/market.py'
+adding 'investment_stack/contracts/slots.py'
+adding 'investment_stack/contracts/storage.py'
+adding 'investment_stack/decisions/__init__.py'
+adding 'investment_stack/decisions/action.py'
+adding 'investment_stack/decisions/briefing.py'
+adding 'investment_stack/evidence/__init__.py'
+adding 'investment_stack/evidence/manager.py'
+adding 'investment_stack/evidence/paths.py'
+adding 'investment_stack/evidence/research.py'
+adding 'investment_stack/execution/__init__.py'
+adding 'investment_stack/execution/analysis_modes.py'
+adding 'investment_stack/execution/asset_update.py'
+adding 'investment_stack/execution/dispatcher.py'
+adding 'investment_stack/execution/models.py'
+adding 'investment_stack/execution/portfolio_thesis_modes.py'
+adding 'investment_stack/execution/service_composition.py'
+adding 'investment_stack/freshness/__init__.py'
+adding 'investment_stack/freshness/calendar.py'
+adding 'investment_stack/freshness/engine.py'
+adding 'investment_stack/freshness/models.py'
+adding 'investment_stack/institutional/__init__.py'
+adding 'investment_stack/institutional/compare.py'
+adding 'investment_stack/institutional/models.py'
+adding 'investment_stack/institutional/normalize.py'
+adding 'investment_stack/institutional/scoring.py'
+adding 'investment_stack/institutional/validation.py'
+adding 'investment_stack/materiality/__init__.py'
+adding 'investment_stack/materiality/config.py'
+adding 'investment_stack/materiality/engine.py'
+adding 'investment_stack/migrations/__init__.py'
+adding 'investment_stack/migrations/personal/__init__.py'
+adding 'investment_stack/migrations/personal/v0001_initial.py'
+adding 'investment_stack/migrations/personal/v0002_storage_indexes.py'
+adding 'investment_stack/migrations/personal/v0003_ledger_projection.py'
+adding 'investment_stack/migrations/run/__init__.py'
+adding 'investment_stack/migrations/run/v0001_initial.py'
+adding 'investment_stack/migrations/run/v0002_phase4_evidence.py'
+adding 'investment_stack/personal/__init__.py'
+adding 'investment_stack/personal/backup.py'
+adding 'investment_stack/personal/decimal.py'
+adding 'investment_stack/personal/errors.py'
+adding 'investment_stack/personal/intent.py'
+adding 'investment_stack/personal/interpretation.py'
+adding 'investment_stack/personal/ledger.py'
+adding 'investment_stack/personal/manager.py'
+adding 'investment_stack/personal/paths.py'
+adding 'investment_stack/personal/projection.py'
+adding 'investment_stack/personal/validation.py'
+adding 'investment_stack/pipelines/__init__.py'
+adding 'investment_stack/pipelines/planner.py'
+adding 'investment_stack/providers/__init__.py'
+adding 'investment_stack/providers/adapters.py'
+adding 'investment_stack/providers/contract_adapters.py'
+adding 'investment_stack/providers/credentials.py'
+adding 'investment_stack/providers/execution.py'
+adding 'investment_stack/providers/factory.py'
+adding 'investment_stack/providers/http.py'
+adding 'investment_stack/providers/market_quotes.py'
+adding 'investment_stack/providers/models.py'
+adding 'investment_stack/providers/ohlcv.py'
+adding 'investment_stack/providers/registry.py'
+adding 'investment_stack/providers/sec_13f.py'
+adding 'investment_stack/reporting/__init__.py'
+adding 'investment_stack/reporting/builder.py'
+adding 'investment_stack/reporting/display.py'
+adding 'investment_stack/reporting/models.py'
+adding 'investment_stack/reporting/portfolio_modes.py'
+adding 'investment_stack/reporting/runtime.py'
+adding 'investment_stack/reporting/thesis_refresh.py'
+adding 'investment_stack/review/__init__.py'
+adding 'investment_stack/review/engine.py'
+adding 'investment_stack/review/models.py'
+adding 'investment_stack/routing/__init__.py'
+adding 'investment_stack/routing/models.py'
+adding 'investment_stack/routing/router.py'
+adding 'investment_stack/security/__init__.py'
+adding 'investment_stack/security/logging.py'
+adding 'investment_stack/security/redaction.py'
+adding 'investment_stack/storage/__init__.py'
+adding 'investment_stack/storage/identity.py'
+adding 'investment_stack/storage/migrations.py'
+adding 'investment_stack/storage/permissions.py'
+adding 'investment_stack/storage/schema.py'
+adding 'investment_stack/storage/sqlite.py'
+adding 'investment_stack/web_research/__init__.py'
+adding 'investment_stack/web_research/adapter.py'
+adding 'investment_stack/web_research/bundle.py'
+adding 'investment_stack/web_research/models.py'
+adding 'investment_stack/web_research/quote_sources.py'
+adding 'investment_stack-0.1.0.data/data/.agents/skills/alternative-asset-analysis/SKILL.md'
+adding 'investment_stack-0.1.0.data/data/.agents/skills/alternative-asset-analysis/agents/openai.yaml'
+adding 'investment_stack-0.1.0.data/data/.agents/skills/fund-analysis/SKILL.md'
+adding 'investment_stack-0.1.0.data/data/.agents/skills/fund-analysis/agents/openai.yaml'
+adding 'investment_stack-0.1.0.data/data/.agents/skills/fundamental-analysis/SKILL.md'
+adding 'investment_stack-0.1.0.data/data/.agents/skills/fundamental-analysis/agents/openai.yaml'
+adding 'investment_stack-0.1.0.data/data/.agents/skills/investment-orchestrator/SKILL.md'
+adding 'investment_stack-0.1.0.data/data/.agents/skills/investment-orchestrator/agents/openai.yaml'
+adding 'investment_stack-0.1.0.data/data/.agents/skills/investment-report/SKILL.md'
+adding 'investment_stack-0.1.0.data/data/.agents/skills/investment-report/agents/openai.yaml'
+adding 'investment_stack-0.1.0.data/data/.agents/skills/personal-asset-analysis/SKILL.md'
+adding 'investment_stack-0.1.0.data/data/.agents/skills/personal-asset-analysis/agents/openai.yaml'
+adding 'investment_stack-0.1.0.data/data/.agents/skills/review/SKILL.md'
+adding 'investment_stack-0.1.0.data/data/.agents/skills/review/agents/openai.yaml'
+adding 'investment_stack-0.1.0.data/data/.agents/skills/valuation/SKILL.md'
+adding 'investment_stack-0.1.0.data/data/.agents/skills/valuation/agents/openai.yaml'
+adding 'investment_stack-0.1.0.data/data/config/freshness.yaml'
+adding 'investment_stack-0.1.0.data/data/config/materiality.yaml'
+adding 'investment_stack-0.1.0.data/data/config/providers.yaml'
+adding 'investment_stack-0.1.0.data/data/config/reconciliation.yaml'
+adding 'investment_stack-0.1.0.data/data/config/web_research.yaml'
+adding 'investment_stack-0.1.0.data/data/skills/alternative-asset-analysis/SKILL.md'
+adding 'investment_stack-0.1.0.data/data/skills/alternative-asset-analysis/agents/openai.yaml'
+adding 'investment_stack-0.1.0.data/data/skills/fund-analysis/SKILL.md'
+adding 'investment_stack-0.1.0.data/data/skills/fund-analysis/agents/openai.yaml'
+adding 'investment_stack-0.1.0.data/data/skills/fundamental-analysis/SKILL.md'
+adding 'investment_stack-0.1.0.data/data/skills/fundamental-analysis/agents/openai.yaml'
+adding 'investment_stack-0.1.0.data/data/skills/investment-orchestrator/SKILL.md'
+adding 'investment_stack-0.1.0.data/data/skills/investment-orchestrator/agents/openai.yaml'
+adding 'investment_stack-0.1.0.data/data/skills/investment-report/SKILL.md'
+adding 'investment_stack-0.1.0.data/data/skills/investment-report/agents/openai.yaml'
+adding 'investment_stack-0.1.0.data/data/skills/personal-asset-analysis/SKILL.md'
+adding 'investment_stack-0.1.0.data/data/skills/personal-asset-analysis/agents/openai.yaml'
+adding 'investment_stack-0.1.0.data/data/skills/review/SKILL.md'
+adding 'investment_stack-0.1.0.data/data/skills/review/agents/openai.yaml'
+adding 'investment_stack-0.1.0.data/data/skills/valuation/SKILL.md'
+adding 'investment_stack-0.1.0.data/data/skills/valuation/agents/openai.yaml'
+adding 'investment_stack-0.1.0.dist-info/METADATA'
+adding 'investment_stack-0.1.0.dist-info/WHEEL'
+adding 'investment_stack-0.1.0.dist-info/entry_points.txt'
+adding 'investment_stack-0.1.0.dist-info/top_level.txt'
+adding 'investment_stack-0.1.0.dist-info/RECORD'
+removing build\bdist.win-amd64\wheel
+Successfully built investment_stack-0.1.0-py3-none-any.whl

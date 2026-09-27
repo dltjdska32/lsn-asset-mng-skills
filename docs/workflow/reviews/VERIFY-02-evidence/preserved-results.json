@@ -1,0 +1,34 @@
+[
+  {
+    "suite": "first_pass_probes",
+    "returncode": 0
+  },
+  {
+    "suite": "interim_probes",
+    "returncode": 0
+  },
+  {
+    "suite": "b1f4514_probes",
+    "returncode": 0
+  },
+  {
+    "suite": "final_probes",
+    "returncode": 0
+  },
+  {
+    "suite": "dcd262a_probes",
+    "returncode": 0
+  },
+  {
+    "suite": "briefing_persistence_probe",
+    "returncode": 0
+  },
+  {
+    "suite": "refresh_binding_checks",
+    "returncode": 0
+  },
+  {
+    "suite": "rc12_roundtrip_checks",
+    "returncode": 0
+  }
+]

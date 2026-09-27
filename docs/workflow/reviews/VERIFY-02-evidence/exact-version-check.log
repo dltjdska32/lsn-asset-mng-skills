@@ -1,0 +1,18 @@
+> git rev-parse HEAD
+2a078da91ddfd761a1785ee482f3cd23eb1acaf7
+exit=0
+> git status --porcelain
+exit=0
+> git show -s --format=%H %s 4e55a560b4245ad5fb63cf4de8a2ce9813a2752a
+4e55a560b4245ad5fb63cf4de8a2ce9813a2752a fix: persist briefing content in report reference
+exit=0
+> git diff --stat 4e55a560b4245ad5fb63cf4de8a2ce9813a2752a 2a078da91ddfd761a1785ee482f3cd23eb1acaf7
+ IMPLEMENTATION_STATUS.md                           |  6 ++
+ README.md                                          |  2 +-
+ docs/workflow/handoffs/REVIEW-CODE-01.md           | 16 +++-
+ docs/workflow/reviews/REVIEW-CODE-01.md            | 65 ++++++++++++++++
+ .../review_code_01_rc12_roundtrip_checks.py        | 89 ++++++++++++++++++++++
+ ...review_code_01_rc12_roundtrip_checks_output.txt |  9 +++
+ docs/workflow/tasks.md                             |  2 +
+ 7 files changed, 187 insertions(+), 2 deletions(-)
+exit=0

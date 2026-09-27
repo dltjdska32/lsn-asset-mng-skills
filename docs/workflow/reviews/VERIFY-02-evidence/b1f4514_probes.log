@@ -1,0 +1,10 @@
+test_rc06_delegated_report_ref_resolves_in_run_db (__main__.IndependentBundleReview.test_rc06_delegated_report_ref_resolves_in_run_db) ... ok
+test_rc07_cross_run_thesis_cannot_use_wrong_clock_or_write_wrong_db (__main__.IndependentBundleReview.test_rc07_cross_run_thesis_cannot_use_wrong_clock_or_write_wrong_db) ... ok
+test_rc08_sdist_version_test_has_its_required_architecture_resource (__main__.IndependentBundleReview.test_rc08_sdist_version_test_has_its_required_architecture_resource) ... ok
+test_rc09_refresh_pin_does_not_require_outer_portfolio_payload (__main__.IndependentBundleReview.test_rc09_refresh_pin_does_not_require_outer_portfolio_payload) ... ok
+test_rc10_partial_scenario_cannot_render_available_high_confidence_report (__main__.IndependentBundleReview.test_rc10_partial_scenario_cannot_render_available_high_confidence_report) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 7.392s
+
+OK
