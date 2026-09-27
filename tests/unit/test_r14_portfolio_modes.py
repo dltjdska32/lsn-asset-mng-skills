@@ -74,6 +74,39 @@ class PortfolioModesTests(unittest.TestCase):
         self.assertIn("현금: 100", result.section.lines[3])
         self.assertIn("부채: 50", result.section.lines[4])
 
+    def test_risk_weights_are_normalized_to_evaluation_currency(self):
+        usd_request = self.complete_request()
+        jpy_request = replace(
+            usd_request,
+            positions=(replace(usd_request.positions[0], market_value=D("80000"), currency="JPY"), usd_request.positions[1]),
+            fx_evidence=(FxEvidence(
+                "JPY", "USD", D("0.01"), "fx-jpy-usd", "2026-09-26T10:00:00+00:00",
+                "2026-09-26T10:01:00+00:00", "ELIGIBLE", "FRESH", True,
+            ),),
+        )
+        usd_result = analyze_portfolio(usd_request)
+        jpy_result = analyze_portfolio(jpy_request)
+        self.assertEqual(usd_result.gross_assets, D("1100"))
+        self.assertEqual(jpy_result.gross_assets, D("1100"))
+        self.assertTrue(usd_result.risk and jpy_result.risk)
+        self.assertEqual(usd_result.risk.volatility, jpy_result.risk.volatility)
+
+    def test_risk_fails_closed_for_missing_or_wrong_direction_fx(self):
+        request = self.complete_request()
+        wrong_direction = FxEvidence(
+            "USD", "JPY", D("100"), "fx-usd-jpy", "2026-09-26T10:00:00+00:00",
+            "2026-09-26T10:01:00+00:00", "ELIGIBLE", "FRESH", True,
+        )
+        unconvertible = replace(
+            request,
+            positions=(replace(request.positions[0], market_value=D("80000"), currency="JPY"), request.positions[1]),
+            fx_evidence=(wrong_direction,),
+        )
+        result = analyze_portfolio(unconvertible)
+        self.assertIsNone(result.gross_assets)
+        self.assertIsNone(result.risk)
+        self.assertTrue(any("FX" in reason or "환산" in reason for reason in result.missing_inputs))
+
     def test_unvalued_positions_and_missing_fx_remain_unknown(self):
         request = self.complete_request()
         request = replace(request, positions=request.positions + (

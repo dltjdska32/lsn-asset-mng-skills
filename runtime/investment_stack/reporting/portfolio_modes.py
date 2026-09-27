@@ -425,7 +425,12 @@ def _convert(
     return None if rate is None else value * rate
 
 
-def _risk_result(request: PortfolioAnalysisRequest, positions: tuple[PortfolioPosition, ...], gross: Decimal | None):
+def _risk_result(
+    request: PortfolioAnalysisRequest,
+    positions: tuple[PortfolioPosition, ...],
+    converted_positions: Mapping[str, Decimal | None],
+    gross: Decimal | None,
+):
     period = request.period_policy
     if (period is None or request.risk_policy is None or not request.risk_policy.approved
             or not request.risk_policy.approval_ref or not request.risk_policy.validation_ref):
@@ -440,8 +445,12 @@ def _risk_result(request: PortfolioAnalysisRequest, positions: tuple[PortfolioPo
     risk_inputs: list[AssetRiskInput] = []
     timeline: tuple[str, ...] | None = None
     missing: list[str] = []
-    priced_positions = [position for position in positions if position.market_value is not None]
+    priced_positions = [position for position in positions if converted_positions.get(position.instrument_id) is not None]
     for position in priced_positions:
+        converted_value = converted_positions.get(position.instrument_id)
+        if converted_value is None:
+            missing.append(f"{position.instrument_id}: 평가통화 기준 위험 가중치가 없습니다.")
+            continue
         series = risk_by_instrument.get(position.instrument_id)
         if series is None or series.frequency != period.frequency:
             missing.append(f"{position.instrument_id}: 위험 series 또는 빈도 불일치")
@@ -475,7 +484,7 @@ def _risk_result(request: PortfolioAnalysisRequest, positions: tuple[PortfolioPo
             missing.append(f"{position.instrument_id}: 위험 관측 시점이 다른 자산과 정렬되지 않습니다.")
             continue
         risk_inputs.append(AssetRiskInput(
-            position.instrument_id, position.market_value / gross,
+            position.instrument_id, converted_value / gross,
             tuple(item.price for item in valid),
         ))
     if missing or len(risk_inputs) != len(priced_positions):
@@ -535,7 +544,7 @@ def _analyze(request: PortfolioAnalysisRequest, fx_override: Mapping[tuple[str, 
         exposures, denominator=gross_assets, denominator_resolved=gross_assets is not None,
     )
 
-    risk, risk_missing = _risk_result(request, request.positions, gross_assets)
+    risk, risk_missing = _risk_result(request, request.positions, converted_positions, gross_assets)
     unknown.extend(risk_missing)
     if risk is not None and risk.partial:
         unknown.append("정렬된 위험 자료가 불완전하여 portfolio volatility/contribution은 미확정입니다.")
