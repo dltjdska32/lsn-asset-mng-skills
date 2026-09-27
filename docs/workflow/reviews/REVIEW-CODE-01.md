@@ -1,5 +1,62 @@
 # REVIEW-CODE-01 — 독립 통합 코드 검토
 
+## 최신 재검토 — dcd262a
+
+**판정: 수정 필요, 최종 통과 보류.** 이전 a1a41b0의 RC10-R1 내부 replay 및 RC11은 수정 확인했다. 외부 runner 경로에서 RC10-R2 P1을 추가 재현했다. 아래 a1a41b0 실패 기록은 역사로 그대로 보존하며 그 당시 판정을 소급 변경하지 않는다.
+
+- 직접 checkout/실행 SHA: `dcd262ac1fb0033cb70796e90b848e487191fcb2`.
+- 새 독립 worktree: `C:/Users/lsn/.codex/worktrees/89b8/lsn-asset-mng-skills/workspace/review-dcd262a`.
+- 검토 diff: a1a41b0→dcd262a의 C 상태/합의 집계, A 안전 WAIT 브리핑, B README/IMPLEMENTATION_STATUS/ARCHITECTURE 변경. 이전 두 worktree와 실패 산출물 유지. 구현/기존 테스트/개인 DB/commit/push 변경 없음.
+- 같은 Windows Python 3.14.6, 같은 interpreter, 새 worktree의 `PYTHONPATH=runtime` 사용. 실행 한도 오류는 발생하지 않았다.
+
+### RC10-R2 [P1] 외부 replay snapshot이 저장된 PARTIAL 보고서를 완료로 바꿈
+
+- 소유 C 경계. R14/R17. 총괄에게 재현 직후 회송했고 총괄이 수정 착수함을 알려왔다.
+- 위치: `reporting/thesis_refresh.py:291`의 `ReportSnapshot.availability=AVAILABLE` 기본값, `execution/portfolio_thesis_modes.py`의 외부 `allowed_mode_runners` 및 refresh 결과 소비 경계.
+- 내부 rerun_fixed_mode는 수정 후 ModeResult의 PARTIAL/누락을 새 snapshot에 유지한다. 그러나 외부 고정 runner는 저장 보고서와 상태를 대조하는 wrapper 없이 호출된다. 새 Snapshot의 두 추가 필드를 생략한 기존 7필드 생성자가 AVAILABLE/빈 누락을 부여한다. 상태를 AVAILABLE로 명시해도 같은 문제가 난다.
+- actual configured portfolio replay·실제 report manifest·임시 DB를 사용했다. 구현 함수나 DB를 monkeypatch하지 않았다. 외부 callback은 허용된 고정 모드를 정상 실행한 뒤 기존 snapshot 생성자로 결과를 반환한다.
+
+| 확인 대상 | 상태 | 부족 입력 |
+|---|---|---|
+| 실제 외부 PERSONAL_PORTFOLIO_ANALYSIS replay | PARTIAL | approved_materiality_selector, selected_assets_for_deep_research |
+| 같은 새 run.db에 저장된 replay report manifest | PARTIAL | 같은 두 입력 |
+| 외부 runner가 반환한 7필드 snapshot | AVAILABLE (기본값) | 빈 배열 |
+| 최종 REPORT_REFRESH | COMPLETE | 빈 배열 |
+| 사용자 보고서 | AVAILABLE / 확인 완료 / 높은 신뢰도 | 자료 품질의 누락 없음 문구 |
+
+- 별도 반례에서는 snapshot에 AVAILABLE을 명시하여 저장 manifest와의 불일치 자체도 검증했다. 같은 결과다. 따라서 default만 UNAVAILABLE로 바꾸는 수정으로는 두 번째 경계가 남는다.
+- 기대: 상태가 생략된 snapshot은 미확인으로 유지한다. 외부 runner가 가리킨 현재 run/report_ref/section과 저장 manifest를 확인하고 저장된 availability·missing을 보수적으로 결속한다. 누락 또는 상충한 외부 metadata가 저장 보고서보다 높은 확신을 만들지 않아야 한다. 존재하지 않는 ref도 성공으로 승격하지 않는다.
+- 재현 파일: `review_code_01_dcd262a_probes.py`, 출력: `review_code_01_dcd262a_probes_output.txt`. 두 RC10-R2 검사는 FAIL이고 같은 파일의 안전 WAIT 브리핑 검사는 PASS다.
+
+### 수정 확인과 직접 실행
+
+| 검증 | dcd262a 직접 결과 |
+|---|---|
+| 현 SHA wheel/sdist `build --no-isolation` | 성공 |
+| 전체 unittest | **600 tests OK, skipped=1**, 85.403초 |
+| 기존 first-pass 5 / interim 3 / b1 bundle 5 | **13/13 PASS** |
+| a1 final probe의 configured 7모드 / RC10-R1 / RC11 | **3/3 PASS**, 7.600초 |
+| 새 dcd probe | **3 tests, 1 PASS / 2 FAIL**, 7.611초 |
+| 실제 단일/비교 자산 WAIT 브리핑 직접 검사 | 5항목 순서·대기·정책 누락·계산 불가 표시, mutation receipt 없음, 임시 ledger state 불변 |
+
+RC10-R1은 새 manifest와 외부 ModeResult에 `approved_materiality_selector`, `selected_assets_for_deep_research`가 그대로 남고 PARTIAL로 유지됨을 확인했다. RC11은 기관별 연속성 확인 후 비교기간 집합을 맞추며 정상 2기관 증가 결과가 1이다. 기존 및 새 작성된 unit 회귀에서 동일기관 중복/기간 불일치 차단도 통과했다.
+
+이번 diff는 시세/HTTP/달력/Phase5 가격 경로를 변경하지 않아 a1a41b0에서 확인한 live 2종목 조회를 반복하지 않았다. 그 결과를 dcd262a의 새 live 실행으로 표기하지 않는다. wheel은 현 SHA로 재빌드하고 전체 suite의 패키지 검증을 실행했으며, clean wheel venv 및 unpacked sdist 자체 재빌드의 상세 실증은 아래 a1a41b0 절의 고정 근거다.
+
+### WAIT 브리핑과 문서 범위
+
+A는 단일/비교 자산 render_report에 `NonPostingBriefing`을 연결했다. 실제 출력에 지금 판단→가격·행동 표→핵심 근거→판단 변경 조건→상세 근거 순서가 생겼고 미승인 정책에서 WAIT와 수량 미산출을 유지한다. 기존 'briefing 연결 자체가 없음'은 이 SHA에서는 해소되었다.
+
+다만 `has_policy=False`로 안전 경계를 유지하는 현재 경로는 정책·개인 상태·typed 입력 부족을 표시하는 제한된 WAIT 안내다. R08/13→판단·브리핑, 검증된 가격/가치평가 숫자의 자동 결속, 승인 정책·가중치·실행규모까지 완성되었다는 의미는 아니다. 새 코드는 임의 정책 승인이나 자동 주문을 하지 않는다. 본문 일반 분석 섹션과 내부 ID/영문 표현의 전체 정리는 여전히 잔여 범위다.
+
+B 문서 diff는 host 주입/기본 CLI UNSUPPORTED, bounded calendar, live/fixture, 스킬 설치/UI 자동발견의 한계를 분명히 했다. 다만 문서의 `a1a41b0` 체크포인트 설명에는 'A WAIT 연결 작업 중/C 수정 중'이 남아 있어, 최종 완료 문서로 사용할 때에는 이번 실제 연결과 최종 수정 SHA를 후속 기록해야 한다. R10/R11/R17 전체 완료라는 과장 주장은 하지 않는다.
+
+최종 인수는 RC10-R2 수정과 두 독립 반례 PASS를 확인한 새 고정 SHA에서 다시 판정한다. 별도 다른 Codex의 VERIFY는 아직 이 리뷰가 대신하지 않는다.
+
+---
+
+## 보존된 이전 검토 — a1a41b0
+
 **판정: 수정 필요. 최종 인수/통과 아님.** 기존 독립 반례 13개와 전체 595개 회귀는 통과했지만 새 P1 1건·P2 1건을 재현했다. R10–11/17의 전체 판단→5단계 브리핑 연결도 잔여 범위다. 아래 결과는 지정된 고정 SHA에 대한 직접 검토이며 총괄의 통과 보고를 대신 인용한 것이 아니다.
 
 ## 기준과 격리

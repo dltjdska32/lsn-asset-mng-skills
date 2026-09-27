@@ -1,5 +1,7 @@
 # 작업 상태표
 
+**RC10-R2 독립 재검토·총괄 보정 — root 커밋 대기:** REVIEW-CODE-01은 정확한 `dcd262a`에서 이전 RC10-R1/RC11과 WAIT 브리핑은 PASS, 새 P1 RC10-R2 외부 runner 상태 생략·허위 AVAILABLE 두 변형은 FAIL로 판정했다. 실제 replay/저장 manifest는 PARTIAL·누락 두 건인데 외부 REPORT_REFRESH가 COMPLETE로 승격한 문제다. 재현·실패 출력 `reviews/review_code_01_dcd262a_probes.py`/`_output.txt`와 최신 검토 보고서를 인수했다. C 세션 한도 중단으로 총괄이 snapshot 기본 상태를 UNAVAILABLE로 조정하고 runner snapshot과 동일 run.db manifest의 정체성·섹션·상태·누락을 결속했다. 검토자 새 probe **3/3 PASS**, 관련 14/14, wheel/sdist 재빌드 전체 **600 OK(skip1)**를 총괄이 직접 확인. 상세 `handoffs/RC10-R2-REFRESH-MANIFEST-01.md`. **독립 reviewer의 이 수정 SHA 재검토와 다른 Codex 최종 검증은 미실행**이다.
+
 **A R10/11/17 안전 대기 브리핑 — 통합 커밋 대기:** A 격리 `codex/r10-11-17-briefing`(기준 `7792c8c`)의 `analysis_modes.py` 변경을 사용 한도 중단 뒤 총괄이 인수하고 WAIT 문구·조건을 보정했다. Phase6 보고서에 기존 5항목 `NonPostingBriefing`을 연결하고 무정책·미결속 수치/규모를 숨긴다. 총괄 equity/report 집중 **9/9 PASS**, wheel/sdist 재빌드 후 C 수정과 합친 전체 **600 OK(skip1)**. 상세 `handoffs/LUNA-A-R10-R11-R17-BRIEFING-01.md`. R08 차트·13F→판단 결속, 정책 승인이 필요한 행동 규모 산출 및 기본 CLI host wiring은 미완. 독립 reviewer 새 SHA 검토·별도 Codex 최종 검증 전이므로 완료 아님.
 
 **C RC10-R1·RC11 수정 회귀 — 통합 커밋 대기:** C 격리 `codex/luna-c-rc10-r1-refresh-status`(기준 `a1a41b0`) 작업 폴더에서 C 소유 3개 runtime 파일과 대응 테스트 변경을 총괄이 인수했다. C 작업 세션은 사용 한도 오류로 커밋/인계 전에 중단되었으므로 총괄이 읽고 통합 작업 폴더에 복사해 검증했다. 독립 새 probe 3/3(두 회귀+7모드), 기존 독립 13/13, wheel/sdist 재빌드 후 전체 **600 OK(skip1)**. RC10-R1의 하위 PARTIAL·누락 두 ID가 갱신 보고서에 전달되고, RC11 두 기관 같은 인접 분기 증액 방향=1이며 기간 불일치는 차단된다. 상세 `handoffs/LUNA-C-RC10-R1-RC11-01.md`. **독립 reviewer 새 SHA 재검토와 다른 최종 Codex 검증은 미실행**이다.

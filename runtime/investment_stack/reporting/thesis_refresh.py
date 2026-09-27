@@ -289,7 +289,8 @@ class ReportSnapshot:
     assumptions: tuple[str, ...]
     analysis_as_of: str
     section_fingerprints: Mapping[str, str | None]
-    availability: Availability = Availability.AVAILABLE
+    # Legacy seven-field runners have not attested replay completeness.
+    availability: Availability = Availability.UNAVAILABLE
     missing_inputs: tuple[str, ...] = ()
 
 
@@ -407,7 +408,6 @@ def refresh_report(request: ReportRefreshRequest | None, services: ReportRefresh
         else:
             status = DeltaStatus.CHANGED
         deltas.append(ReportDelta(section, status, before, after))
-    lines = tuple(f"{delta.status.value}: {delta.section}" for delta in deltas) or ("No comparable report sections were returned.",)
     comparison_incomplete = not deltas or any(delta.status is DeltaStatus.UNKNOWN for delta in deltas)
     replay_incomplete = current.availability is not Availability.AVAILABLE or bool(current.missing_inputs)
     lines = tuple(f"{delta.status.value}: {delta.section}" for delta in deltas)

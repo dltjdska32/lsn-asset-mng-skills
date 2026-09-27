@@ -507,11 +507,39 @@ def portfolio_thesis_services(
         if not runners:
             return StepResult(Availability.UNSUPPORTED,
                               unsupported_reasons=("fixed non-posting refresh runners are not configured",))
+        def bind_stored_replay(replay: FixedModeReplay, runner: Callable[[FixedModeReplay], ReportSnapshot]) -> ReportSnapshot:
+            current = runner(replay)
+            if not isinstance(current, ReportSnapshot) or current.run_id != run_db.run_id:
+                raise ValueError("fixed replay did not return a report snapshot from the current run")
+            stored = read_report_snapshot(run_db.run_id, current.report_ref)
+            if (
+                RequestMode.parse(current.mode) != RequestMode.parse(stored.mode)
+                or current.target != stored.target
+                or current.assumptions != stored.assumptions
+                or current.analysis_as_of != stored.analysis_as_of
+                or dict(current.section_fingerprints) != dict(stored.section_fingerprints)
+            ):
+                raise ValueError("fixed replay snapshot disagrees with the stored report manifest")
+            availability = (
+                ReportAvailability.UNAVAILABLE
+                if ReportAvailability.UNAVAILABLE in (current.availability, stored.availability)
+                else ReportAvailability.PARTIAL
+                if ReportAvailability.PARTIAL in (current.availability, stored.availability)
+                else ReportAvailability.AVAILABLE
+            )
+            return replace(
+                current, availability=availability,
+                missing_inputs=tuple(dict.fromkeys((*current.missing_inputs, *stored.missing_inputs))),
+            )
+        verified_runners = {
+            mode: (lambda replay, runner=runner: bind_stored_replay(replay, runner))
+            for mode, runner in runners.items()
+        }
         wrapped = ReportRefreshServices(
             external.load_prior_report if external else read_report_snapshot,
             external.start_pinned_run if external else start_existing_pinned_run,
             verify,
-            runners,
+            verified_runners,
         )
         try:
             result = refresh_report(refresh_request, wrapped)
