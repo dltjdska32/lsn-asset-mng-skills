@@ -1,5 +1,9 @@
 # 작업 상태표
 
+**자산 분석 보고서 갱신 pin 검증 통합 — root `eb12de0`:** A source `96d78a4`를 통합. SINGLE_ASSET_ANALYSIS/ASSET_COMPARISON replay에서 REPORT_REFRESH 새 run의 ID·모드·시각·시간대·state version·snapshot ref·`refresh_replay` flag가 일치할 때만 기존 equity bundle 입력을 허용한다. 총괄이 분석 통합 8/8, 독립 첫 패스 5/5·중간 3/3 PASS. C 소유 `portfolio_thesis_modes.py`가 `refresh_context`를 payload로 전달하는 연결은 아직 통합 전이라 실제 전체 refresh replay 완료는 아니다. A의 C 파일 직접 편집은 자동 소유권 검토에서 거부되었고 C 담당 파일로 재배정해 안전하게 진행 중이다.
+
+**독립 검토 추가 RC10 P1:** C 네 모드 번들에서 PORTFOLIO_SCENARIO의 누락 materiality selector로 dispatcher ModeResult=PARTIAL인데 Phase6 사용자 보고서는 '확인 완료/정보 신뢰도 높음/누락 없음'으로 생성되는 상태 불일치를 reviewer가 재현했다. C에 상위 step partial/missing을 보고서 저장·본문에 반영하도록 회송. R17 한국어 보고와 내부 ID 표시 품질도 최종 검토 범위에 남김.
+
 **RC05 분기 순서·연속성 수정 통합 — root `b5ff354`:** C source `fa797fe`를 통합. 역순·비인접·비분기말 13F 비교와 관리자별 gap/중복 chain을 fail-closed로 차단하고 정상 인접 분기만 PIT/연속 보유를 계산한다. C는 전체 578 OK(skip1)를 자기 branch에서 직접 실행했고, 총괄은 root에서 독립 첫 패스 5/5, 독립 중간 3/3 및 RC05 전용 3/3 PASS를 재실행했다. 현재 root 전체 회귀·최종 독립 재검토는 C/B 후속 수정 통합 뒤 필요하다.
 
 **독립 신규 리뷰 RC08/RC09:** reviewer가 b1f4514에서 R15 P2 RC08(sdist에 포함된 packaging test가 제외된 ARCHITECTURE.md를 읽어 unpacked sdist 실패), R14 P2 RC09(refresh 상태 pin 전용 handler가 등록되지 않아 typed_portfolio_request 누락을 잘못 반환)을 합성 반례로 재현했다. RC06/07와 합쳐 네 probe는 현재 4/4 FAIL. RC08은 B, RC09와 RC06/07·A/C replay 연결은 C에 배정했다. 독립 probe/보고서 인수·수정·재검증 전이며 완료 아님.
