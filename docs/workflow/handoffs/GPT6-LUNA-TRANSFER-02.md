@@ -24,3 +24,10 @@
 - 총괄 직접 C 새 13F·R13 검증 30/30, 결정 테스트 11/11 = **41/41 PASS**. 통합 HEAD `d85814e`에서 `.venv/Scripts/python.exe -X utf8 -B -m unittest discover` 전체 **487 OK, skip1**, 종료 0. 이는 통합 회귀 결과이며 별도 최종 검증 세션의 수행 결과가 아니다.
 - A task `01a0e2a4-f627-7610-8cbf-fabe9bad1a70` 계속 활성: R02/R03 단위 적격성과 R09 DCF·HTTP. B task `01a0e2a5-b0ff-7690-b818-5652533aa0c1` 계속 활성: 실제 Naver OHLCV top-level list parser 등 R06–08. C task `01a0e2a5-8c93-7470-afcf-b67ee0577db6`에 R12/13/17 합성 수직 흐름 후속 요청 전달. B/A 변경은 아직 이 포인터 뒤의 새 checkpoint로 인수하지 않음.
 - 전체 기능 R02–05, R09, R10–11 정책·수량, 실제 7모드, R16 end-to-end는 미완. 새 독립 REVIEW-CODE-01과 다른 VERIFY-01 세션 미생성/미실행. Gemini 자동화 PAUSED 유지.
+
+## 12:04 UTC B/C 후속 통합 포인터
+
+- C 후속 source `94ababd`를 root `ad99f0a`에 cherry-pick. Filing과 holdings 식별 정합성, 공개 cutoff, 불완전 coverage 비중 차단, 13F→한국어 브리핑 합성 수직 경로. 총괄이 C 관련 **46/46 PASS**, 해당 통합 root 전체 **492 OK, skip1** 직접 실행. 실제 SEC 네트워크/Archive index/XSD와 R13 point-in-time 백테스트는 수행하지 않음.
+- B source `5d424e4`, `3ffe21d`, `9808438`을 root `3ebd9db`, `19d2850`, `b08fbf9`에 통합. README 한 줄 충돌은 B가 더 정확히 기술한 기본 HTTP transport 미연결 상태로 해결. 총괄이 B 관련 **45/45 PASS**, root 최종 `b08fbf9` 전체 **495 OK, skip1** 직접 실행. B의 별도 패키징5/5와 live probe는 `handoffs/LUNA-B-TRANSFER-02.md` 참조; root가 이 단계에서 wheel 빌드/live를 재실행한 것은 아님.
+- B 임시 scoped truststore probe Naver/Yahoo/Coinbase 200, Investing 403. 기본 `providers/http.py`에는 A가 TLS/Decimal 연결 중; 설치된 `truststore`만으로 성공하지 않음. Naver 9/27 조회 시 9/23 종가는 current price 증거 아님; 조정 근거 없는 OHLCV raw bars는 계산 불가. A에 transport 결과 전달.
+- B task 후속 R07–08 verified BarSet→technical provenance 수직 검증 요청 전달. A task는 R02–05/R09/HTTP 인계 커밋 직전. 전체 7모드·정식 개인 규모 판단·독립 REVIEW-CODE-01·다른 VERIFY-01 미실행.

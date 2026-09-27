@@ -1,5 +1,7 @@
 # 작업 상태표
 
+**최신 상태 — 2026-09-27 12:04 UTC, Luna B/C 후속 통합:** C source `94ababd`(filing/holdings identity·cutoff·불완전 비중·브리핑 E2E)를 root `ad99f0a`로 통합. C 담당 테스트 총괄 직접 **46/46 PASS**, root 전체 **492 OK, skip1**. B source `5d424e4`(실제 Naver OHLCV request-route binding), `3ffe21d`(문서), `9808438`(인계)를 root `3ebd9db`·`19d2850`·`b08fbf9`로 통합. README 충돌은 B의 더 상세한 scoped truststore 미연결 설명을 채택. B 담당 총괄 직접 **45/45 PASS**, 통합 root 전체 **495 OK, skip1**. B 공개 조회 Naver/Yahoo/Coinbase 200은 임시 scoped TLS probe의 사실이며 기본 transport 연결은 A 담당으로 진행 중; Investing 403, Naver 9/23 종가를 9/27 현재가로 취급하지 않음. C 실제 SEC 네트워크/XSD·R13 기간 외 검증 미실행. A R02–05/R09·HTTP 인계 마무리 중, B는 후속 R07–08 적격 BarSet→기술 계산 수직 검증 재배정. 새 독립 전체 코드 검토와 다른 새 최종 검증은 아직 미실행. 상세 각 인계·`handoffs/GPT6-LUNA-TRANSFER-02.md`.
+
 **최신 상태 — 2026-09-27 11:49 UTC, Luna A/C 체크포인트 통합:** root `codex/autonomous-integration` HEAD `d85814e`에 Luna A의 R05 structured fallback `f8b15a8`, Evidence Decimal/선택 WIP `b30db40`·보정 `7885fd5`, Luna C의 13F 정정·결손 `4c35017`, WAIT 브리핑 `e820516`, 인계 `65ec325`, generic `bound_results` 숫자 누출 수정 `d85814e` 반영. 총괄이 C 담당 41/41 PASS, 전체 unittest **487 OK, skip1** 직접 실행; root 작업 트리 clean. A는 R02/R03 단위 검증·R09 DCF/HTTP를 계속 구현 중, B는 실제 Naver OHLCV 최상위 리스트 응답 대응 중이다. C는 다음 R12/13/17 수직 슬라이스로 재배정했다. 세 구현의 완성, 신규 독립 전체 코드 검토, 다른 신규 최종 검증은 아직 아니다. Gemini 자동화 PAUSED. 상세 `handoffs/GPT6-LUNA-TRANSFER-02.md`.
 
 후속 A R14·R16 일곱 모드 실행 계약은 `assignments/LUNA-A-R14-01.md`에 고정했다. 선행 A 슬라이스 인계 및 B/C 코드 통합 뒤 최신 기준 SHA를 다시 전달하고 착수한다. 현재 route/plan 검사는 실행 완료 증거가 아니다.
