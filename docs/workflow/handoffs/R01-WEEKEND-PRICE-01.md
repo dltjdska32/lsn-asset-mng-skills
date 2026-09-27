@@ -30,3 +30,11 @@
 - 빌드 산출물은 로컬 `dist/`에만 두었으며 커밋 대상이 아니다.
 - `NYSE` pinned calendar는 현재 registry에 없으므로 NYSE quote는 fail-closed다. pinned calendar coverage 밖 날짜도 승인되지 않는다.
 - personal DB 변경 및 주문 동작은 없었다. 원격 push/deploy도 수행하지 않았다.
+
+## 독립 검토 후속 수정 — P1 Yahoo 지연 quote
+
+- 리뷰 task: `01a0e30c-b115-7db0-9a6c-b05a962b2d8c`; 리뷰 기준 root SHA `57aca43`.
+- 재현 반례: Yahoo `exchangeDataDelayedBy=15` quote, NASDAQ `2026-09-28 09:46` 관측, `10:01` cutoff (age 900초). Parser는 `REGULAR`와 `delay_minutes=15`를 함께 만들었지만 calendar evaluator는 지연 필드를 무시해 일반 freshness `FRESH`로 승인할 수 있었다.
+- 수정 커밋: `1c4c6fe` (`Reject delayed quotes for current price`). `calendar_aware_freshness_evaluator`는 `delay_minutes > 0`인 quote를 freshness 계산 전에 `DELAYED_QUOTE_NOT_ALLOWED_FOR_CURRENT_PRICE`로 거부한다. `0` 및 미상 delay는 quote timestamp가 실제 active session 안에 있는지 pinned calendar가 계속 검사하며, 세션 밖 timestamp는 불가 상태다.
+- 회귀 테스트: `tests/unit/test_r01_delayed_quote_gate.py`가 15분 지연 거부, zero/unknown active-session 허용, 정규장 전 timestamp 거부를 확인한다. 집중 회귀 **37/37 PASS**; 전체 `unittest discover -s tests -q` **549 tests, OK, skipped=1**.
+- R01 범위 밖의 dispatcher/analysis mode 독립 리뷰 이슈에는 손대지 않았다.
