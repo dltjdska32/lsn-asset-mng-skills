@@ -24,7 +24,7 @@ from zoneinfo import ZoneInfo
 from investment_stack.contracts.codec import parse_finite_decimal
 from investment_stack.contracts.context import PublicAvailability
 from investment_stack.contracts.market import MarketQuote, QuoteKind
-from investment_stack.providers.models import ProviderObservation, ProviderResult, ProviderStatus
+from investment_stack.providers.models import ProviderObservation, ProviderRequest, ProviderResult, ProviderStatus
 from investment_stack.providers.registry import ProviderCapability
 
 # Generic HTTP Transport callable signature:
@@ -63,6 +63,67 @@ def quote_matches_requested_market(quote: MarketQuote, instrument_id: str) -> tu
     if prefix == "CRYPTO" and not _supports_btc_usd(instrument_id, quote.currency):
         return False, "UNSUPPORTED_SOURCE_PAIR: requested pair is not BTC/USD"
     return True, None
+
+
+def calendar_aware_freshness_evaluator(calendar: Any = None, *, engine: Any = None, policy: Any = None) -> EligibilityEvaluator:
+    """Build the quote qualification callback used by fetch_current.
+
+    The supplied schedule must match a pinned official snapshot. LAST_VALID_CLOSE
+    is eligible as a dated close observation, never relabeled as a live quote.
+    """
+    from investment_stack.freshness import FreshnessEngine, FreshnessStatus
+    from investment_stack.providers.contract_adapters import quote_to_observation
+
+    freshness_engine = engine or FreshnessEngine()
+    # CURRENT_PRICE is blocked for delayed observations unless a later policy
+    # explicitly opts in. A dated, calendar-verified close remains eligible.
+    allowed = {FreshnessStatus.FRESH, FreshnessStatus.LAST_VALID_CLOSE}
+
+    def evaluate(quote: MarketQuote, analysis_as_of: datetime) -> tuple[bool, str | None]:
+        observation = quote_to_observation(quote)
+        if calendar is not None and not getattr(calendar, "is_pinned", False):
+            return False, "UNTRUSTED_CALENDAR_SCHEDULE"
+        assessment = freshness_engine.assess(
+            observation, analysis_as_of=analysis_as_of.isoformat(), policy=policy, calendar=calendar,
+        )
+        return assessment.status in allowed, assessment.reason
+
+    return evaluate
+
+
+@dataclass(slots=True)
+class MarketQuoteProviderAdapter:
+    """ProviderAdapter bridge for the CURRENT_PRICE executor.
+
+    Calendars are explicit and bounded. Without one, age-fresh quotes may pass;
+    a stale close cannot receive LAST_VALID_CLOSE qualification.
+    """
+
+    quote_provider: Any
+    calendars: Mapping[str, Any]
+    engine: Any = None
+    policy: Any = None
+    name: str = "market_quotes"
+    capabilities: frozenset[ProviderCapability] = frozenset({ProviderCapability.CURRENT_PRICE})
+
+    def fetch(self, request: ProviderRequest) -> ProviderResult:
+        if request.capability not in self.capabilities or not request.instrument_id:
+            return ProviderResult(self.name, request.capability, ProviderStatus.UNAVAILABLE,
+                                  reason="CURRENT_PRICE and instrument_id are required")
+        try:
+            analysis_as_of = datetime.fromisoformat(request.analysis_as_of.replace("Z", "+00:00"))
+        except ValueError:
+            return ProviderResult(self.name, request.capability, ProviderStatus.ERROR,
+                                  reason="invalid analysis_as_of format")
+        prefix = request.instrument_id.split(":", 1)[0].upper()
+        exchange = {"NMS": "NASDAQ", "NASDAQGS": "NASDAQ", "KS": "KRX"}.get(prefix, prefix)
+        calendar = self.calendars.get(exchange)
+        evaluator = calendar_aware_freshness_evaluator(calendar, engine=self.engine, policy=self.policy)
+        return self.quote_provider.fetch_current(
+            request.instrument_id, analysis_as_of=analysis_as_of,
+            prefer_extended_hours=bool(request.parameters.get("prefer_extended_hours", False)),
+            eligibility_evaluator=evaluator,
+        )
 
 
 class MarketQuoteError(Exception):
@@ -291,9 +352,29 @@ def parse_naver_basic_quote(
             error_reasons=(f"INVALID_PRICE_FORMAT: {exc}",),
         )
 
-    if claimed_market_time is not None:
-        if claimed_market_time.tzinfo is None:
-            claimed_market_time = claimed_market_time.replace(tzinfo=ZoneInfo(tz_name))
+    if claimed_market_time is not None and claimed_market_time.tzinfo is None:
+        claimed_market_time = claimed_market_time.replace(tzinfo=ZoneInfo(tz_name))
+    close_price_send_time: datetime | None = None
+    close_price_send_time_source: str | None = None
+    if quote_kind == QuoteKind.LAST_VALID_CLOSE:
+        raw_send_time = str(data.get("closePriceSendTime", "")).strip()
+        if len(raw_send_time) == 4 and raw_send_time.isdigit() and claimed_market_time is not None:
+            try:
+                close_price_send_time = claimed_market_time.replace(
+                    hour=int(raw_send_time[:2]), minute=int(raw_send_time[2:]), second=0, microsecond=0
+                )
+                if close_price_send_time < claimed_market_time:
+                    raise ValueError("close price publication precedes market close")
+                close_price_send_time_source = "closePriceSendTime"
+            except ValueError:
+                close_price_send_time = None
+                close_price_send_time_source = None
+        if close_price_send_time is not None:
+            pub_avail = PublicAvailability.exact(available_at=close_price_send_time, locator=resolved_source_url)
+        else:
+            # Session close can be reconstructed, but publication/availability cannot.
+            pub_avail = PublicAvailability.unknown(locator=resolved_source_url)
+    elif claimed_market_time is not None:
         pub_avail = PublicAvailability.exact(
             available_at=claimed_market_time,
             locator=resolved_source_url,
@@ -331,15 +412,22 @@ def parse_naver_basic_quote(
         metric="current_price",
         retrieved_at=retrieved.isoformat(),
         observed_at=claimed_market_time.isoformat() if claimed_market_time else None,
+        published_at=pub_avail.public_available_at.isoformat() if pub_avail.public_available_at else None,
         claimed_market_time=claimed_market_time.isoformat() if claimed_market_time else None,
         market_session_date=quote.market_session_date,
         official_confirmation_status="EXCHANGE_CONFIRMED" if exchange_code else "UNCONFIRMED",
         metadata={
             "quote_kind": str(quote_kind),
+            "exchange": exchange_name,
+            "currency": currency,
             "stock_name": data.get("stockName"),
             "delay_minutes": delay_minutes,
             "fluctuations_ratio": data.get("fluctuationsRatio"),
             "market_session_type": market_session_type,
+            "market_time_provenance": "DERIVED_FROM_SESSION_END_TIME" if quote_kind == QuoteKind.LAST_VALID_CLOSE else "SOURCE_TRADE_TIMESTAMP",
+            "claimed_time_source": "stockExchangeType.endTime" if quote_kind == QuoteKind.LAST_VALID_CLOSE else "localTradedAt",
+            "public_available_time_source": close_price_send_time_source,
+            "public_availability_status": "SOURCE_REPORTED" if close_price_send_time is not None else ("UNKNOWN" if quote_kind == QuoteKind.LAST_VALID_CLOSE else "AT_OBSERVED_TIME"),
         },
     )
 
@@ -445,6 +533,7 @@ def parse_coinbase_ticker(
         metric="current_price",
         retrieved_at=retrieved.isoformat(),
         observed_at=claimed_market_time.isoformat(),
+        published_at=claimed_market_time.isoformat(),
         claimed_market_time=claimed_market_time.isoformat(),
         market_session_date=quote.market_session_date,
         official_confirmation_status="EXCHANGE_CONFIRMED",
@@ -583,6 +672,7 @@ def parse_kraken_trades(
         metric="current_price",
         retrieved_at=retrieved.isoformat(),
         observed_at=claimed_market_time.isoformat(),
+        published_at=claimed_market_time.isoformat(),
         claimed_market_time=claimed_market_time.isoformat(),
         market_session_date=quote.market_session_date,
         official_confirmation_status="EXCHANGE_CONFIRMED",
@@ -705,7 +795,9 @@ def parse_yahoo_quote(
         except (TypeError, ValueError):
             return MarketQuoteParseResult(quote=None, observation=None,
                 error_reasons=("INVALID_DELAY_METADATA",))
-    quote_kind = QuoteKind.DELAYED if delay_minutes is None or delay_minutes > 0 else QuoteKind.REGULAR
+    # regularMarketPrice is a regular-session quote; whether it is delayed is a
+    # separate field and remains unknown when the provider omits delay metadata.
+    quote_kind = QuoteKind.REGULAR
     quote = MarketQuote(
         quote_id=f"quote_{resolved_evidence_id}",
         evidence_id=resolved_evidence_id,
@@ -736,6 +828,7 @@ def parse_yahoo_quote(
         metric="current_price",
         retrieved_at=retrieved.isoformat(),
         observed_at=claimed_market_time.isoformat(),
+        published_at=claimed_market_time.isoformat(),
         claimed_market_time=claimed_market_time.isoformat(),
         market_session_date=quote.market_session_date,
         official_confirmation_status="EXCHANGE_CONFIRMED",
@@ -744,6 +837,7 @@ def parse_yahoo_quote(
             "exchange": exchange_name,
             "delay_minutes": delay_minutes,
             "delay_status": "UNKNOWN" if delay_minutes is None else "REPORTED",
+            "public_available_time_source": "regularMarketTime",
         },
     )
 

@@ -226,7 +226,8 @@ class TestMarketQuotesR06(unittest.TestCase):
         self.assertEqual(res.quote.price, Decimal("225.50"))
         self.assertEqual(res.quote.currency, "USD")
         self.assertEqual(res.quote.exchange, "NASDAQ")
-        self.assertEqual(res.quote.quote_kind, QuoteKind.DELAYED)
+        self.assertEqual(res.quote.quote_kind, QuoteKind.REGULAR)
+        self.assertIsNone(res.quote.delay_minutes)
         self.assertIsNone(res.quote.delay_minutes)
         delayed = json.loads(json.dumps(payload))
         delayed["chart"]["result"][0]["meta"]["exchangeDataDelayedBy"] = 15

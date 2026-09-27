@@ -42,3 +42,7 @@ class FreshnessAssessment:
     effective_time: str | None
     age_seconds: int | None
     reason: str
+    market_session_date: str | None = None
+    quote_kind: str | None = None
+    calendar_id: str | None = None
+    public_available_time: str | None = None
