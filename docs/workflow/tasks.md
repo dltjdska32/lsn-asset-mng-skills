@@ -1,5 +1,7 @@
 # 작업 상태표
 
+**독립 번들 중간 검토 산출물 인수 — 기준 `b1f4514`:** REVIEW-CODE-01의 보고서 `reviews/REVIEW-CODE-01-INTERIM-b1f4514.md`, 재현 `review_code_01_b1f4514_probes.py` 및 인계를 공유 메모리에 반영했다. reviewer와 총괄 모두 RC06–10 5/5 FAIL을 직접 재현했다. P1은 refresh 반환 ref 미저장, 다른 run의 논지 자료/DB 허용, 실행 PARTIAL인데 사용자 보고서 완료·높은 신뢰도로 표시; P2는 sdist 자체 테스트의 ARCHITECTURE.md 누락, refresh pin handler 미등록이다. B/C에 소유 파일별 수정 회송. reviewer의 clean wheel venv R15 10/10과 전체 576 OK(skip1)는 이 독립 반례를 대체하지 않는다. R17 한국어·내부 ID 본문 분리도 C 후속 확인 대상으로 배정했다.
+
 **자산 분석 보고서 갱신 pin 검증 통합 — root `eb12de0`:** A source `96d78a4`를 통합. SINGLE_ASSET_ANALYSIS/ASSET_COMPARISON replay에서 REPORT_REFRESH 새 run의 ID·모드·시각·시간대·state version·snapshot ref·`refresh_replay` flag가 일치할 때만 기존 equity bundle 입력을 허용한다. 총괄이 분석 통합 8/8, 독립 첫 패스 5/5·중간 3/3 PASS. C 소유 `portfolio_thesis_modes.py`가 `refresh_context`를 payload로 전달하는 연결은 아직 통합 전이라 실제 전체 refresh replay 완료는 아니다. A의 C 파일 직접 편집은 자동 소유권 검토에서 거부되었고 C 담당 파일로 재배정해 안전하게 진행 중이다.
 
 **독립 검토 추가 RC10 P1:** C 네 모드 번들에서 PORTFOLIO_SCENARIO의 누락 materiality selector로 dispatcher ModeResult=PARTIAL인데 Phase6 사용자 보고서는 '확인 완료/정보 신뢰도 높음/누락 없음'으로 생성되는 상태 불일치를 reviewer가 재현했다. C에 상위 step partial/missing을 보고서 저장·본문에 반영하도록 회송. R17 한국어 보고와 내부 ID 표시 품질도 최종 검토 범위에 남김.
