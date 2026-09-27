@@ -20,4 +20,4 @@
 - 이 체크포인트는 전체 v1.3 완료가 아니다. A R01은 기존 Phase4 SelectedEvidence의 current-price 안전 수직 경로이며 정식 `SelectedInputSet`을 모든 deep research 가격/재무 계산 소비 지점에 연결한 것은 아니다. R02–05, R09 DCF/시나리오/민감도도 미완.
 - C의 ACTION-01~04는 독립 branch에서 별도 수정 중이며 **이 통합 tree에는 넣지 않았다**. 완전 R10–11 판단/개인 정책 registry·검증된 pin/규모 계산은 미완. B의 Codex UI 실제 스킬 발견은 wheel 파일/격리 venv 테스트로 대체하지 않는다.
 - 7개 고정 모드 실행 결과 R14, 끝단 R16–17, 사용자 문서/스킬 최종 정렬·깨끗한 배포 안내, 새 Codex 전체 독립 검토와 다른 새 Codex 최종 검증은 후속. 위 테스트는 이 부분의 구현을 증명하지 않는다.
-- 대상 root commit SHA는 총괄이 이 체크포인트를 commit한 뒤 tasks.md에서 확정한다.
+- 대상 root commit SHA: `571101af3672eea900ebfae9321ace77f78f2473`. 위 465/1 skip 및 격리 venv 설치5/5는 해당 commit 직전 staged tree에서 실행했고 그 뒤 의미 코드는 바꾸지 않았다(공백 정리만 수행).
