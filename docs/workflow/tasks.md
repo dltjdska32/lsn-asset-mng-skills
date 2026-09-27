@@ -1,5 +1,9 @@
 # 작업 상태표
 
+**R15 패키지 통합 — root `53f4a7a`:** B 별도 `codex/luna-r15-package-01` source `e903e54`를 통합했다. 정확한 8개 `skills/` 원본과 `.agents/skills/` 미러/UI 메타데이터, 이름별 5개 config 리소스, wheel/sdist 파일 allowlist 및 Windows 같은 인터프리터 설치 안내를 점검. B는 오프라인 clean wheel venv에서 focused 10/10·`pip check`·CLI check/plan/preflight smoke를 직접 확인했다. 총괄은 통합 소스로 wheel/sdist를 재빌드한 뒤 focused 10 OK(skip1), 미러 check, 전체 **575 OK(skip1)**를 직접 확인했다. Codex UI의 임의 venv 자동 스킬 검색, Python 3.11–3.13, 외부 연결·정책 자동 승인은 검증되지 않았다. 인계 `handoffs/PACKAGE-01.md`.
+
+**독립 중간 재검토 산출물:** REVIEW-CODE-01 세션의 고정 `979cc5e` 리뷰 `reviews/REVIEW-CODE-01-INTERIM-979cc5e.md`와 3개 새 probe를 공유 메모리에 인수했다. 검토자 자신과 총괄 모두 EPS 개별 context 누락·13F 역순·13F 분기 gap/중복 3/3 FAIL을 직접 재현했다. 검토자는 실제 Yahoo/Naver 기본 경로→Phase4/run.db→Phase5 및 비실시간 종가 표시도 독립 확인했다. A/C 수정 뒤 3/3 통과와 최종 통합 SHA 재검토가 필요하다.
+
 **독립 중간 재검토 — 기준 `979cc5e` 추가 반례 회송:** 별도 REVIEW-CODE-01 세션이 이전 RC01–05 probe 5/5와 전체 570 OK(skip1)를 직접 재실행했으나 새 P1 둘을 재현했다. (1) R02/R14 비교가 자산의 모든 재무 observation metadata를 합집합으로 모아 특정 EPS 지표의 기간 시작·정정 정보가 빠져도 다른 지표로 보충하여 비교 숫자/delta를 저장한다. A에 지표별 실제 소비 근거 검증 배정. (2) R12/R13 13F 비교에서 공개시각이 cutoff 전이어도 보유기간 역순 또는 분기 gap·중복 시 PIT/연속분기 점수를 생성한다. C에 모드 번들 인계 뒤 기간 순서·연속성·중복 fail-closed 수정 배정. reviewer의 재현 코드·중간 보고서 인수 및 최종 SHA 검토 전이므로 완료 아님.
 
 **RC04 동일 누락 보정 통합 — root `a379404`:** A source `5565c3a`를 root `a379404`에 통합했다. 비교 양쪽에 기간 시작·주기·보고구분·회계기준·연결·조정·정정상태가 각각 하나씩 확인되어야 하고 서로 같아야 한다. 동일 누락/충돌은 비교 수치·delta를 차단한다. 총괄 직접 분석/dispatcher 관련 14/14, 독립 검토 고정 반례 5/5, 전체 **570 OK(skip1)**. 이는 첫 패스 반례 수정 증거이며 독립 검토 세션의 최신 SHA 재검토와 다른 Codex 최종 검증은 아직 남아 있다.
