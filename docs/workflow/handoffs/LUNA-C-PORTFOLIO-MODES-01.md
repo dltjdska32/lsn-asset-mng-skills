@@ -5,6 +5,7 @@
 - 범위: R14 `PERSONAL_PORTFOLIO_ANALYSIS`·`PORTFOLIO_SCENARIO`의 C-owned 비게시 계산/보고 서비스
 - 기준 root/source SHA: `27d95e452444a1d1e2121841644362f1eadc40db`
 - 구현 branch: `codex/luna-c-portfolio-modes-01`
+- C 구현 소스 SHA: `d9d3e15c635226bba5c59af94f973d34d5a7b24a`
 - 변경 파일: 신규 `runtime/investment_stack/reporting/portfolio_modes.py`, 신규 `tests/unit/test_r14_portfolio_modes.py`, 본 handoff
 - A dispatcher/factory/execution, B calendar/quotes, C `thesis_refresh.py` 및 개인 DB는 수정/사용하지 않음
 
