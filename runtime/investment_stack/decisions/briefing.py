@@ -3,13 +3,26 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
+from decimal import Decimal
+import re
 from typing import Mapping
 
-from investment_stack.contracts.calculation import CalculationRecord, DataAvailabilityStatus, InvestmentDecision
+from investment_stack.contracts.calculation import (
+    CalculationRecord,
+    CalculationStatus,
+    DataAvailabilityStatus,
+    FormulaRequirement,
+    GateDecision,
+    InvestmentDecision,
+    OutputKind,
+    validate_calculation_for_use,
+)
+from investment_stack.contracts.codec import format_decimal
 from investment_stack.contracts.context import PublicAvailabilityKind
-from investment_stack.contracts.institutional import Filing13F
-from investment_stack.contracts.slots import SelectedInputSet
 from investment_stack.contracts.errors import ContractValidationError
+from investment_stack.contracts.institutional import Filing13F
+from investment_stack.contracts.slots import EligibilityDecision, EligibilityStatus, SelectedInputSet
 from investment_stack.institutional.models import EffectiveHoldingSet, ValidationReport
 
 
@@ -21,6 +34,139 @@ class InstitutionalBriefingContext:
     publication_label: str
     validation_status: str
     accessions: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class NumericBinding:
+    """Typed output rendered from one calculation and its eligible selected evidence."""
+
+    key: str
+    value: Decimal
+    unit: str
+    currency: str
+    calculation_id: str
+    evidence_ids: tuple[str, ...]
+    public_available_at: str
+    conditional: bool = False
+
+
+def _collect_numeric_bindings(
+    inputs: SelectedInputSet,
+    calculations: Mapping[str, CalculationRecord],
+    eligibility_decisions: Mapping[str, EligibilityDecision] | None,
+    analysis_as_of: datetime | None,
+    registered_gates: tuple[GateDecision, ...],
+) -> tuple[NumericBinding, ...]:
+    """Fail closed unless semantic output and every source input are explicitly bound."""
+    if analysis_as_of is None or analysis_as_of.tzinfo is None or eligibility_decisions is None:
+        return ()
+    selected_by_slot = {slot.slot_id: slot for slot in inputs.slots}
+    candidates: dict[str, list[NumericBinding]] = {"current_price": [], "valuation": []}
+    allowed_units = {"currency/share", "price/share", "money/share"}
+
+    for calc_key, record in calculations.items():
+        if (
+            calc_key != record.calculation_id
+            or not record.bound_inputs
+            or not record.verify_lineage()
+            or record.run_id != inputs.run_id
+            or record.selection_snapshot_hash != inputs.snapshot_hash
+        ):
+            continue
+        purpose = (record.purpose or "").upper()
+        if purpose == "CURRENT_PRICE":
+            output_kind = OutputKind.PRICE
+            binding_key = "current_price"
+            if record.status != CalculationStatus.CALCULATED:
+                continue
+        elif purpose == "VALUATION_MODEL":
+            output_kind = OutputKind.VALUATION
+            binding_key = "valuation"
+            if record.requirement != FormulaRequirement.ANALYST_SCENARIO:
+                continue
+            if record.status not in {CalculationStatus.CALCULATED, CalculationStatus.CONDITIONAL}:
+                continue
+        else:
+            continue
+
+        evidence_ids: set[str] = set()
+        public_times: list[datetime] = []
+        lineage_ok = True
+        for bound in record.bound_inputs:
+            selected = selected_by_slot.get(bound.slot_id)
+            decision = eligibility_decisions.get(bound.eligibility_id)
+            if (
+                selected is None
+                or selected.canonical_value != bound.canonical_value
+                or selected.canonical_unit != bound.canonical_unit
+                or selected.canonical_currency != bound.canonical_currency
+                or selected.evidence_id != bound.evidence_id
+                or selected.input_fingerprint != bound.input_fingerprint
+                or selected.eligibility_id != bound.eligibility_id
+                or selected.public_available_at != bound.public_available_at
+                or not bound.eligibility_id
+                or decision is None
+                or decision.eligibility_id != bound.eligibility_id
+                or decision.status != EligibilityStatus.ELIGIBLE
+                or decision.input_fingerprint != bound.input_fingerprint
+                or not bound.public_available_at
+                or (
+                    purpose == "CURRENT_PRICE"
+                    and decision.purpose.upper() != "CURRENT_PRICE"
+                )
+                or (
+                    purpose == "VALUATION_MODEL"
+                    and decision.purpose.upper() not in {"FINANCIAL_CALC", "VALUATION_MODEL"}
+                )
+            ):
+                lineage_ok = False
+                break
+            try:
+                available_at = datetime.fromisoformat(bound.public_available_at.replace("Z", "+00:00"))
+            except (AttributeError, TypeError, ValueError):
+                lineage_ok = False
+                break
+            if available_at.tzinfo is None or available_at > analysis_as_of:
+                lineage_ok = False
+                break
+            public_times.append(available_at)
+            evidence_ids.add(bound.evidence_id)
+        if not lineage_ok or not evidence_ids:
+            continue
+
+        try:
+            validated = validate_calculation_for_use(record, registered_gates=registered_gates)
+        except ContractValidationError:
+            continue
+        if not validated.is_consumable:
+            continue
+        matches = [output for output in validated.outputs if output.kind == output_kind]
+        # No scenario-name field exists, so a scenario value cannot be assigned to
+        # conservative/base/optimistic by tuple order.
+        if len(matches) != 1:
+            continue
+        output = matches[0]
+        unit = output.unit.strip().casefold()
+        currency = (output.currency or "").strip().upper()
+        currency_unit = f"{currency.casefold()}/share"
+        valid_per_share_unit = unit in allowed_units or unit == currency_unit
+        if not valid_per_share_unit or not re.fullmatch(r"[A-Z]{3}", currency) or output.value <= 0:
+            continue
+        candidates[binding_key].append(
+            NumericBinding(
+                key=binding_key,
+                value=output.value,
+                unit=output.unit,
+                currency=currency,
+                calculation_id=record.calculation_id,
+                evidence_ids=tuple(sorted(evidence_ids)),
+                public_available_at=max(public_times).isoformat(),
+                conditional=record.status == CalculationStatus.CONDITIONAL,
+            )
+        )
+
+    # Conflicting eligible calculations are not averaged or selected by input order.
+    return tuple(bindings[0] for bindings in candidates.values() if len(bindings) == 1)
 
 
 def make_institutional_briefing_context(
@@ -95,6 +241,7 @@ class NonPostingBriefing:
 
     reasons: tuple[str, ...]
     verified_hash: str
+    numeric_bindings: tuple[NumericBinding, ...] = ()
 
     def __post_init__(self) -> None:
         if self.status in (DataAvailabilityStatus.PARTIAL, DataAvailabilityStatus.UNAVAILABLE):
@@ -111,6 +258,10 @@ def generate_briefing(
     has_policy: bool,
     has_personal_snapshot: bool,
     institutional_context: InstitutionalBriefingContext | None = None,
+    *,
+    eligibility_decisions: Mapping[str, EligibilityDecision] | None = None,
+    analysis_as_of: datetime | None = None,
+    registered_gates: tuple[GateDecision, ...] = (),
 ) -> NonPostingBriefing:
     """Generate a 5-section Korean briefing without posting any trades."""
     reasons = []
@@ -164,6 +315,10 @@ def generate_briefing(
             verified_hash=""
         )
 
+    numeric_bindings = _collect_numeric_bindings(
+        inputs, calculations, eligibility_decisions, analysis_as_of, registered_gates
+    )
+
     # 2. Completeness checks
     if not calculations:
         reasons.append("A 도메인 결과 부재 (계산 내역 없음).")
@@ -197,14 +352,30 @@ def generate_briefing(
             verified_hash=inputs.snapshot_hash
         )
 
-    # Presence booleans do not prove trusted price eligibility, valuation semantics,
-    # policy provenance, or a pinned personal snapshot. Keep all executable actions
-    # unavailable until those typed integrations exist.
-    reasons.append("적격 가격·가치평가 결과와 승인 정책 출처가 검증되지 않아 행동 판단을 보류합니다.")
+    # Numeric market/valuation outputs may be displayed only through typed bindings.
+    # They do not authorize any action or sizing policy.
+    reasons.append("안전마진·개인 위험·축소 정책 provenance가 확인되지 않아 행동 판단과 규모 산출을 보류합니다.")
     core_lines = [
         "13F 자료는 공개 지연이 있는 보조 근거이며, UNVALIDATED 점수는 판단 가중치나 거래 신호로 쓰지 않습니다."
     ]
     detail_lines = list(reasons)
+    table = {
+        "현재가": "계산 불가: 적격 가격 근거 미연결",
+        "적정가 산출값": "계산 불가: 적격 가치평가 근거 미연결",
+        "진입·추가매수 구간": "계산 불가: 승인된 안전마진 정책 미확인",
+        "축소 구간": "계산 불가: 승인된 축소 정책 미확인",
+        "금액·수량": "계산 불가: 승인 정책 provenance 미검증",
+    }
+    for binding in numeric_bindings:
+        value_text = f"{format_decimal(binding.value)} {binding.currency}/주"
+        if binding.conditional:
+            value_text += " (조건부 산출값)"
+        table["현재가" if binding.key == "current_price" else "적정가 산출값"] = value_text
+        detail_lines.append(
+            f"수치 근거 — calculation `{binding.calculation_id}`; evidence "
+            + ", ".join(f"`{evidence_id}`" for evidence_id in binding.evidence_ids)
+            + f"; 공개시점 {binding.public_available_at}."
+        )
     if institutional_context is not None:
         core_lines.append(
             f"13F 보고 기준일 {institutional_context.report_period}; 공개시점: {institutional_context.publication_label}; "
@@ -217,23 +388,19 @@ def generate_briefing(
     return NonPostingBriefing(
         status=DataAvailabilityStatus.PARTIAL,
         decision=InvestmentDecision.WAIT,
-        section_judgement="대기 — 적격 가격·가치와 승인 정책을 확인할 때까지 매수·추가매수·축소 판단을 보류합니다.",
-        section_table={
-            "현재가": "계산 불가: 적격 가격 결과 미연결",
-            "적정가 범위": "계산 불가: 적격 가치평가 결과 미연결",
-            "진입·추가매수 구간": "계산 불가: 승인된 안전마진 정책 미확인",
-            "축소 구간": "계산 불가: 승인된 축소 정책 미확인",
-            "금액·수량": "계산 불가: 승인 정책 provenance 미검증",
-        },
+        section_judgement="대기 — 승인된 투자·위험 정책을 확인할 때까지 매수·추가매수·축소 판단을 보류합니다.",
+        section_table=table,
         section_core=tuple(core_lines),
         section_conditions=("A 도메인의 적격 가격과 가치평가 결과가 결속될 때 재평가합니다.", "승인된 정책 출처와 같은 시점의 개인 상태가 검증된 뒤에만 규모를 계산합니다."),
         section_details=tuple(detail_lines),
         reasons=tuple(reasons),
-        verified_hash=inputs.snapshot_hash
+        verified_hash=inputs.snapshot_hash,
+        numeric_bindings=numeric_bindings,
     )
 
 __all__ = [
     "InstitutionalBriefingContext",
+    "NumericBinding",
     "NonPostingBriefing",
     "generate_briefing",
     "make_institutional_briefing_context",

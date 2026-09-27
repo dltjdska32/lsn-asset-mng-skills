@@ -76,6 +76,23 @@ class TestActionProposalLogic(unittest.TestCase):
         self.assertEqual(prop.decision, InvestmentDecision.WAIT)
         self.assertTrue(any("Required gates are not explicitly ENABLED" in r for r in prop.unavailable_reasons))
 
+    def test_approval_shaped_fields_and_mapping_order_do_not_enable_orders(self):
+        reverse_policy = dict(reversed(list(self.policy_buy.items())))
+        reverse_state = dict(reversed(list(self.personal_state.items())))
+        first = calculate_action_proposal(
+            intended_decision=InvestmentDecision.BUY, state_version=self.state_version,
+            policy=self.policy_buy, price=self.price, value=self.value, personal_state=self.personal_state,
+        )
+        second = calculate_action_proposal(
+            intended_decision=InvestmentDecision.BUY, state_version=self.state_version,
+            policy=reverse_policy, price=self.price, value=self.value, personal_state=reverse_state,
+        )
+        self.assertEqual(first.decision, second.decision)
+        self.assertEqual(first.tranches, second.tranches)
+        self.assertEqual(first.unavailable_reasons, second.unavailable_reasons)
+        self.assertEqual(first.decision, InvestmentDecision.WAIT)
+        self.assertEqual(first.tranches, ())
+
     def test_pure_arithmetic_valid(self):
         from investment_stack.decisions.action import calculate_budget_arithmetic
         
