@@ -69,20 +69,31 @@ run-local derived outputs rather than a personal Source of Truth.
 
 ## Run locally
 
-The runtime has no third-party dependencies.
+The runtime dependencies include `tzdata` (for Windows) and `truststore>=0.9.1` (for scoped TLS on Windows).
+
+For an isolated environment, use the following Windows PowerShell commands to create a virtual environment, activate it, install the package in editable mode, and run the validations using the same virtual environment interpreter:
 
 ```powershell
-$env:PYTHONPATH = "runtime"
-python -m investment_stack route "FANUC 분석해" --json
-python -m investment_stack plan PERSONAL_PORTFOLIO_ANALYSIS --json
-python -m investment_stack check --project-root . --json
-python -m unittest discover -s tests -v
+# 1. Create and activate virtual environment
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+
+# 2. Editable install (resolves dependencies)
+python -m pip install -e .
+
+# 3. Run unit tests
+python -m unittest discover -s tests -q
+
+# 4. Verify byte-equality of the 8 skills
+python scripts/sync_agent_skills.py --check
 ```
 
-For an editable install, run `python -m pip install -e .` in an isolated
-environment. `OPENDART_API_KEY` is optional; when absent the provider reports
-`MISSING_CREDENTIAL` and the research flow can continue with public/keyless or
-Web Research fallback paths.
+**Skills and Packaging:**
+The authoritative skill instructions are in the `skills/` source directory, while Codex repository-local discovery uses byte-identical mirrors under `.agents/skills/`. The `sync_agent_skills.py --check` command enforces exact byte equality between the source and the mirror. 
+
+When building for distribution (wheel/sdist), the artifact strictly packages exactly the 8 expected skills, including specifically `SKILL.md` and `agents/openai.yaml` from both the source and mirror paths. It explicitly prevents arbitrary files from leaking into the packaging. Note that while repository-local Codex sessions successfully discover the 8 skills in the Available skills list, automatic UI discovery in other environments post-wheel installation is not yet empirically proven.
+
+`OPENDART_API_KEY` is optional; when absent the provider reports `MISSING_CREDENTIAL` and the research flow can continue with public/keyless or Web Research fallback paths.
 
 ## Safety boundary
 
