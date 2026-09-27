@@ -42,6 +42,7 @@ class PortfolioPhase5Result:
     deep_results: Mapping[str, object]
     allocation: AllocationResult
     risk: PortfolioRiskResult
+    missing_deep_analyzers: tuple[str, ...] = ()
 
 
 class Phase5AssetAnalysisRuntime:
@@ -98,10 +99,13 @@ class Phase5AssetAnalysisRuntime:
         }
         # Deep research is invoked only after every lightweight decision has been produced.
         deep_results: dict[str, object] = {}
+        missing_deep_analyzers: list[str] = []
         for instrument_id in sorted(selected_ids):
             callback = deep_analyzers.get(instrument_id)
             if callback is not None:
                 deep_results[instrument_id] = callback()
+            else:
+                missing_deep_analyzers.append(instrument_id)
         allocation = self.allocation.analyze(
             exposures,
             denominator=allocation_denominator,
@@ -110,7 +114,7 @@ class Phase5AssetAnalysisRuntime:
         risk = self.risk.analyze(risk_assets)
         self._persist_portfolio_calculation("cross_asset_allocation", allocation, calculation_evidence_ids)
         self._persist_portfolio_calculation("portfolio_risk", risk, calculation_evidence_ids)
-        return PortfolioPhase5Result(decisions, deep_results, allocation, risk)
+        return PortfolioPhase5Result(decisions, deep_results, allocation, risk, tuple(missing_deep_analyzers))
 
     def _persist_result(self, result: AnalysisResult) -> AnalysisResult:
         calculation_id = f"calc:{uuid.uuid4().hex}"

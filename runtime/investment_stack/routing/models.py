@@ -29,6 +29,16 @@ class RequestMode(StrEnum):
             raise ValueError(f"Unsupported request mode {value!r}; expected one of: {supported}") from exc
 
 
+class RequestIntent(StrEnum):
+    ANALYSIS = "ANALYSIS"
+    TRANSACTION_FACT = "TRANSACTION_FACT"
+    BUY_QUESTION = "BUY_QUESTION"
+    NEGATED_TRANSACTION = "NEGATED_TRANSACTION"
+    ORDER_COMMAND = "ORDER_COMMAND"
+    HYPOTHETICAL = "HYPOTHETICAL"
+    REPORT_REFRESH = "REPORT_REFRESH"
+
+
 @dataclass(frozen=True, slots=True)
 class RoutingDecision:
     """A deterministic routing result with an auditable reason."""
@@ -36,11 +46,17 @@ class RoutingDecision:
     mode: RequestMode
     reason: str
     explicit: bool = False
+    intent: RequestIntent = RequestIntent.ANALYSIS
+    supported: bool = True
+    unsupported_reason: str | None = None
 
-    def as_dict(self) -> dict[str, str | bool]:
+    def as_dict(self) -> dict[str, str | bool | None]:
         return {
             "mode": self.mode.value,
             "reason": self.reason,
             "explicit": self.explicit,
+            "intent": self.intent.value,
+            "supported": self.supported,
+            "unsupported_reason": self.unsupported_reason,
         }
 

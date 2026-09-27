@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from investment_stack.routing import RequestMode, RequestRouter, RoutingError
+from investment_stack.routing import RequestIntent, RequestMode, RequestRouter, RoutingError
 
 
 class RequestRouterTest(unittest.TestCase):
@@ -15,6 +15,10 @@ class RequestRouterTest(unittest.TestCase):
                 decision = self.router.route("opaque request", mode_hint=mode.value)
                 self.assertEqual(mode, decision.mode)
                 self.assertTrue(decision.explicit)
+                if mode is RequestMode.ASSET_UPDATE:
+                    self.assertFalse(decision.supported)
+                else:
+                    self.assertTrue(decision.supported)
 
     def test_representative_requests_route_deterministically(self) -> None:
         cases = {
@@ -66,6 +70,29 @@ class RequestRouterTest(unittest.TestCase):
     def test_unknown_explicit_mode_is_rejected(self) -> None:
         with self.assertRaises(RoutingError):
             self.router.route("anything", mode_hint="GENERIC_DAG")
+
+    def test_buy_questions_and_negations_never_become_transaction_facts(self) -> None:
+        question = self.router.route("매수해도 될지 분석해")
+        negative = self.router.route("매수하지 말고 분석해")
+        self.assertEqual(RequestMode.SINGLE_ASSET_ANALYSIS, question.mode)
+        self.assertEqual(RequestIntent.BUY_QUESTION, question.intent)
+        self.assertEqual(RequestMode.SINGLE_ASSET_ANALYSIS, negative.mode)
+        self.assertEqual(RequestIntent.NEGATED_TRANSACTION, negative.intent)
+
+    def test_completed_fact_routes_to_update_but_order_command_is_unsupported(self) -> None:
+        fact = self.router.route("FANUC 2주 샀어")
+        command = self.router.route("FANUC 매수해")
+        self.assertEqual(RequestMode.ASSET_UPDATE, fact.mode)
+        self.assertTrue(fact.supported)
+        self.assertFalse(command.supported)
+        self.assertEqual(RequestIntent.ORDER_COMMAND, command.intent)
+
+    def test_asset_update_mode_hint_cannot_override_question_or_negation(self) -> None:
+        for text in ("매수해도 될지 분석해", "매수하지 말고 분석해"):
+            with self.subTest(text=text):
+                decision = self.router.route(text, mode_hint=RequestMode.ASSET_UPDATE)
+                self.assertEqual(RequestMode.ASSET_UPDATE, decision.mode)
+                self.assertFalse(decision.supported)
 
 
 if __name__ == "__main__":

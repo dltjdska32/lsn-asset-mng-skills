@@ -5,8 +5,10 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import sys
 from typing import Any, Sequence
 
+from investment_stack.execution import Availability, ModeRequest, RuntimeServices, execute_mode
 from investment_stack.invariants import validate_runtime_invariants
 from investment_stack.pipelines import FixedPipelinePlanner
 from investment_stack.routing import RequestMode, RequestRouter, RoutingError
@@ -44,10 +46,16 @@ def build_parser() -> argparse.ArgumentParser:
     check = subparsers.add_parser("check", help="validate implemented architecture invariants")
     check.add_argument("--project-root", type=Path)
     check.add_argument("--json", action="store_true")
+    execute = subparsers.add_parser("execute", help="execute a fixed request-mode pipeline from JSON on stdin")
+    execute.add_argument("--mode", required=True, choices=[mode.value for mode in RequestMode])
+    execute.add_argument("--run-id", required=True)
+    execute.add_argument("--refresh-replay", action="store_true")
+    execute.add_argument("--json", action="store_true")
+
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv: Sequence[str] | None = None, *, runtime_services: RuntimeServices | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     planner = FixedPipelinePlanner()
@@ -69,6 +77,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             }
             _emit(payload, as_json=args.json)
             return 0 if payload["passed"] else 1
+        if args.command == "execute":
+            try:
+                payload = json.load(sys.stdin)
+            except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                parser.error(f"execute input on stdin must be a JSON object: {type(exc).__name__}")
+            if not isinstance(payload, dict):
+                parser.error("execute input on stdin must be a JSON object")
+            request = ModeRequest(args.run_id, RequestMode.parse(args.mode), payload, refresh_replay=args.refresh_replay)
+            result = execute_mode(request, runtime_services or RuntimeServices())
+            _emit(result.as_dict(), as_json=args.json)
+            return 0 if result.availability in {Availability.COMPLETE, Availability.PARTIAL} else 3
     except (RoutingError, ValueError) as exc:
         parser.error(str(exc))
     return 2
