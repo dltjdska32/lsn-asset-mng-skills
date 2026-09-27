@@ -57,11 +57,12 @@ class SelectedAssetResearchResult:
     evidence_refs: tuple[str, ...]
     calculation_refs: tuple[str, ...]
     missing_inputs: tuple[str, ...]
+    unsupported_reasons: tuple[str, ...]
 
     def __init__(
         self, sections: tuple[ReportSectionInput, ...], *,
         evidence_refs: tuple[str, ...] = (), calculation_refs: tuple[str, ...] = (),
-        missing_inputs: tuple[str, ...] = (),
+        missing_inputs: tuple[str, ...] = (), unsupported_reasons: tuple[str, ...] = (),
     ) -> None:
         if any(not isinstance(section, ReportSectionInput) for section in sections):
             raise TypeError("asset research sections must be ReportSectionInput values")
@@ -69,6 +70,7 @@ class SelectedAssetResearchResult:
         object.__setattr__(self, "evidence_refs", tuple(dict.fromkeys(evidence_refs)))
         object.__setattr__(self, "calculation_refs", tuple(dict.fromkeys(calculation_refs)))
         object.__setattr__(self, "missing_inputs", tuple(dict.fromkeys(missing_inputs)))
+        object.__setattr__(self, "unsupported_reasons", tuple(dict.fromkeys(unsupported_reasons)))
 
 
 PortfolioLoader = Callable[[ModeRequest], PortfolioAnalysisRequest | None]
@@ -273,6 +275,10 @@ def portfolio_thesis_services(
         if not isinstance(result, SelectedAssetResearchResult):
             return StepResult(Availability.UNSUPPORTED,
                               unsupported_reasons=("selected asset research must return SelectedAssetResearchResult",))
+        if result.unsupported_reasons:
+            return StepResult(Availability.UNSUPPORTED,
+                              output={"sections": result.sections},
+                              unsupported_reasons=result.unsupported_reasons)
         refs_missing = _missing_run_refs(run_db, result.evidence_refs, result.calculation_refs)
         missing = (*result.missing_inputs, *refs_missing)
         return StepResult(Availability.PARTIAL if missing else Availability.COMPLETE,
