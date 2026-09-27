@@ -2,14 +2,26 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal
+from datetime import datetime
 import hashlib
 import json
 from itertools import combinations
+from typing import Mapping
 from uuid import uuid4
 
 from investment_stack.calculations import BusinessType
 from investment_stack.calculations.common import AnalysisStatus
+from investment_stack.contracts.calculation import (
+    CalculationRecord,
+    DataAvailabilityStatus,
+    GateDecision,
+    InvestmentDecision,
+    OutputKind,
+)
+from investment_stack.contracts.slots import EligibilityDecision, EligibilityStatus, SelectedInputSet
+from investment_stack.decisions.briefing import NonPostingBriefing, generate_briefing
 from investment_stack.deep_research import EquityResearchOutcome, EquityResearchSpec, LiveDeepResearchRuntime, _observation_metrics
 from investment_stack.evidence import RunDatabaseManager
 from investment_stack.pipelines import PipelineStep
@@ -421,9 +433,92 @@ def equity_analysis_services(
         review = context[PipelineStep.CONDITIONAL_REVIEW.value].output["review"]
         if not isinstance(review, ReviewResult):
             return StepResult(Availability.FAILED, output={"review_type": type(review).__name__})
+        run_snapshot = run_db.fetch_phase6_context()
+        pinned_clock = run_snapshot["run_metadata"].get("analysis_as_of")
+        try:
+            briefing_as_of = datetime.fromisoformat(str(pinned_clock).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            briefing_as_of = None
+        if briefing_as_of is not None and briefing_as_of.tzinfo is None:
+            briefing_as_of = None
+        evidence_ids = {row["evidence_id"] for row in run_snapshot["evidence"]}
+        calculation_ids = {row["calculation_id"] for row in run_snapshot["calculations"]}
+        pin = run_snapshot["pinned_personal_state"]
+        briefings: list[tuple[str, NonPostingBriefing]] = []
+        sources = request.payload.get("briefing_contexts", {})
+        for outcome in outcomes:
+            source = sources.get(outcome.instrument_id) if isinstance(sources, Mapping) else None
+            selected_inputs = source.get("selected_inputs") if isinstance(source, Mapping) else None
+            calculations = source.get("calculations", {}) if isinstance(source, Mapping) else {}
+            eligibility = source.get("eligibility_decisions", {}) if isinstance(source, Mapping) else {}
+            registered_gates = source.get("registered_gates", ()) if isinstance(source, Mapping) else ()
+            source_bound = (
+                isinstance(selected_inputs, SelectedInputSet)
+                and selected_inputs.run_id == run_db.run_id
+                and selected_inputs.instrument_id == outcome.instrument_id
+                and selected_inputs.verify_hash()
+                and all(slot.evidence_id in evidence_ids for slot in selected_inputs.slots)
+                and isinstance(calculations, Mapping)
+                and all(isinstance(record, CalculationRecord)
+                        and record.run_id == run_db.run_id
+                        and record.selection_snapshot_hash == selected_inputs.snapshot_hash
+                        and record.calculation_id in calculation_ids
+                        for record in calculations.values())
+                and isinstance(eligibility, Mapping)
+                and all(isinstance(item, EligibilityDecision) for item in eligibility.values())
+                and isinstance(registered_gates, tuple)
+                and all(isinstance(gate, GateDecision) for gate in registered_gates)
+                and briefing_as_of is not None
+            )
+            if source_bound:
+                has_price = any(
+                    decision.status is EligibilityStatus.ELIGIBLE
+                    and decision.purpose.upper() == "CURRENT_PRICE"
+                    and any(slot.eligibility_id == eligibility_id for slot in selected_inputs.slots)
+                    for eligibility_id, decision in eligibility.items()
+                )
+                has_personal_snapshot = bool(
+                    pin is not None
+                    and int(pin.get("state_version") or 0) > 0
+                    and pin.get("portfolio_snapshot_id")
+                    and request.payload.get("pinned_state_version") == int(pin["state_version"])
+                    and request.payload.get("pinned_snapshot_ref") == pin.get("portfolio_snapshot_id")
+                )
+            else:
+                # No source is displayed unless its typed selection, calculations,
+                # run identity, clock, and persisted evidence are all bound.
+                selected_inputs = SelectedInputSet.create(
+                    run_db.run_id, "EQUITY_BRIEFING", 1, (), instrument_id=outcome.instrument_id,
+                )
+                calculations, eligibility, registered_gates = {}, {}, ()
+                has_price = has_personal_snapshot = False
+            briefing = generate_briefing(
+                selected_inputs, calculations, has_price=has_price,
+                # Equity mode does not own an approved sizing policy or a posting gate.
+                has_policy=False, has_personal_snapshot=has_personal_snapshot,
+                eligibility_decisions=eligibility, analysis_as_of=briefing_as_of,
+                registered_gates=registered_gates,
+            )
+            # Incomplete analysis must leave the user with an explicit safe wait.
+            if briefing.decision is not InvestmentDecision.WAIT:
+                briefing = replace(
+                    briefing, decision=InvestmentDecision.WAIT,
+                    section_judgement="대기 — 승인된 투자·위험 정책과 결속된 계산 근거를 확인할 때까지 행동을 보류합니다.",
+                    section_conditions=(
+                        "같은 실행의 적격 가격·가치평가 계산과 근거가 결속되면 다시 평가합니다.",
+                        "승인된 투자·위험 정책과 같은 시점의 개인 상태가 확인되기 전에는 규모를 계산하지 않습니다.",
+                    ),
+                )
+            if not source_bound:
+                briefing = replace(briefing, section_details=tuple(dict.fromkeys((
+                    *briefing.section_details,
+                    "브리핑 근거가 이 run의 typed selection·계산·evidence에 결속되지 않아 수치를 표시하지 않았습니다.",
+                ))))
+            briefings.append((outcome.instrument_id, briefing))
+        briefing = _combine_briefings(tuple(briefings))
         report = phase6.report.build(
             title=str(request.payload.get("title") or _default_title(request)),
-            sections=tuple(sections), review=review,
+            sections=tuple(sections), review=review, briefing=briefing,
         )
         expected_names = {section.name for section in report.sections}
         persisted_sections = [
@@ -479,3 +574,35 @@ def equity_analysis_services(
 
 def _default_title(request: ModeRequest) -> str:
     return "Single Asset Analysis" if request.mode is RequestMode.SINGLE_ASSET_ANALYSIS else "Asset Comparison"
+
+
+def _combine_briefings(briefings: tuple[tuple[str, NonPostingBriefing], ...]) -> NonPostingBriefing:
+    if len(briefings) == 1:
+        return briefings[0][1]
+    status = (DataAvailabilityStatus.UNAVAILABLE
+              if any(item.status is DataAvailabilityStatus.UNAVAILABLE for _, item in briefings)
+              else DataAvailabilityStatus.PARTIAL)
+    table = {
+        f"{instrument_id} · {key}": value
+        for instrument_id, briefing in briefings
+        for key, value in briefing.section_table.items()
+    }
+    core = tuple(f"{instrument_id}: {line}" for instrument_id, item in briefings for line in item.section_core)
+    conditions = tuple(dict.fromkeys(line for _, item in briefings for line in item.section_conditions))
+    details = tuple(f"{instrument_id}: {line}" for instrument_id, item in briefings for line in item.section_details)
+    reasons = tuple(dict.fromkeys(line for _, item in briefings for line in item.reasons))
+    digest = hashlib.sha256("|".join(
+        f"{instrument_id}:{item.verified_hash}" for instrument_id, item in briefings
+    ).encode("utf-8")).hexdigest()
+    return NonPostingBriefing(
+        status=status,
+        decision=InvestmentDecision.WAIT,
+        section_judgement="대기 — 자산별로 승인된 투자·위험 정책과 개인 상태를 확인할 때까지 행동 판단과 규모 산출을 보류합니다.",
+        section_table=table,
+        section_core=core,
+        section_conditions=conditions,
+        section_details=details,
+        reasons=reasons,
+        verified_hash=digest,
+        numeric_bindings=tuple(binding for _, item in briefings for binding in item.numeric_bindings),
+    )

@@ -164,6 +164,17 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
         self.assertEqual(result.report_refs[0], json.loads(report_manifest["metadata_json"])["report_ref"])
         report_step = next(state for state in result.step_states if state.step == "render_partial_aware_report")
         self.assertEqual(ReportAvailability.PARTIAL.value, report_step.result.output["report_availability"])
+        report = report_step.result.output["report"]
+        self.assertIsNotNone(report.briefing)
+        self.assertIn("## 최종 판단 브리핑", report.markdown)
+        self.assertIn("**지금 판단**", report.briefing)
+        self.assertIn("**가격·행동 표**", report.briefing)
+        self.assertIn("**핵심 근거**", report.briefing)
+        self.assertIn("**판단 변경 조건**", report.briefing)
+        self.assertIn("**상세 근거**", report.briefing)
+        self.assertIn("대기", report.briefing)
+        self.assertIn("정책 누락", report.briefing)
+        self.assertNotIn("6,000 JPY/주", report.briefing)
         self.assertGreaterEqual(len(context["calculations"]), 2)
         self.assertTrue({"FANUC_fundamental", "FANUC_valuation", "data_quality"}.issubset(
             {section["section_name"] for section in context["report_sections"]}))
