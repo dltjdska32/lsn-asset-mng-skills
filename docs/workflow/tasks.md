@@ -1,5 +1,7 @@
 # 작업 상태표
 
+**독립 REVIEW-CODE-01 고정 SHA `a1a41b0` 보고서 인수:** 별도 task `01a0e30c-b115-7db0-9a6c-b05a962b2d8c`가 직접 595 OK(skip1), 기존 13/13 반례 PASS, configured 7모드 E2E PASS, 공개 Yahoo/Naver 종가→Phase5 전달, clean wheel 11/11·sdist 11 OK(skip1)을 검증했다. 새 RC10-R1 P1·RC11 P2 두 반례는 reviewer와 총괄 모두 재현하여 C 수정 중이다. `reviews/REVIEW-CODE-01.md`와 `handoffs/REVIEW-CODE-01.md`의 이 판정은 **수정 필요/최종 통과 보류**이며, R10–11/17 WAIT 브리핑 연결·R08/13 판단 결속도 남는다. A가 안전한 브리핑 연결, B가 문서 경계를 별도 worktree에서 수정 중이다. 최종 코드 SHA의 reviewer 재검토와 다른 Codex 최종 검증은 아직 미실행이다.
+
 **2026-09-28 문서 정확도 통합 — root `2a99cd8`:** B 별도 `codex/r15-r16-doc-accuracy` source `bf30c15`의 README·IMPLEMENTATION_STATUS·ARCHITECTURE·인계를 통합했다. 기본 CLI UNSUPPORTED, host 주입 7모드, 제한된 NASDAQ/KRX 종가 일정, 9/27 실제 공개 조회·합성 DB 경로, 패키지/UI 검색 한계를 설명한다. reviewer 추가 판정상 R10/11/17 5단계 브리핑 결속은 미완이므로 B 문서 후속, A 소유 안전 WAIT 연결을 별도 배정했다. 문서 링크·`git diff --check`는 B에서 통과; 문서 변경 뒤 소스 회귀는 아직 재실행 전이다.
 
 **독립 검토 추가 반례 — 기준 root `a1a41b0`, 수정 대기:** reviewer가 RC10-R1(P1)을 재현했다. 재생된 PERSONAL_PORTFOLIO_ANALYSIS가 필수 materiality/selected-asset 조사 누락으로 PARTIAL이어도 REPORT_REFRESH 외부 결과가 COMPLETE·누락 없음·높은 신뢰도로 표시된다. `rerun_fixed_mode`의 snapshot 전달과 refresh 상태 전파를 C 소유 파일에서 보정하도록 회송했다. 추가 RC11(P2,R13)은 같은 인접 13F 분기의 정상적인 두 기관 증액 합의가 단일 기관용 chain 검사에 막혀 direction=None이 되는 회귀이며, C에 기관별 검증 후 합의 집계를 회송했다. 두 독립 probe/수정 커밋/총괄 회귀/최종 독립 재검토는 아직 대기 중이다. reviewer는 이 SHA의 실제 기본 Yahoo/Naver→Phase4→5를 다시 실행하여 각각 341.07 USD/286500 KRW의 `LAST_VALID_CLOSE`·비실시간 고지·합성 임시 DB 경로를 확인했다. 전체 595 OK(skip1)·기존 독립 13/13은 새 두 반례의 통과 증거가 아니다.
