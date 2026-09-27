@@ -141,12 +141,17 @@ class EvidenceResearchStore:
                         metadata=observation.metadata,
                     )
                 elif observation.evidence_type == "financial":
+                    financial_metadata = dict(observation.metadata)
+                    if isinstance(observation.value, Decimal):
+                        # SQLite NUMERIC affinity converts decimal strings to binary floats.
+                        # Keep the canonical exact value alongside the numeric projection.
+                        financial_metadata["exact_value_decimal"] = str(observation.value)
                     self.run_db.add_financial_observation(
                         observation_id=_id("financial"), evidence_id=evidence_id,
                         metric_name=observation.metric or "unknown",
                         period_end=observation.metadata.get("period_end"), value=value,
                         unit=observation.unit, currency=observation.currency,
-                        provider_id=observation.provider_id, metadata=observation.metadata,
+                        provider_id=observation.provider_id, metadata=financial_metadata,
                     )
                 elif observation.evidence_type == "macro":
                     self.run_db.add_macro_observation(

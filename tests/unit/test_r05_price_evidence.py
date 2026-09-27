@@ -1,6 +1,8 @@
 """Test price evidence selection constraints in Phase 4."""
 
 import os
+import sqlite3
+from contextlib import closing
 import tempfile
 import unittest
 from datetime import datetime, timezone, timedelta
@@ -14,9 +16,9 @@ from investment_stack.providers.models import ProviderObservation, ProviderResul
 class PriceEvidenceTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
-        self.run_db_path = os.path.join(self.temp_dir.name, "run.db")
-        self.run_db = RunDatabaseManager(self.run_db_path)
-        self.run_db.initialize_schema()
+        self.run_db = RunDatabaseManager(self.temp_dir.name, "r05-price-test")
+        report = self.run_db.create()
+        self.assertTrue(report.valid, report.errors)
         self.store = EvidenceResearchStore(self.run_db, freshness=FreshnessEngine())
 
     def tearDown(self):
@@ -56,12 +58,7 @@ class PriceEvidenceTests(unittest.TestCase):
             metadata={"calculation_input_approved": True}
         )
         
-        result = ProviderResult(
-            provider_name="test_provider",
-            capability=ProviderCapability.CURRENT_PRICE,
-            status=ProviderStatus.AVAILABLE,
-            observations=tuple(obs_invalid + [obs_stale])
-        )
+        result = ProviderResult("test_provider", ProviderCapability.CURRENT_PRICE, ProviderStatus.AVAILABLE, tuple(obs_invalid + [obs_stale]))
         
         selected = self.store.persist_and_select([result], analysis_as_of=analysis_as_of)
         
@@ -71,9 +68,9 @@ class PriceEvidenceTests(unittest.TestCase):
         self.assertTrue(selected.partial)
         
         # Verify invalid values are still recorded in DB (not totally dropped from storage)
-        with self.run_db._get_connection() as conn:
+        with closing(sqlite3.connect(self.run_db.database_path)) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM phase4_market_observations")
+            cursor.execute("SELECT COUNT(*) FROM market_observations WHERE run_id = ?", (self.run_db.run_id,))
             count = cursor.fetchone()[0]
             self.assertEqual(count, len(invalid_vals) + 1)
 

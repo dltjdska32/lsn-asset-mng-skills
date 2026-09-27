@@ -1,6 +1,9 @@
 """Test Decimal conversion and persistence in Phase 4 evidence layer."""
 
 import os
+import sqlite3
+import json
+from contextlib import closing
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -17,9 +20,9 @@ def _now() -> str:
 class DecimalEvidenceTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
-        self.run_db_path = os.path.join(self.temp_dir.name, "run.db")
-        self.run_db = RunDatabaseManager(self.run_db_path)
-        self.run_db.initialize_schema()
+        self.run_db = RunDatabaseManager(self.temp_dir.name, "r04-decimal-test")
+        report = self.run_db.create()
+        self.assertTrue(report.valid, report.errors)
         self.store = EvidenceResearchStore(self.run_db, freshness=FreshnessEngine())
 
     def tearDown(self):
@@ -41,26 +44,21 @@ class DecimalEvidenceTests(unittest.TestCase):
             metadata={"period_end": "2023-12-31"}
         )
         
-        result = ProviderResult(
-            provider_name="sec",
-            capability=ProviderCapability.FUNDAMENTALS,
-            status=ProviderStatus.AVAILABLE,
-            observations=(obs,)
-        )
+        result = ProviderResult("sec", ProviderCapability.FUNDAMENTALS, ProviderStatus.AVAILABLE, (obs,))
         
         selected = self.store.persist_and_select([result], analysis_as_of=_now())
         self.assertIsNotNone(selected.observation)
         
         # Verify it was saved as a string in DB
-        with self.run_db._get_connection() as conn:
+        with closing(sqlite3.connect(self.run_db.database_path)) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM phase4_financial_observations WHERE evidence_id = ?", (selected.evidence_id,))
+            cursor.execute("SELECT * FROM financial_observations WHERE evidence_id = ?", (selected.evidence_id,))
             row = cursor.fetchone()
             self.assertIsNotNone(row)
             
-            # Find the string representation of our precise decimal in the stored row
-            found_str = any(str(col) == "123456789.123456789123456789" for col in row)
-            self.assertTrue(found_str, f"Decimal string not found in DB row: {row}")
+            # NUMERIC affinity stores the projection as a float; exact input remains in lineage metadata.
+            metadata = json.loads(row[7])
+            self.assertEqual(metadata["exact_value_decimal"], "123456789.123456789123456789")
 
 if __name__ == "__main__":
     unittest.main()
