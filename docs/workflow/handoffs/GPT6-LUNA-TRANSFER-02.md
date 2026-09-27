@@ -50,3 +50,7 @@
 - C source `1010432` (`codex/luna-c-brief-binding`, 기준 `83dfb27`)를 root `0d78c64`에 반영. 총괄 직접 C 결정/브리핑 **15/15 PASS**, root 전체 **505 OK, skip1**. 상세 `LUNA-C-BRIEF-BINDING-01.md`.
 - `CURRENT_PRICE`/`VALUATION_MODEL` 목적 및 typed output kind, 선택 근거·적격성 ID·공개시각·계산 lineage·소비 gate가 완전히 일치하는 단일 양수/주 값만 브리핑 표에 표시. 일반 계산 숫자 및 이름 없는 시나리오 값은 표시하지 않는다. 숫자 표시가 행동 승인으로 전이되지 않도록 WAIT/no tranche 유지. 정책 미승인으로 진입/축소·금액/수량은 미산출.
 - A는 7모드 dispatcher·routing 및 영속 보고 계약 확인/수직 테스트 작성 중. B는 R06 evaluator 없는 AVAILABLE 및 Yahoo/Naver identity·통화 강제 부족을 발견해 fail-closed 전환 작업 중. 독립 REVIEW-CODE-01과 별도 VERIFY-01은 미생성.
+
+## 12:23 UTC root 기본 TLS transport 공개 연결 재확인
+
+- Root `0d78c64` 계열(이후 workflow 메모리만 추가) `.venv/Scripts/python.exe`에서 실제 `providers.http.fetch_json`의 기본 transport로 공개 Naver 삼성 basic API, Yahoo AAPL chart API, Coinbase BTC-USD ticker API를 각각 호출했고 모두 JSON `dict`를 반환, 프로세스 종료 0. 별도 주입 transport가 아닌 A 통합 기본 경로를 총괄이 직접 검사했다. 이 probe는 연결/JSON 파싱만 입증하며 9/27 현재가 적격성, 종목·거래소 동일성, 조정 OHLCV, 실행 판단을 입증하지 않는다. 인증정보·개인 데이터 사용 없음.
