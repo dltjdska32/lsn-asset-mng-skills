@@ -347,6 +347,7 @@ class InvestmentReportBuilder:
                 "evidence_ids": list(section.evidence_ids),
                 "calculation_ids": list(section.calculation_ids),
                 "metadata": dict(section.metadata),
+                "section_status": section.status.value,
                 "report_availability": report.availability.value,
                 "report_confidence": report.confidence.value,
                 "analysis_as_of": report.as_of.analysis_as_of,

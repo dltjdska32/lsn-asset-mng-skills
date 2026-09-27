@@ -156,6 +156,25 @@ class Phase6UnitTests(unittest.TestCase, Phase6RunFixture):
                 self.assertEqual(content_reference, rows_by_id[section_id]["content_reference"])
         self.assertFalse(any(row["section_name"] in {"final_briefing", "investment_briefing"} for row in rows))
 
+    def test_section_status_is_part_of_immutable_content_reference(self):
+        review = ConditionalReviewEngine(self.manager).evaluate()
+        builder = InvestmentReportBuilder(self.manager)
+        common = ReportSectionInput("other", "기타", ("same",), status=Availability.PARTIAL)
+        first = builder.build(
+            title="TEST", sections=(ReportSectionInput("summary", "요약", ("same",), status=Availability.AVAILABLE), common),
+            review=review,
+        )
+        second = builder.build(
+            title="TEST", sections=(ReportSectionInput("summary", "요약", ("same",), status=Availability.PARTIAL), common),
+            review=review,
+        )
+        first_id = next(section_id for name, section_id, _ in first.persisted_section_refs if name == "summary")
+        second_id = next(section_id for name, section_id, _ in second.persisted_section_refs if name == "summary")
+        self.assertNotEqual(first_id, second_id)
+        rows = {row["section_id"]: row for row in self.manager.fetch_phase6_context()["report_sections"]}
+        self.assertEqual(rows[first_id]["section_status"], Availability.AVAILABLE.value)
+        self.assertEqual(rows[second_id]["section_status"], Availability.PARTIAL.value)
+
     def test_materiality_pass_in_run_db_triggers_review(self):
         self.manager.add_materiality_decision(decision_id="m1", subject="EQ", decision="PASS", rationale="weight threshold")
         result = ConditionalReviewEngine(self.manager).evaluate()

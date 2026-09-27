@@ -573,6 +573,7 @@ def equity_analysis_services(
                 or payload.get("lines") != list(section.lines)
                 or payload.get("evidence_ids") != list(section.evidence_ids)
                 or payload.get("calculation_ids") != list(section.calculation_ids)
+                or payload.get("section_status") != section.status.value
                 or payload.get("analysis_as_of") != report.as_of.analysis_as_of
             ):
                 return StepResult(Availability.FAILED, output={"report_persisted": False})
