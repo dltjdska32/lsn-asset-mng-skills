@@ -315,18 +315,21 @@ def parse_information_table_xml(
 
         # Quantity and quantity type
         shrs_elem = _find_child_elem(elem, "shrsorprnamt", "shrs_or_prn_amt")
-        raw_qty: Decimal = Decimal("0")
-        qty_type = QuantityType.SH
-        if shrs_elem is not None:
-            raw_qty_str = _find_child_text(shrs_elem, "sshprnamt", "ssh_prn_amt", "shares")
-            if raw_qty_str is not None:
-                try:
-                    raw_qty = parse_finite_decimal(raw_qty_str)
-                except Exception:
-                    raw_qty = Decimal("0")
-            qty_type_str = _find_child_text(shrs_elem, "sshprnamttype", "ssh_prn_amt_type", "type")
-            if qty_type_str and qty_type_str.upper() == "PRN":
-                qty_type = QuantityType.PRN
+        raw_qty_str = _find_child_text(shrs_elem, "sshprnamt", "ssh_prn_amt", "shares") if shrs_elem is not None else None
+        qty_type_str = _find_child_text(shrs_elem, "sshprnamttype", "ssh_prn_amt_type", "type") if shrs_elem is not None else None
+        if raw_qty_str is None or qty_type_str is None or qty_type_str.upper() not in {"SH", "PRN"}:
+            missing_row_count += 1
+            parsing_warnings.append(f"Row {index} ({cusip}): missing or unsupported quantity/type; row skipped")
+            continue
+        try:
+            raw_qty = parse_finite_decimal(raw_qty_str)
+            if raw_qty < 0:
+                raise ValueError("quantity must be non-negative")
+        except Exception as exc:
+            missing_row_count += 1
+            parsing_warnings.append(f"Row {index} ({cusip}): invalid quantity; row skipped ({exc})")
+            continue
+        qty_type = QuantityType.PRN if qty_type_str.upper() == "PRN" else QuantityType.SH
 
         # Put/Call option distinction
         put_call_str = _find_child_text(elem, "putcall", "put_call")

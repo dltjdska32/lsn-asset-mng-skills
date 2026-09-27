@@ -374,6 +374,44 @@ class TestAmendmentChainSynthesis(unittest.TestCase):
         self.assertTrue(eff.has_additions)
         self.assertIn("166764100", [h.cusip for h in eff.holdings])
 
+    def test_ambiguous_amendment_does_not_partially_overwrite_snapshot(self) -> None:
+        ambiguous = dataclasses.replace(
+            self.filing_restate,
+            amendment_type=None,
+            amendment_number=2,
+        )
+        pairs = [(self.filing_orig, self.hset_orig), (ambiguous, self.hset_restate)]
+        cutoff = datetime(2024, 7, 1, tzinfo=timezone.utc)
+        effective = synthesize_effective_holdings("0001067983", "2024-03-31", pairs, cutoff)
+        self.assertIsNotNone(effective)
+        self.assertTrue(effective.has_unresolved_amendments)
+        self.assertEqual(len(self.hset_orig.holdings), len(effective.holdings))
+
+    def test_notice_only_filing_does_not_clear_last_holdings(self) -> None:
+        notice = dataclasses.replace(
+            self.filing_restate,
+            form=Form13FKind.NT,
+            amendment_type=None,
+            amendment_number=None,
+        )
+        pairs = [(self.filing_orig, self.hset_orig), (notice, self.hset_restate)]
+        cutoff = datetime(2024, 7, 1, tzinfo=timezone.utc)
+        effective = synthesize_effective_holdings("0001067983", "2024-03-31", pairs, cutoff)
+        self.assertIsNotNone(effective)
+        self.assertEqual(len(self.hset_orig.holdings), len(effective.holdings))
+        self.assertTrue(effective.has_unresolved_amendments)
+        self.assertTrue(any("Notice-only" in warning for warning in effective.parsing_warnings))
+
+    def test_invalid_quantity_row_is_skipped_and_coverage_is_partial(self) -> None:
+        malformed = """<informationTable><infoTable><nameOfIssuer>TEST</nameOfIssuer>
+        <titleOfClass>COM</titleOfClass><cusip>123456789</cusip><value>100</value>
+        <shrsOrPrnAmt><sshPrnamt>NaN</sshPrnamt><sshPrnamtType>SH</sshPrnamtType></shrsOrPrnAmt>
+        </infoTable></informationTable>"""
+        parsed = parse_information_table_xml(malformed, self.filing_orig)
+        self.assertEqual((), parsed.holdings)
+        self.assertEqual("PARTIAL_MISSING_ROWS", parsed.coverage_status)
+        self.assertEqual(1, parsed.missing_row_count)
+
 
 class TestPortfolioComparison(unittest.TestCase):
     def test_comparison_metrics_and_split_adjustment(self) -> None:
@@ -550,7 +588,7 @@ class TestSourceVintageAndMissingRowCoverage(unittest.TestCase):
                 <nameOfIssuer>APPLE INC</nameOfIssuer>
                 <cusip>037833100</cusip>
                 <value>500</value>
-                <shrsOrPrnAmt><sshPrnAmt>50</sshPrnAmt></shrsOrPrnAmt>
+                <shrsOrPrnAmt><sshPrnAmt>50</sshPrnAmt><sshPrnAmtType>SH</sshPrnAmtType></shrsOrPrnAmt>
             </infoTable>
         </informationTable>"""
         # Filing lacking filed_date -> DO NOT guess from report_period, DO NOT default to 1
@@ -581,6 +619,7 @@ class TestSourceVintageAndMissingRowCoverage(unittest.TestCase):
                 <nameOfIssuer>APPLE INC</nameOfIssuer>
                 <cusip>037833100</cusip>
                 <value>500</value>
+                <shrsOrPrnAmt><sshPrnAmt>50</sshPrnAmt><sshPrnAmtType>SH</sshPrnAmtType></shrsOrPrnAmt>
             </infoTable>
         </informationTable>"""
         filing_bad_date = Filing13F(
@@ -608,7 +647,7 @@ class TestSourceVintageAndMissingRowCoverage(unittest.TestCase):
                 <nameOfIssuer>APPLE INC</nameOfIssuer>
                 <cusip>037833100</cusip>
                 <value>1000</value>
-                <shrsOrPrnAmt><sshPrnAmt>100</sshPrnAmt></shrsOrPrnAmt>
+                <shrsOrPrnAmt><sshPrnAmt>100</sshPrnAmt><sshPrnAmtType>SH</sshPrnAmtType></shrsOrPrnAmt>
             </infoTable>
             <infoTable>
                 <nameOfIssuer>BROKEN CUSIP</nameOfIssuer>
@@ -665,7 +704,7 @@ class TestSourceVintageAndMissingRowCoverage(unittest.TestCase):
                 <nameOfIssuer>APPLE INC</nameOfIssuer>
                 <cusip>037833100</cusip>
                 <value>1000</value>
-                <shrsOrPrnAmt><sshPrnAmt>100</sshPrnAmt></shrsOrPrnAmt>
+                <shrsOrPrnAmt><sshPrnAmt>100</sshPrnAmt><sshPrnAmtType>SH</sshPrnAmtType></shrsOrPrnAmt>
             </infoTable>
         </informationTable>"""
         filing_prior_uncertain = Filing13F(

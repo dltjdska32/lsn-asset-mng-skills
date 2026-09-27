@@ -41,6 +41,14 @@ from investment_stack.institutional.validation import (
 
 
 class TestPointInTimeValidation(unittest.TestCase):
+    def test_missing_consensus_observations_remain_missing(self) -> None:
+        self.assertIsNone(calculate_consensus_direction("037833100", []))
+        features = compute_institutional_features(
+            "037833100", "0001067983", [], datetime(2024, 8, 1, tzinfo=timezone.utc)
+        )
+        self.assertIsNone(features.information_lag_days)
+        self.assertIsNone(features.coverage_quality_score)
+
     def test_lookahead_leak_detected(self) -> None:
         # Filing accepted on 2024-05-15
         filing_future = Filing13F(

@@ -119,6 +119,7 @@ def synthesize_effective_holdings(
     has_additions = False
     has_unresolved = False
     unresolved_reasons: list[str] = []
+    synth_warnings: list[str] = []
 
     for filing, h_set in eligible:
         contributing_accessions.append(filing.accession)
@@ -149,6 +150,9 @@ def synthesize_effective_holdings(
                         unresolved_reasons.append(
                             f"Duplicate conflicting key {key} in ADD_NEW_HOLDINGS accession {filing.accession}"
                         )
+                    # An additive amendment cannot overwrite an already reported row.
+                    # Identical duplicates are redundant; conflicting duplicates stay unresolved.
+                    continue
                 active_holdings[key] = h
 
         elif filing.form == Form13FKind.HR_A and filing.amendment_type is None:
@@ -157,20 +161,23 @@ def synthesize_effective_holdings(
             unresolved_reasons.append(
                 f"Amendment {filing.accession} lacks explicit amendment_type (neither RESTATED nor ADD_NEW_HOLDINGS)"
             )
-            # Default to replacing if no previous holdings, or updating existing
-            for h in h_set.holdings:
-                key = (h.cusip, h.security_class or "", str(h.put_call), str(h.quantity_type))
-                active_holdings[key] = h
+            # Do not guess whether a partial amendment replaces or adds rows.
+            # Keep the last unambiguous snapshot and block downstream comparison.
 
         elif filing.form == Form13FKind.NT:
-            # Notice only - manager does not report holdings
-            active_holdings.clear()
+            # A notice-only filing contains no replacement holdings table.
+            # Preserve the last holdings report; the notice is not a liquidation.
+            has_unresolved = True
+            unresolved_reasons.append(
+                f"Notice-only filing {filing.accession} has no holdings table and cannot establish an effective snapshot"
+            )
+            synth_warnings.append(
+                f"Notice-only filing {filing.accession} did not replace reported holdings"
+            )
 
     has_missing_rows = False
     total_missing_rows = 0
     scale_uncertain = False
-    synth_warnings: list[str] = []
-
     for filing, h_set in eligible:
         if getattr(h_set, "missing_row_count", 0) > 0:
             has_missing_rows = True

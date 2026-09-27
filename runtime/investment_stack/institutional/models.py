@@ -202,8 +202,8 @@ class InstitutionalFeatureSet:
     portfolio_weight_change: Decimal | None
     institutional_consensus_direction: int | None
     consecutive_quarters_held: int
-    information_lag_days: int
-    coverage_quality_score: Decimal
+    information_lag_days: int | None
+    coverage_quality_score: Decimal | None
     is_point_in_time: bool = True
     score_status: str = "UNVALIDATED"
 

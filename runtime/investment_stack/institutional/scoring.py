@@ -53,8 +53,8 @@ def compute_institutional_features(
             portfolio_weight_change=None,
             institutional_consensus_direction=None,
             consecutive_quarters_held=0,
-            information_lag_days=0,
-            coverage_quality_score=Decimal("0"),
+            information_lag_days=None,
+            coverage_quality_score=None,
             is_point_in_time=True,
             score_status="UNVALIDATED",
         )
@@ -91,20 +91,23 @@ def compute_institutional_features(
             break
 
     # Calculate coverage quality score
+    observed_count = sum(
+        1 for comp in mgr_comparisons
+        if any(ch.cusip == target_cusip for ch in comp.changes)
+    )
     complete_count = sum(
         1 for comp in mgr_comparisons
         for ch in comp.changes
         if ch.cusip == target_cusip and ch.notice_status == NoticeStatus.COMPLETE
     )
-    total_obs = max(1, len(mgr_comparisons))
-    coverage_score = Decimal(str(round(complete_count / total_obs, 4)))
+    coverage_score = (
+        Decimal(str(round(complete_count / observed_count, 4)))
+        if observed_count else None
+    )
 
-    # Estimate information lag in days from quarter end to as_of
-    try:
-        q_end = datetime.fromisoformat(holding_period).replace(tzinfo=timezone.utc)
-        lag_days = max(0, (as_of - q_end).days)
-    except Exception:
-        lag_days = 45  # Standard SEC Form 13F filing lag estimate
+    # Comparison records currently do not carry the filing's verified public timestamp.
+    # Quarter-end is not publication time, so information age stays unavailable.
+    lag_days = None
 
     return InstitutionalFeatureSet(
         manager_cik=manager_cik,
@@ -126,18 +129,31 @@ def compute_institutional_features(
 def calculate_consensus_direction(
     target_cusip: str,
     manager_comparisons: Sequence[InstitutionalPortfolioComparison],
-) -> int:
-    """Calculate institutional consensus direction (+1 net accumulation, -1 net distribution, 0 neutral)."""
+) -> int | None:
+    """Return descriptive direction, or None when there are no comparable observations.
+
+    This is an unvalidated research feature only; it is not an investment score.
+    """
     target_cusip = target_cusip.upper().strip()
     net_score = 0
+    observed = False
     for comp in manager_comparisons:
+        if not comp.is_comparable:
+            continue
         ch = next((c for c in comp.changes if c.cusip == target_cusip), None)
         if ch is None:
             continue
         if ch.status in (HoldingChangeStatus.INCREASED, HoldingChangeStatus.NEW_POSITION):
             net_score += 1
+            observed = True
         elif ch.status in (HoldingChangeStatus.DECREASED, HoldingChangeStatus.CLOSED_POSITION):
             net_score -= 1
+            observed = True
+        elif ch.status == HoldingChangeStatus.UNCHANGED:
+            observed = True
+
+    if not observed:
+        return None
 
     if net_score > 0:
         return 1
