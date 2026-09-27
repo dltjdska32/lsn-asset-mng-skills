@@ -16,3 +16,11 @@
 - B 실제 task `01a0e2a5-b0ff-7690-b818-5652533aa0c1`, `C:/Users/lsn/.codex/worktrees/72d3/lsn-asset-mng-skills`, `codex/luna-b-transfer-02`, 시작 `0ed93d8`. Naver OHLCV 실제 최상위 list 응답과 fixture schema 불일치 발견, B 코드 수정 중. 중복 준비 task `01a0e2a5-437e-7f30-a5fe-8548c3a40239`(91bc)는 새 B task를 생성하고 idle로 끝나 archive했다.
 - C 실제 task `01a0e2a5-8c93-7470-afcf-b67ee0577db6`, `C:/Users/lsn/.codex/worktrees/a3b7/lsn-asset-mng-skills`, `codex/gpt6-luna-c`, source `1d5f2f2` 위 `adfdbae` 13F와 `098a0b8` 브리핑 checkpoint. 담당 자체 합성 37 PASS 보고, 총괄 재검증 전.
 - 각 실제 Codex session_meta/turn_context에서 `gpt-6-luna`, `medium` 확인. App `wait_threads`에서 세 구현 task 동시에 active/inProgress, 세 분리 폴더 코드 수정 확인. 별도 독립 검토/최종 검증은 미시작.
+
+## 11:49 UTC 통합·검증 포인터
+
+- Root branch `codex/autonomous-integration`, 최종 통합 HEAD `d85814e`. A의 Gemini R05 structured fallback·Evidence WIP 및 Luna Evidence 수정은 순서대로 `f8b15a8`, `b30db40`, `7885fd5`에 반영. R05의 나머지 end-to-end deep research 구현은 진행 중.
+- C Luna source commits `adfdbae`(13F amendment/missing data), `098a0b8`(WAIT 브리핑), `623cc59`(인계), `d341375`(generic bound_results 숫자 누출 제거)는 root에서 `4c35017`, `e820516`, `65ec325`, `d85814e`로 각각 통합. 브리핑 충돌 1건은 총괄이 C 내용을 받아 해결하고 최종 누출 수정까지 확인.
+- 총괄 직접 C 새 13F·R13 검증 30/30, 결정 테스트 11/11 = **41/41 PASS**. 통합 HEAD `d85814e`에서 `.venv/Scripts/python.exe -X utf8 -B -m unittest discover` 전체 **487 OK, skip1**, 종료 0. 이는 통합 회귀 결과이며 별도 최종 검증 세션의 수행 결과가 아니다.
+- A task `01a0e2a4-f627-7610-8cbf-fabe9bad1a70` 계속 활성: R02/R03 단위 적격성과 R09 DCF·HTTP. B task `01a0e2a5-b0ff-7690-b818-5652533aa0c1` 계속 활성: 실제 Naver OHLCV top-level list parser 등 R06–08. C task `01a0e2a5-8c93-7470-afcf-b67ee0577db6`에 R12/13/17 합성 수직 흐름 후속 요청 전달. B/A 변경은 아직 이 포인터 뒤의 새 checkpoint로 인수하지 않음.
+- 전체 기능 R02–05, R09, R10–11 정책·수량, 실제 7모드, R16 end-to-end는 미완. 새 독립 REVIEW-CODE-01과 다른 VERIFY-01 세션 미생성/미실행. Gemini 자동화 PAUSED 유지.
