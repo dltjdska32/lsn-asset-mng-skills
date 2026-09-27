@@ -105,10 +105,15 @@ def execute_mode(request: ModeRequest, services: RuntimeServices) -> ModeResult:
         if handler is None:
             reason = f"required runtime handler is not configured for {step.value}"
             state = StepState(step.value, Availability.UNSUPPORTED, error=reason)
+            try:
+                _record_state(services, request, state)
+                status = Availability.UNSUPPORTED
+                unsupported.append(reason)
+            except Exception:
+                state = StepState(step.value, Availability.FAILED, error="RunStatePersistenceError")
+                status = Availability.FAILED
+                unsupported.append("run-local state logging failed")
             states.append(state)
-            _record_state(services, request, state)
-            status = Availability.UNSUPPORTED
-            unsupported.append(reason)
             break
         try:
             result = handler(request, MappingProxyType(dict(context)))
@@ -133,8 +138,11 @@ def execute_mode(request: ModeRequest, services: RuntimeServices) -> ModeResult:
             # Avoid serializing exception text because provider/db errors can include
             # source values or local paths. Preserve only the exception class.
             state = StepState(step.value, Availability.FAILED, error=f"{type(exc).__name__}")
+            try:
+                _record_state(services, request, state)
+            except Exception:
+                state = StepState(step.value, Availability.FAILED, error="RunStatePersistenceError")
             states.append(state)
-            _record_state(services, request, state)
             status = Availability.FAILED
             break
 

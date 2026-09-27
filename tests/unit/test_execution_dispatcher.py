@@ -147,6 +147,45 @@ class FixedModeDispatcherTests(unittest.TestCase):
         self.assertEqual(Availability.FAILED, log_failure.availability)
         self.assertEqual("POSTED", log_failure.mutation_receipt["status"])
 
+        analysis_calls: list[bool] = []
+        failing_handlers = {}
+        for step in update_steps:
+            if step is PipelineStep.DECIDE_POSTING:
+                failing_handlers[step] = lambda *_: StepResult(Availability.COMPLETE, output={"posted": True}, mutation_receipt={
+                    "status": "POSTED", "transaction_ids": ["posted-before-projection"], "state_version": 8,
+                })
+            elif step is PipelineStep.PROJECT_PERSONAL_STATE:
+                def fail_projection(*_):
+                    raise OSError("synthetic projection failure")
+                failing_handlers[step] = fail_projection
+            else:
+                failing_handlers[step] = lambda *_: StepResult(Availability.COMPLETE, output={"ok": True})
+        for step in analysis_steps:
+            def should_not_run(*_, current=step):
+                analysis_calls.append(True)
+                if current is PipelineStep.RENDER_PARTIAL_AWARE_REPORT:
+                    return StepResult(Availability.COMPLETE, report_refs=("report:must-not-run",))
+                return StepResult(Availability.COMPLETE, output={"unexpected": True})
+            failing_handlers[step] = should_not_run
+
+        class ProjectionFailureLogger:
+            run_id = "update-after-post"
+            def record_task_state(self, *, task_name, **_):
+                if task_name.endswith(PipelineStep.PROJECT_PERSONAL_STATE.value):
+                    raise OSError("synthetic run-db projection state failure")
+
+        guarded = RuntimeServices(failing_handlers, run_dbs={"update-after-post": ProjectionFailureLogger()})
+        combined_failure = execute_update_then_analysis(
+            ModeRequest("update-after-post", RequestMode.ASSET_UPDATE),
+            ModeRequest("analysis-after-post", RequestMode.SINGLE_ASSET_ANALYSIS),
+            guarded, requires_posted_update=True,
+        )
+        self.assertEqual(Availability.FAILED, combined_failure.availability)
+        self.assertEqual("POSTED", combined_failure.update.mutation_receipt["status"])
+        self.assertIsNone(combined_failure.analysis)
+        self.assertFalse(analysis_calls)
+        self.assertTrue(any(state.error == "RunStatePersistenceError" for state in combined_failure.update.step_states))
+
     def test_unconfirmed_composite_update_waits_or_is_excluded_from_analysis(self) -> None:
         update_steps = FixedPipelinePlanner().plan(RequestMode.ASSET_UPDATE).steps
         analysis_steps = FixedPipelinePlanner().plan(RequestMode.SINGLE_ASSET_ANALYSIS).steps
