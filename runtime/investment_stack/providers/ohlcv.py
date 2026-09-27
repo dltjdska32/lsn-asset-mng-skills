@@ -84,7 +84,7 @@ def parse_naver_ohlcv(
     """Parse Naver Pay Securities daily OHLCV (dayCandle) JSON response.
 
     Enforces:
-    1. Identity check: payload code must match requested instrument.
+    1. Identity check: object payload code or a canonical Naver request-route code must match the requested instrument.
     2. Adjustment fidelity: A strict `adjustment_verified is True` and a non-empty receipt
        are both required to create a BarSet. Otherwise raw bars are preserved but blocked.
     3. Price bounds: low <= min(open, close) <= max(open, close) <= high.

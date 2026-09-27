@@ -8,7 +8,7 @@ As of **2026-09-27**, the system is undergoing a final multi-agent integration. 
 
 - **Completed in this checkpoint (`a861b6b`):**
   - Agent A: Price safety precursors and contracts.
-  - Agent B: R06–08 deterministic technical calculations, signaling fail-closed gates, and 8-skill strict packaging (wheel/sdist).
+  - Agent B: R06–08 quote/bar parsing and deterministic technical-calculation components, fail-closed signal gates, and 8-skill package layout. See the dated B follow-up below for live verification limits.
   - Agent C: 13F filing structure, 5-section briefing formats, and WAIT action arithmetic precursors.
 - **Current Test Baseline:** 
   - Root unittest: 470 OK, 1 skip at `a861b6b`; 475 OK, 1 skip after SEC parser integration at `5d094a5` plus the corrected empty-tag test.
@@ -22,6 +22,19 @@ As of **2026-09-27**, the system is undergoing a final multi-agent integration. 
 - Runtime Execution: Actual execution of the 7 request modes.
 - R17 Number Combination logic.
 - Full independent review and final verification session (to be scheduled after all agents merge).
+
+## B Follow-up Verification — 2026-09-27
+
+This update belongs to `codex/luna-b-transfer-02`, based on `0ed93d8e100494a350f5ecde160c72ffafaf26a1`. It is a B-scope check, not root integration or full-stack verification.
+
+- The B quote, OHLCV, and technical fixture suite passes **45 tests** in a Windows venv containing the declared `truststore` and `tzdata` dependencies. These are synthetic fixture tests, not live-source evidence.
+- Public probes made with a temporary, scoped `truststore.SSLContext` returned HTTP 200 for the Naver Samsung quote and daily-price APIs, the Naver stock page, Yahoo Finance AAPL chart API, and Coinbase BTC-USD ticker API. The B adapters parsed Naver, Yahoo, and Coinbase quote responses; Yahoo daily OHLCV produced 22 parsed bars. This confirms the test transport path only; the default runtime transport was not used.
+- The Naver quote response parsed as `LAST_VALID_CLOSE` with an observation time of **2026-09-23 15:30 KST**, although retrieved on 2026-09-27. Its provider result was `AVAILABLE` because the R01 eligibility evaluator was not supplied. This is stale data and does not establish a current KRX price.
+- Naver's `/price` endpoint returned a top-level list with no ticker field and comma-grouped numeric strings. The parser now binds the payload to the matching canonical Naver request route, parses grouped numbers, preserves five raw bars in the live probe, and returns `UNAVAILABLE` without adjustment verification. Route binding is request provenance, not an identity echoed in the response.
+- Direct Investing.com US and Korea page requests returned HTTP 403. Those entries remain fixture-only and are not used as live quote sources.
+- The default `providers/http.py` transport failed TLS verification in this Windows environment (`CERTIFICATE_VERIFY_FAILED`). It is A-owned and was not edited. The declared `truststore` dependency is not proof that the runtime uses scoped Windows TLS; A/root must connect it and re-run the public probes through the default transport.
+- The adjustment receipt is still a caller-supplied marker rather than a validated corporate-action record. No split-adjusted Naver OHLCV result is claimed from the live probe. R01 freshness policy wiring, an accepted corporate-action receipt verifier, market-session coverage checks, and R08-to-briefing calculation binding remain integration work. R08's pure functions also accept `Sequence[Bar]`, which carries no source provenance; callers must not feed raw diagnostics into production calculations.
+- The wheel-installed Codex UI auto-discovery path was not proven by repo-local skill discovery. Current build/install checks must be read as package file-layout checks only.
 
 ---
 

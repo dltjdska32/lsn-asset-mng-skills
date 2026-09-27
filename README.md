@@ -6,6 +6,8 @@ The eight skill definitions under `skills/` are authoritative. Codex repository-
 investment analysis. The canonical v1.3 architecture is frozen; v1.3.1 hardens current-quote fallback and Korean user-facing status rendering; implementation
 is proceeding in bounded phases.
 
+The `v1.3` label identifies the architecture, while the Python distribution currently uses package version `0.1.0`; no release mapping between these labels is defined.
+
 The current slice implements Phase 1 foundations, Phase 2 Storage Safety,
 Phase 3 Personal Ledger & Projection, Phase 4 Evidence & Research, Phase 5 Asset Analysis, Phase 6 Report & Review, Phase 7 Acceptance, and the Phase 8 final integration/hardening handoff:
 
@@ -69,29 +71,37 @@ run-local derived outputs rather than a personal Source of Truth.
 
 ## Run locally
 
-The declared runtime dependencies include `tzdata` on Windows and `truststore>=0.9.1`. The current provider HTTP transport has not yet been connected to a scoped Windows truststore context; that integration remains pending.
+The declared runtime dependencies include `tzdata` (for Windows time zones) and `truststore>=0.9.1` (for Windows certificate-store TLS support). The current default transport in `providers/http.py` does not yet create a scoped `truststore` context, so the dependency declaration alone does not enable that behavior; the Windows public-provider path remains dependent on the A-owned transport integration.
 
 For an isolated environment, use the following Windows PowerShell commands to create a virtual environment, activate it, install the package in editable mode, and run the validations using the same virtual environment interpreter:
 
 ```powershell
-# 1. Create and activate virtual environment
-python -m venv venv
-.\venv\Scripts\Activate.ps1
+# 1. Create a virtual environment and pin the interpreter path for every later command
+python -m venv .venv
+$VenvPython = (Resolve-Path .\.venv\Scripts\python.exe).Path
 
-# 2. Editable install (resolves dependencies)
-python -m pip install -e .
+# 2. Install the project and dependencies through that interpreter
+& $VenvPython -m pip install -e .
 
-# 3. Run unit tests
-python -m unittest discover -s tests -q
+# 3. Run validations through the same interpreter
+& $VenvPython -m unittest discover -s tests -q
 
 # 4. Verify byte-equality of the 8 skills
-python scripts/sync_agent_skills.py --check
+& $VenvPython scripts/sync_agent_skills.py --check
 ```
+
+## Market data and chart limits
+
+`MarketQuoteProvider` validates source identity, price fields, currency, and source timestamps, then records every attempted source. An `AVAILABLE` result means the source response parsed; it does not establish that the quote passes a freshness policy. Callers must provide the R01 eligibility evaluator before using a quote in current-price calculations. No universal delay or age threshold is configured here.
+
+The Naver daily-price endpoint returns a top-level list without an echoed ticker. Its response can be associated with an instrument only when the request uses the matching canonical Naver `/api/stock/{code}/price` route. The provider withholds a validated `BarSet` unless both a strict verification flag and an adjustment receipt are supplied, while preserving raw bars in diagnostics. The receipt is currently a caller-provided marker; corporate-action receipt authenticity is not checked by this adapter. Passing those raw bars manually as a `Sequence[Bar]` bypasses source provenance and is not safe for production analysis. Yahoo daily bars are parsed separately from current quotes. Technical indicator functions are deterministic calculations over completed bars; they do not authorize buy or sell actions, and the signal gate remains disabled until a verified policy registry exists.
+
+Indicator conventions are explicit in the calculation API: SMA uses the trailing period of closes; EMA uses alpha `2 / (period + 1)` and an initial SMA seed; Wilder RSI seeds average gains/losses over `period` price changes and then uses Wilder smoothing; MACD is fast EMA minus slow EMA with the signal EMA seeded from the first signal-period MACD values; ATR uses true range and Wilder smoothing; relative volume compares the current bar with the preceding lookback volumes; volatility is sample standard deviation of log returns (`ddof=1`) with optional annualization. Trend, pivot, and breakout periods/thresholds are caller inputs. `Sequence[Bar]` supports deterministic calculations but does not carry a source-validation receipt, so production analysis must pass only a series validated by its caller.
 
 **Skills and Packaging:**
 The authoritative skill instructions are in the `skills/` source directory, while Codex repository-local discovery uses byte-identical mirrors under `.agents/skills/`. The `sync_agent_skills.py --check` command enforces exact byte equality between the source and the mirror. 
 
-When building for distribution (wheel/sdist), the artifact strictly packages exactly the 8 expected skills, including specifically `SKILL.md` and `agents/openai.yaml` from both the source and mirror paths. It explicitly prevents arbitrary files from leaking into the packaging. Note that while repository-local Codex sessions successfully discover the 8 skills in the Available skills list, automatic UI discovery in other environments post-wheel installation is not yet empirically proven.
+When building for distribution (wheel/sdist), the artifact allowlists the 8 expected skills, specifically `SKILL.md` and `agents/openai.yaml` from both the source and mirror paths. It excludes known local database, log, environment, and run-data paths. The package tests inspect built artifacts; they do not prove that every possible sensitive file name is excluded. Repository-local Codex sessions discover the 8 skills in the Available skills list, while automatic UI discovery in other environments after wheel installation remains unverified.
 
 `OPENDART_API_KEY` is optional; when absent the provider reports `MISSING_CREDENTIAL` and the research flow can continue with public/keyless or Web Research fallback paths.
 
