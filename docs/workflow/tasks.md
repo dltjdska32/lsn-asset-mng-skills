@@ -1,5 +1,9 @@
 # 작업 상태표
 
+**실제 주말 종가 기본 실행기 검증 — root `8640632`:** A source `fc189a0`을 root `8640632`로 통합했다. scoped TLS의 Yahoo 후보에만 `User-Agent`/JSON Accept를 주어 앞서 재현된 HTTP 429를 해결했다. 총괄이 2026-09-27 실제 기본 `build_default_provider_executor()`를 직접 실행하여 Yahoo AAPL `341.07 USD`(9/25 16:00:01 ET)·Naver 삼성 `286500 KRW`(9/23 정규장 파생 15:30 KST, 16:30 공개)를 모두 `AVAILABLE` 선택했고, 공통 gate가 각각 `LAST_VALID_CLOSE`로 판정함을 재확인했다. 담당 집중 8/8 PASS. 이 결과는 9/27 pinned NASDAQ/KRX 구간의 마지막 유효 거래일 종가이지 실시간 시세가 아니다.
+
+**독립 검토 RC03/RC04 1차 수정 통합 — root `2ff4053`:** A source `c9ea340`·`a7f319d`를 root `d3f8d6b`·`2ff4053`으로 통합. 총괄이 독립 검토 고정 5반례 **5/5 PASS**, 전체 **570 OK(skip1)**를 직접 실행했다. 별도로 RC04의 양쪽 회계기간/기준 metadata가 **동시에 누락**됐을 때 동일 빈 집합 비교로 compatible=True가 되는 잔여 반례를 발견해 A에 보정 회송했다. 5/5는 이 새 누락 반례나 최종 독립 검토 완료를 뜻하지 않는다.
+
 **최신 통합 — 독립 검토 RC01·RC05 수정, root `c5ed40c`:** C 별도 `codex/luna-c-fx-risk-fix-01` source `01a8ddb`·인계 `ec80048`, `codex/luna-c-rc05-pit-fix-01` source/인계 `f8070d9`를 root `a7ab0c4`·`fbf5670`·`c5ed40c`으로 통합. 총괄이 전체 **568 OK(skip1)** 직접 실행했다. RC01은 위험 비중을 평가통화 환산 금액으로 계산하고 FX 부족 시 UNKNOWN; RC05는 양쪽 13F 보고기간·공개시각이 cutoff 내인지 확인 안 되면 점수 UNAVAILABLE/PIT=false. 독립 검토자의 고정 반례 재실행과 최종 SHA 재검토는 아직 남아 있다. B는 R15 스킬·패키지 작업을 새 별도 branch에서 진행하도록 배정했다.
 
 **독립 첫 패스 회귀 재실행 — root `b47d17e`:** 검토자가 실제로 작성한 `reviews/REVIEW-CODE-01-FIRST-PASS.md`·`review_code_01_first_pass_probes.py`·인계를 공유 메모리에 가져와 같은 고정 5반례를 총괄이 직접 실행했다. RC01·RC02·RC05는 PASS, RC03·RC04는 아직 FAIL(게시 영수증 반환 예외, 기간/회계기준 불일치 비교). A에 이미 RC03/04 회송했고 고친 SHA에서 5/5 및 전체 회귀를 재실행한다. 첫 패스 3/5는 최종 독립 검토 완료가 아니다.
