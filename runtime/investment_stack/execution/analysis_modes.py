@@ -27,6 +27,7 @@ _CURRENCY_METRICS = frozenset({
     "capex", "total_debt", "cash", "equity", "average_equity", "invested_capital",
     "current_assets", "current_liabilities", "ebitda", "enterprise_value", "market_cap",
 })
+_REFRESH_REPLAY_MODES = frozenset({RequestMode.SINGLE_ASSET_ANALYSIS, RequestMode.ASSET_COMPARISON})
 
 
 def equity_analysis_services(
@@ -48,10 +49,31 @@ def equity_analysis_services(
         raise ValueError("Phase 4/5 analysis clock must match the pinned run clock")
 
     def resolve_specs(request: ModeRequest, _context: StepContext) -> StepResult:
-        pinned_mode = run_db.fetch_phase6_context()["run_metadata"].get("request_mode")
-        if pinned_mode != request.mode.value:
+        snapshot = run_db.fetch_phase6_context()
+        metadata = snapshot["run_metadata"]
+        pinned_mode = metadata.get("request_mode")
+        replay_context = request.payload.get("refresh_context")
+        replay_run_id = getattr(replay_context, "run_id", None)
+        replay_clock = getattr(replay_context, "analysis_as_of", None)
+        replay_timezone = getattr(replay_context, "analysis_timezone", None)
+        replay_state_version = getattr(replay_context, "state_version", None)
+        replay_state_ref = getattr(replay_context, "pinned_state_ref", None)
+        pin = snapshot["pinned_personal_state"]
+        valid_refresh_replay = bool(
+            request.refresh_replay
+            and request.mode in _REFRESH_REPLAY_MODES
+            and pinned_mode == RequestMode.REPORT_REFRESH.value
+            and request.run_id == run_db.run_id == replay_run_id
+            and replay_clock == metadata.get("analysis_as_of") == deep_research.analysis_as_of
+            and replay_timezone == metadata.get("analysis_timezone") == deep_research.analysis_timezone
+            and pin is not None
+            and replay_state_version is not None
+            and int(pin.get("state_version") or 0) == replay_state_version
+            and pin.get("portfolio_snapshot_id") == replay_state_ref
+        )
+        if pinned_mode != request.mode.value and not valid_refresh_replay:
             return StepResult(Availability.UNSUPPORTED, unsupported_reasons=(
-                "run database request mode does not match the requested analysis mode",
+                "run database request mode does not match the requested analysis mode or verified refresh replay",
             ))
         raw = request.payload.get("research_specs")
         expected = 1 if request.mode is RequestMode.SINGLE_ASSET_ANALYSIS else 2

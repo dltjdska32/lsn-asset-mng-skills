@@ -85,6 +85,7 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
         first_context: dict[str, str | None] | None = None, second_context: dict[str, str | None] | None = None,
         second_metric_contexts: dict[str, dict[str, str | None]] | None = None,
         mode: RequestMode = RequestMode.SINGLE_ASSET_ANALYSIS,
+        state_version: int = 0, snapshot_ref: str | None = None,
     ):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -92,8 +93,9 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
         self.assertTrue(run.create().valid)
         run.initialize_run_context(
             request_mode=mode.value,
-            analysis_as_of=CUTOFF, analysis_timezone="Asia/Seoul", state_version=0,
+            analysis_as_of=CUTOFF, analysis_timezone="Asia/Seoul", state_version=state_version,
             personal_db_instance_id="NONE:TEST",
+            portfolio_snapshot_id=snapshot_ref,
         )
         research = Phase4ResearchRuntime(
             providers=build_default_provider_executor(credentials=EnvironmentCredentials({})),
@@ -110,6 +112,41 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
             analysis_as_of=CUTOFF, analysis_timezone="Asia/Seoul")
         phase6 = Phase6ReportReviewRuntime(run)
         return run, equity_analysis_services(deep_research=deep, phase6=phase6, run_db=run)
+
+    def test_report_refresh_replay_requires_allowlisted_mode_flag_and_exact_pin(self) -> None:
+        specs = self.specs()[:1]
+        run, services = self.make_services(
+            "r14-refresh-equity", specs, mode=RequestMode.REPORT_REFRESH,
+            state_version=8, snapshot_ref="snapshot:synthetic-8",
+        )
+        context = type("RefreshContext", (), {
+            "run_id": run.run_id, "analysis_as_of": CUTOFF,
+            "analysis_timezone": "Asia/Seoul", "state_version": 8,
+            "pinned_state_ref": "snapshot:synthetic-8",
+        })()
+        allowed = execute_mode(ModeRequest(
+            run.run_id, RequestMode.SINGLE_ASSET_ANALYSIS,
+            {"research_specs": specs, "refresh_context": context}, refresh_replay=True,
+        ), services)
+        self.assertEqual(Availability.PARTIAL, allowed.availability, allowed.unsupported_reasons)
+        self.assertTrue(allowed.report_refs)
+
+        mismatched_context = type("RefreshContext", (), {
+            "run_id": run.run_id, "analysis_as_of": CUTOFF,
+            "analysis_timezone": "Asia/Seoul", "state_version": 9,
+            "pinned_state_ref": "snapshot:synthetic-9",
+        })()
+        rejected = execute_mode(ModeRequest(
+            run.run_id, RequestMode.SINGLE_ASSET_ANALYSIS,
+            {"research_specs": specs, "refresh_context": mismatched_context}, refresh_replay=True,
+        ), services)
+        self.assertEqual(Availability.UNSUPPORTED, rejected.availability)
+
+        unflagged = execute_mode(ModeRequest(
+            run.run_id, RequestMode.SINGLE_ASSET_ANALYSIS,
+            {"research_specs": specs, "refresh_context": context},
+        ), services)
+        self.assertEqual(Availability.UNSUPPORTED, unflagged.availability)
 
     def test_single_asset_pipeline_persists_real_evidence_calculations_and_report(self) -> None:
         specs = self.specs()[:1]
