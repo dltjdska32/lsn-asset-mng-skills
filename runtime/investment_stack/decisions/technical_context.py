@@ -7,6 +7,7 @@ from decimal import Decimal
 
 from investment_stack.calculations.technical import (
     TechnicalAnalysisResult,
+    TechnicalParameters,
     TechnicalPoint,
     calculate_verified_technical_analysis,
     _bar_fingerprint,
@@ -93,14 +94,22 @@ def build_technical_briefing_context(
             fingerprint=fingerprint,
         )
 
-    if analysis.parameters is None:
+    if not _valid_parameters(analysis.parameters):
         return _unavailable(
-            "TECHNICAL_RESULT_PARAMETERS_MISSING",
+            "TECHNICAL_RESULT_PARAMETERS_INVALID",
             source=source,
             receipt=receipt_id,
             fingerprint=fingerprint,
         )
-    recalculated = calculate_verified_technical_analysis(parse_result, analysis.parameters)
+    try:
+        recalculated = calculate_verified_technical_analysis(parse_result, analysis.parameters)
+    except Exception:
+        return _unavailable(
+            "TECHNICAL_RECALCULATION_FAILED",
+            source=source,
+            receipt=receipt_id,
+            fingerprint=fingerprint,
+        )
     if recalculated.points != points or recalculated.status != analysis.status:
         return _unavailable(
             "TECHNICAL_VALUES_DO_NOT_MATCH_VERIFIED_INPUT",
@@ -170,3 +179,24 @@ def _unavailable(
         indicators=(),
         signal_status="UNAVAILABLE",
     )
+
+
+def _valid_parameters(value: object) -> bool:
+    if not isinstance(value, TechnicalParameters):
+        return False
+    periods = (
+        value.sma_period,
+        value.ema_period,
+        value.rsi_period,
+        value.macd_fast,
+        value.macd_slow,
+        value.macd_signal,
+        value.relative_volume_period,
+        value.volatility_period,
+        value.atr_period,
+        value.trend_fast,
+        value.trend_slow,
+    )
+    if any(type(period) is not int or period <= 0 for period in periods):
+        return False
+    return value.macd_fast < value.macd_slow and value.volatility_period >= 2

@@ -10,6 +10,7 @@ Scope: R08 verified technical result context for later non-posting briefings.
 - The builder accepts only `OHLCVParseResult` plus `TechnicalAnalysisResult`; it checks the parser's strict eligibility gate, cutoff, each bar's close time and public availability, source URL, recomputed input fingerprint and receipt, and one-to-one bar/evidence/session mapping.
 - Technical parameters are now retained on the calculation result so the context builder can recompute and reject forged indicator values. Context reports last session, evidence IDs, source/receipt/fingerprint, latest SMA/EMA/RSI/MACD/volume/volatility/ATR and explicit PARTIAL/UNAVAILABLE reasons. Signals remain `UNAVAILABLE`.
 - The context compares result reasons, trend, formula version, and signal status to a fresh calculation and builds every projected value from that fresh calculation. Mismatches fail closed.
+- The context validates `TechnicalParameters` type and period constraints before recalculation; unexpected recalculation failures return an explicit unavailable reason rather than escaping. Added forged-string and invalid-period parameter cases.
 - Added focused tests for verified lineage and values, unverified-source rejection, future-bar rejection, fingerprint mismatch, forged indicator rejection, and forged descriptive metadata rejection.
 
 ## Integration API for A
@@ -18,7 +19,7 @@ Call `build_technical_briefing_context(parse_result, technical_result)` from `in
 
 ## Verification
 
-- With root `.venv/Scripts/python.exe` and `PYTHONPATH` set to this worktree's `runtime` and root, the B/R08 group passed **53/53**: technical context, B technical, R08 technical, B OHLCV, and R06/R07 market/OHLCV tests.
+- With root `.venv/Scripts/python.exe` and `PYTHONPATH` set to this worktree's `runtime` and root, the B/R08 group passed **54/54**: technical context, B technical, R08 technical, B OHLCV, and R06/R07 market/OHLCV tests.
 - The same interpreter loaded `ZoneInfo("Asia/Seoul")` successfully. The earlier timezone test failure came from the global Python lacking `tzdata`, not from the implementation. No dependency was installed.
 - `git diff --check`: passed.
 

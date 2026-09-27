@@ -105,6 +105,22 @@ class TestTechnicalBriefingContext(unittest.TestCase):
                 self.assertEqual(context.status, "UNAVAILABLE")
                 self.assertIn("TECHNICAL_METADATA_DOES_NOT_MATCH_VERIFIED_INPUT", context.reasons)
 
+    def test_forged_or_invalid_parameters_fail_closed_without_exception(self):
+        parsed = _fixture()
+        result = calculate_verified_technical_analysis(parsed, PARAMS)
+        variants = (
+            replace(result, parameters="forged"),
+            replace(result, parameters=replace(PARAMS, sma_period=0)),
+            replace(result, parameters=replace(PARAMS, volatility_period=1)),
+            replace(result, parameters=replace(PARAMS, macd_fast=3, macd_slow=2)),
+            replace(result, parameters=replace(PARAMS, sma_period="2")),
+        )
+        for forged in variants:
+            with self.subTest(parameters=forged.parameters):
+                context = build_technical_briefing_context(parsed, forged)
+                self.assertEqual(context.status, "UNAVAILABLE")
+                self.assertIn("TECHNICAL_RESULT_PARAMETERS_INVALID", context.reasons)
+
 
 if __name__ == "__main__":
     unittest.main()
