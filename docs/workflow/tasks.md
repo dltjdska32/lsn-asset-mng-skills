@@ -1,5 +1,9 @@
 # 작업 상태표
 
+**최신 통합 — A R01 주말 종가 제품 경로, root `c6e63d9`:** A 별도 `codex/luna-a-weekend-price-01` source `2c3a1d8`·`1c4c6fe`·`e65f6f6`을 root `20dcd23`·`f169350`·`c6e63d9`로 통합했다. 기본 가격 선택·근거 저장·deep research/보고서 연결을 합성 Yahoo/Naver 응답으로 확인했고 총괄 직접 관련 29/29, 전체 **564 OK(skip1)**. 독립 검토 RC02의 Yahoo 명시 지연 시세 승인 반례는 이 변경에서 수정됐다. 그러나 2026-09-27 실제 기본 실행기에서는 Naver 005930이 `LAST_VALID_CLOSE`로 선택된 반면 Yahoo AAPL은 HTTP 429로 미선택이었다. 같은 URL을 Windows truststore로 직접 시험하니 요청 헤더 없음=429, `User-Agent: Mozilla/5.0`=200(3546 bytes). A에 제한된 공개 Yahoo 헤더 수정과 실조회 재검증을 회송했다. 독립 검토 RC03(게시 후 상태 기록 실패 영수증 보존)·RC04(회계기간/기준 불일치 비교 차단)도 A 후속 수정 배정. 현재 실제 Yahoo 기본 실행기·독립 재검토·최종 검증은 미완료다.
+
+**독립 검토 추가 RC05:** 같은 별도 검토 세션은 R12/13의 13F 보유기간이 2026-09-30로 cutoff 9/27 이후이거나 공개시점이 확인되지 않은 경우에도 point-in-time 점수가 생성되는 P1 반례를 직접 재현했다. C의 FX 위험 계산 수정 뒤 같은 담당에게 RC05를 회송했다. C는 현재 별도 branch에서 수정·합성 회귀 진행 중이며 통합 전이다.
+
 **독립 검토 진행 — 기준 `57aca43`:** 새 별도 Codex task `01a0e30c-b115-7db0-9a6c-b05a962b2d8c`/독립 89b8 worktree가 현재 통합 코드의 P1 반례 4건을 직접 재현했다. (1) Yahoo `exchangeDataDelayedBy=15`가 미승인 현재가로 통과(R01); (2) 포트폴리오 위험 계산이 FX 환산 전 position 금액을 환산 후 분모와 혼용(R10/R14); (3) 원장 게시 뒤 상태 기록과 오류 기록이 연속 실패할 때 게시 영수증 반환이 예외로 끊김(R14/R17); (4) 비교가 동일 period_end만으로 ANNUAL/QUARTER·US-GAAP/IFRS 차이를 무시(R02/R14/R17). 1번은 A 현재 R01 branch, 2번은 C 새 수정 branch에 즉시 회송했다. 3·4번은 A R01 인계 뒤 별도 branch 수정 배정 예정. 독립 리뷰의 첫 패스 문서/최종 SHA 재검토와 별도 최종 검증은 아직 진행 중이며 완료 아님.
 
 **최신 통합 — C 포트폴리오/가상 시나리오 서비스:** C `codex/luna-c-portfolio-modes-01`(a3b7, 기준 `27d95e4`) source `d9d3e15`·기록 `a0e0773`·FX baseline 보정 `729b727`·인계 `5c30925`를 root `df39667`→`32eb2fc`로 순서대로 통합. 총괄 직접 관련 **45/45 PASS**, 전체 **558 OK, skip1**. 실제 baseline FX 없이 시나리오 환율로 before/delta를 확정하던 반례를 발견해 C에 회송·수정·재확인했다. 두 모드의 비게시 typed 계산/보고 서비스는 있으나 고정 dispatcher/state pin·deep research 연결은 A 후속이다. A는 R01 주말 종가 제품 경로와 기존 웹 시세 회귀를 수정 중. 독립 전체 검토·다른 최종 검증은 아직 미실행. 인계 `handoffs/LUNA-C-PORTFOLIO-MODES-01.md`.
