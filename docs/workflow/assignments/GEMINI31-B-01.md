@@ -1,0 +1,6 @@
+# GEMINI31-B-01 — R06–08 연계 검증 및 패키지 선행 작업
+
+- 담당: Antigravity Gemini `gemini-3.1-pro-high`, effort high. branch `codex/gemini31-b`, worktree `C:/Users/lsn/lsn-asset-mng-worktrees/gemini-b`, 기준 HEAD `07e8b0be876da7635e1c2c0bdbc040acbd04970c`. REQ-v1 R06–08/R15/R16, 설계 v0.1 및 D18.
+- 기존 Codex B quote-pair/fallback 수정은 기준에 반영했다. 총괄이 B quote19/19, technical11/11, 공개응답 offline fallback6/6을 확인했다. 이 결과는 live E2E/통합 계약 인수가 아니다. 먼저 provider 실제 `fetch_current`와 helper, OHLCV·기술지표를 기존 명시 계약에 대조해 빈 부분을 담당 파일에서 수정하고 의미 있는 부정/정상 테스트를 작성한다. 특히 source identity/pair, observed/retrieved/as_of, 미래·stale/eligibility fallback, forming/mixed adjustment, 명시 기간과 계산 적격성을 확인한다. 미확정 trading threshold/승인 신호를 발명하지 않는다.
+- 이어 독립 가능한 PACKAGE 선행 범위는 `pyproject.toml`, package resource allowlist, `scripts/sync_agent_skills.py`, 설치/미러 검증 테스트로 제한한다. Windows `tzdata`·scoped TLS `truststore` 의존성 검토, 8개 skills 원본 발견·mirror byte equality, wheel/sdist에 개인 DB/workspace/runs/.env/logs가 빠지는지 검사할 수 있는 테스트/명령을 작성한다. 확정되지 않은 CLI/7모드 문서와 실제 미실행 install을 완료로 표시하지 않는다. 최종 README/skills 사용자 문구는 통합 API 후 별도 배정이다.
+- 소유: providers/market_quotes.py·ohlcv.py, web_research/**, calculations/technical.py, B 전용 테스트/fixtures와 위 packaging 파일, `handoffs/GEMINI31-B-01.md`. contracts/evidence/13F/공유 workflow 원본은 편집하지 않는다. shell/git/pip/web 사용 금지; 필요한 검증 명령은 인계해 총괄이 실행한다. 개인 DB·인증정보·자동 주문·원격 push/deploy 없음.

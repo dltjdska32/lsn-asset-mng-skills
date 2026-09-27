@@ -2,16 +2,18 @@ param(
     [Parameter(Mandatory=$true)][string]$WorkingDirectory,
     [Parameter(Mandatory=$true)][string]$PromptFile,
     [Parameter(Mandatory=$true)][string]$RunId,
-    [Parameter(Mandatory=$true)][string]$ConversationId
+    [Parameter(Mandatory=$true)][string]$ConversationId,
+    [string]$Model = 'gemini-3.1-pro-high'
 )
 $ErrorActionPreference = 'Stop'
 if ($RunId -notmatch '^[A-Za-z0-9_-]+$') { throw 'Invalid run id' }
+if ($Model -notmatch '^gemini-[a-z0-9.-]+$') { throw 'Invalid Gemini model id' }
 $taskDirectory = (Resolve-Path -LiteralPath $WorkingDirectory).Path
 $taskPrompt = Get-Content -LiteralPath $PromptFile -Raw -Encoding utf8
 $taskOutput = Join-Path $taskDirectory 'workspace/runs'
 New-Item -ItemType Directory -Force -Path $taskOutput | Out-Null
 $taskReceipt = [ordered]@{
-    task = $RunId; model = 'gemini-3.8-flash-high'; effort = 'high'
+    task = $RunId; model = $Model; effort = 'high'
     conversation = $ConversationId; worktree = $taskDirectory
     startedUtc = [DateTime]::UtcNow.ToString('o'); endedUtc = $null
     supervisorPid = $PID; baseCommit = $null; exitCode = $null
@@ -19,9 +21,9 @@ $taskReceipt = [ordered]@{
 Push-Location -LiteralPath $taskDirectory
 try {
     $taskReceipt.baseCommit = (git rev-parse HEAD)
-    $taskPrompt = "Execution assignment: $RunId. Verified base commit: $($taskReceipt.baseCommit). Assigned worktree: $taskDirectory. This exact base supersedes any placeholder base in the assignment. Read and write only the assigned worktree files. Record this base in the handoff.`n`n" + $taskPrompt
+    $taskPrompt = "Execution assignment: $RunId. Verified base commit: $($taskReceipt.baseCommit). Assigned worktree: $taskDirectory. This exact base supersedes any placeholder base in the assignment. Headless mode cannot approve RunCommand: never invoke command, shell, terminal, git, tests, package installers, or web tools. Use file read/write tools only inside this assigned worktree. The coordinator runs git and tests. Record this base and any requested test commands in the handoff without running them.`n`n" + $taskPrompt
     $taskReceipt | ConvertTo-Json | Set-Content -LiteralPath "$taskOutput/$RunId.receipt.json" -Encoding utf8
-    & 'C:/Users/lsn/AppData/Local/agy/bin/agy.exe' --model gemini-3.8-flash-high --effort high --mode accept-edits --conversation $ConversationId --output-format json --log-file "$taskOutput/$RunId.log" --print $taskPrompt > "$taskOutput/$RunId.json"
+    & 'C:/Users/lsn/AppData/Local/agy/bin/agy.exe' --model $Model --effort high --mode accept-edits --conversation $ConversationId --output-format json --log-file "$taskOutput/$RunId.log" --print $taskPrompt > "$taskOutput/$RunId.json"
     $taskExitCode = $LASTEXITCODE
     if ($taskExitCode -eq 0) {
         $taskResult = Get-Content -LiteralPath "$taskOutput/$RunId.json" -Raw | ConvertFrom-Json

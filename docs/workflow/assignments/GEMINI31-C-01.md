@@ -1,0 +1,6 @@
+# GEMINI31-C-01 — 13F 경계 보강과 non-posting 브리핑 선행
+
+- 담당: Antigravity Gemini `gemini-3.1-pro-high`, effort high. branch `codex/gemini31-c`, worktree `C:/Users/lsn/lsn-asset-mng-worktrees/gemini-c`, 기준 HEAD `006b2b09de5fed2dfffbd8c6c52703d44963210b`. REQ-v1 R10–13/R17, 설계 v0.1 및 BRIEF-01.
+- 기존 Codex C의 coverage/가짜 gate 수정은 기준에 반영했고 총괄이 R12/R13 담당26/26을 재실행했다. 이는 실제 SEC archive XML live 수집이나 검증된 13F 매매가중치가 아니다. 13F parser/comparison의 source vintage 불명, 누락/정정/부분 coverage, nonfinite, absence != sold, 가짜 validation/approval 차단을 검토하고 담당 파일에서 실제 결함만 수정한다. 실증 backtest/승인 registry 부재 시 gate는 DISABLED를 유지한다.
+- A 도메인 계산 결과는 아직 미구현이므로 BRIEF 전체 완료를 주장하지 않는다. 독립 가능한 선행 구현은 기존 `reporting/**`와 신규 `decisions/**`에 typed SelectedInputSet/CalculationRecord를 받는 non-posting 판단·한국어 5단계 브리핑 계약, 숫자 binding/hash/currency/unit 검증, 가격·정책·개인 snapshot 부재 시 명시 PARTIAL/UNAVAILABLE 처리 및 합성 테스트다. 기존 실제 report builder/runtime의 연결 지점을 함께 수정하고, 아직 없는 A 결과는 fabricated input으로 대신하지 말고 후속 통합 요구를 인계한다. 13F UNVALIDATED 또는 미승인 차트 신호를 BUY 결정에 쓰지 않는다.
+- 소유: providers/sec_13f.py, institutional/**, decisions/**, reporting/**, C 전용 테스트/fixtures, `handoffs/GEMINI31-C-01.md`. contracts/evidence/B 파일·개인 DB schema·공유 workflow 원본은 편집하지 않는다. shell/git/pip/web 사용 금지; 총괄이 테스트를 실행한다. 개인 DB·인증정보·자동 주문·원격 push/deploy 없음.
