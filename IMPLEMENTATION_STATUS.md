@@ -2,6 +2,12 @@
 
 Last updated: 2026-09-28
 
+## FINISH Integration — Independently Re-reviewed Source `53b6be0`
+
+Three GPT-6 Luna Medium implementation agents used separate branches/worktrees. Their integrated additions cover a fail-closed persisted-numeric equality helper, a provenance-checked technical briefing context, and clearer Korean report/review text with immutable content-addressed report sections. The coordinator rebuilt wheel/sdist and ran the full suite at source `53b6be01f45ad5b57e8d0718b270f4a14fe01649`: **622 OK, 1 skipped**. A separate Codex review reproduced a pinned-cutoff bypass, forged technical-parameter exception, obscured review reasons, and old-manifest section collisions. Fixes were re-reviewed on the exact final source; focused **44/44**, full **622 OK, 1 skipped**, and no new P1/P2 in the changed scope. See [FINISH-REVIEW-01](docs/workflow/reviews/FINISH-REVIEW-01.md). A different Codex agent independently verified the exact source via 496/496 archive blob matches, a fresh wheel/sdist build, full **622 OK, 1 skipped**, and cutoff, forgery, immutable-section, equity-manifest, and CLI-boundary probes. See [FINISH-VERIFY-01](docs/workflow/reviews/FINISH-VERIFY-01.md).
+
+These helpers are not yet called by the fixed analysis modes. The final equity briefing still passes `eligibility_decisions=None` and `has_policy=False`, so it does not expose unbound numeric claims or authorize an investment size. R08 chart and 13F context are not bound into that briefing, and R13 out-of-sample validation plus user-approved D12 safety-margin/risk/sizing policy remain open. The September 2026 NASDAQ/KRX pinned calendar, vendor coverage, and default CLI host wiring retain the limits described below. This integration is not completion of all R01–R17 requirements.
+
 ## Independently Reviewed Integration — `4e55a56` (2026-09-28)
 
 An independent Codex review directly checked commit `4e55a560b4245ad5fb63cf4de8a2ce9813a2752a` in a separate worktree and passed the implemented code scope. Root and reviewer each rebuilt wheel/sdist and ran the full suite: **600 tests OK, 1 skipped**. The reviewer also passed 20/20 preserved independent probes, 10/10 refresh-manifest boundary checks, two briefing roundtrip/refresh checks, and 11/11 clean installed-wheel packaging checks. See [the review](docs/workflow/reviews/REVIEW-CODE-01.md).
