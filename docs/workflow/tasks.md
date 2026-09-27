@@ -1,5 +1,7 @@
 # 작업 상태표
 
+**R15 sdist 자체검증 보정 — root `22e6087`:** B 별도 `codex/r15-sdist-rc08` source `f69b13a`를 통합. `ARCHITECTURE.md`를 명시적 sdist allowlist에 포함하고, 풀린 sdist에서 배포된 버전 테스트를 별도 프로세스로 실제 실행한다. 총괄이 wheel/sdist 재빌드 후 R15 집중 11 OK(skip1), 독립 번들 5반례 중 RC08 PASS·C 소유 RC06/07/09/10 네 건 FAIL을 재확인. 외부 설치/배포 없음. C 후속 통합 뒤 전체 회귀 필요.
+
 **독립 번들 중간 검토 산출물 인수 — 기준 `b1f4514`:** REVIEW-CODE-01의 보고서 `reviews/REVIEW-CODE-01-INTERIM-b1f4514.md`, 재현 `review_code_01_b1f4514_probes.py` 및 인계를 공유 메모리에 반영했다. reviewer와 총괄 모두 RC06–10 5/5 FAIL을 직접 재현했다. P1은 refresh 반환 ref 미저장, 다른 run의 논지 자료/DB 허용, 실행 PARTIAL인데 사용자 보고서 완료·높은 신뢰도로 표시; P2는 sdist 자체 테스트의 ARCHITECTURE.md 누락, refresh pin handler 미등록이다. B/C에 소유 파일별 수정 회송. reviewer의 clean wheel venv R15 10/10과 전체 576 OK(skip1)는 이 독립 반례를 대체하지 않는다. R17 한국어·내부 ID 본문 분리도 C 후속 확인 대상으로 배정했다.
 
 **자산 분석 보고서 갱신 pin 검증 통합 — root `eb12de0`:** A source `96d78a4`를 통합. SINGLE_ASSET_ANALYSIS/ASSET_COMPARISON replay에서 REPORT_REFRESH 새 run의 ID·모드·시각·시간대·state version·snapshot ref·`refresh_replay` flag가 일치할 때만 기존 equity bundle 입력을 허용한다. 총괄이 분석 통합 8/8, 독립 첫 패스 5/5·중간 3/3 PASS. C 소유 `portfolio_thesis_modes.py`가 `refresh_context`를 payload로 전달하는 연결은 아직 통합 전이라 실제 전체 refresh replay 완료는 아니다. A의 C 파일 직접 편집은 자동 소유권 검토에서 거부되었고 C 담당 파일로 재배정해 안전하게 진행 중이다.
