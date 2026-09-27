@@ -1,5 +1,70 @@
 # REVIEW-CODE-01 — 독립 통합 코드 검토
 
+## 최종 코드 검토 — 4e55a56
+
+**판정: 검토한 구현 범위에서 통과. 추적한 RC01–RC12 및 추가 R1/R2 결함은 모두 수정 확인했고, 이번 검토에서 열린 P1/P2는 없다.** REVIEW-CODE-01 코드 검토 수행을 완료한다. 이는 R01–R17 전체 기능의 무제한 실사용 완료, 미확정 정책 승인, 배포 승인 또는 별도 VERIFY 완료를 의미하지 않는다. 아래 지원 범위/제한을 유지한 채 다른 새 Codex 세션의 최종 VERIFY로 진행할 수 있다.
+
+- 직접 checkout/검증한 최종 SHA: `4e55a560b4245ad5fb63cf4de8a2ce9813a2752a`.
+- 검토 worktree: `C:/Users/lsn/.codex/worktrees/89b8/lsn-asset-mng-skills/workspace/review-4e55a56`.
+- 2b01ab3→4e55a56 source diff, briefing 저장 및 manifest 참조를 직접 읽고 테스트했다. 앞선 실패 SHA의 결과를 아래에 역사로 그대로 유지한다. 독립 probe 출력의 baseline_sha는 원 반례 기준을 뜻하며 이번 실행 SHA는 위 값이다.
+- 구현/기존 테스트 편집, 실제 개인 DB, 인증정보, 자동주문, commit/push/배포 없음. 검토 기록과 합성 검사 파일만 작성했다.
+
+### RC12 수정과 추가 검증
+
+`analysis_modes.render_report`는 rendered 5항목과 typed NonPostingBriefing을 함께 정규화하여 hash 기반 고유 final_briefing section으로 저장한다. 해당 버전의 section fingerprint만 report manifest에 포함한다. 다른 briefing에 다른 report_ref가 생기는 원 반례가 통과했다.
+
+원 반례의 참조 비교에 그치지 않고 다음을 직접 확인했다.
+
+1. 같은 run에서 두 가지 briefing을 렌더하고 다시 첫 요청을 렌더한다. 서로 다른 두 내용은 다른 ref, 동일 내용 재렌더는 원래 ref를 반환한다. final_briefing 저장 버전은 정확히 두 개다.
+2. 새로운 RunDatabaseManager로 임시 run.db를 다시 연다. 과거와 현재의 report_ref 각각에서 manifest fingerprint를 따라가면 그때의 rendered_markdown이 반환된 briefing과 문자 단위로 일치한다. typed WAIT·numeric_bindings도 복원되고 JSON content hash를 재계산한 값이 저장 reference와 일치한다.
+3. 실제 configured 7모드 검사 중 equity REPORT_REFRESH의 replay를 관찰한다. delta에 final_briefing이 포함되고 CHANGED 및 이전/현재 저장 fingerprint를 모두 반환한다. 생산 handler를 대체하지 않고 테스트 호출 결과만 관찰했다.
+
+추가 산출물: `review_code_01_rc12_roundtrip_checks.py`, `review_code_01_rc12_roundtrip_checks_output.txt`. **2/2 PASS**, 7.370초. 이 근거로 RC12를 닫는다.
+
+### 현 SHA 실행 결과
+
+| 검증 | 직접 결과 |
+|---|---|
+| 현 wheel/sdist 재빌드 | 성공 |
+| 전체 unittest | **600 tests OK, skipped=1**, 113.707초 |
+| first-pass 5 + interim 3 + b1 5 + a1 final 3 + dcd 3 + RC12 1 | **20/20 독립 검사 PASS** |
+| RC10-R2 manifest identity/status/missing 경계 | **10/10 하위검사 PASS** (1 test, 9.281초) |
+| RC12 재open/과거 payload/hash/실제 refresh | **2/2 PASS**, 7.370초 |
+| 현 wheel을 깨끗한 임시 venv에 설치한 R15 | **11/11 PASS, skipped=0**, 0.955초; pip check 성공 |
+
+같은 Windows Python 3.14.6/source interpreter와 `PYTHONPATH=runtime`을 사용했다. clean wheel 검증은 별도 system-site-packages 없는 venv, PYTHONPATH 제거, 설치 위치 import assertion, 오프라인 wheel `--no-index --no-deps`, 로컬 tzdata 2026.4/truststore 0.10.4 payload 복사 조건이다. 저장소 root는 scripts 테스트 import를 위해서만 추가했고 runtime 소스 경로는 추가하지 않았다. 전체 suite의 설치 검사 skip은 이 별도 venv에서 실제 실행되어 통과했다. unpacked sdist version 검사와 정확한 배포 allowlist도 이 11개 검사에 포함된다.
+
+현재 소스의 추가 오류 발견 없이 기존 반례, WAIT/비게시, configured 7모드, 새 고정 시각의 refresh, 비교 문맥, 13F 시점/기간/합의 경계를 재실행했다. 시세 HTTP·달력 경로는 후속 diff에서 변하지 않았으므로 a1a41b0의 Yahoo/Naver 실제 Phase4→Phase5 실증을 이번 SHA의 새 live 실행으로 재표기하지 않는다.
+
+### 발견 사항 종료표
+
+| ID | 최종 상태 / 확인 |
+|---|---|
+| RC01 | 종료 — 평가통화 FX 위험 가중치 반례 PASS |
+| RC02 | 종료 — 명시 지연 시세 gate 반례 PASS |
+| RC03 | 종료 — 게시 후 오류 기록 실패에도 receipt 유지 PASS |
+| RC04 / RC04-R1 | 종료 — 자산/지표별 기간·회계 문맥 누락/불일치 차단 PASS |
+| RC05 / RC05-R1 | 종료 — 미래 공개/보고기간·역순·gap·중복 차단 PASS |
+| RC06 | 종료 — 반환 report_ref와 저장 manifest 조회 일치 PASS |
+| RC07 | 종료 — 타 run의 논지 DB/clock 사용 거부 PASS |
+| RC08 | 종료 — sdist 자체 버전 검사/문서 포함 PASS |
+| RC09 | 종료 — refresh 전용 pin 단계 연결 PASS |
+| RC10 / RC10-R1 / RC10-R2 | 종료 — 같은 pipeline/내부 replay/외부 snapshot의 PARTIAL·누락 보존 PASS |
+| RC11 | 종료 — 기관별 시계열 검증과 기관 간 기간 정합 집계 PASS |
+| RC12 | 종료 — briefing identity/과거 payload 보존/재조회/refresh fingerprint PASS |
+
+### 최종 지원 범위와 VERIFY 인계 조건
+
+- configured host가 ledger/provider/typed state/callback을 주입한 7모드 경로를 검증했다. 기본 CLI 자동구성/실제 사용자 personal.db 동작을 인증한 것이 아니다.
+- 단일/비교 자산의 5항목 WAIT 브리핑과 영속성은 연결되었다. 정책 registry·차트/13F 가중치·매수/축소 규모, R08/13→판단/자동 수치 결속 전체 구현·성과 검증은 여전히 완료 범위가 아니다. 미승인 정책의 WAIT/비게시 안전 경계를 유지한다.
+- 원문 접근과 calendar coverage는 아래 고정 2종목/일정 범위에 한정된다. 모든 시장·일반 주말·공급자 구독/권한·기간 외 정책 검증을 확대 주장하지 않는다.
+- 보고서 일반 분석 섹션의 전체 한국어/본문·상세 근거 정리와 README/IMPLEMENTATION_STATUS의 마지막 체크포인트 기록 갱신은 범위 관리 대상으로 남긴다. 이미 역사 체크포인트로 고정된 설명을 현 HEAD 전체 기능 완성으로 읽지 않는다.
+- 다른 새 Codex의 VERIFY는 이 SHA 또는 그 뒤 문서만 추가된 명시된 SHA를 직접 확인해야 한다. 이후 runtime 변경이 생기면 관련 검토 범위를 다시 연다.
+
+이 최종 절이 현재 REVIEW-CODE-01 판정이다. 아래 '수정 필요/통과 보류' 절들은 해당 과거 SHA의 발견 이력이며 삭제하거나 소급 통과로 바꾸지 않는다.
+
+---
+
 ## 최신 재검토 — 2b01ab3
 
 **판정: 수정 필요, 최종 통과 보류.** RC10-R2는 수정 확인했다. 총괄의 추가 요청에 따라 새 WAIT 브리핑의 저장/참조/갱신 연결을 점검했고 RC12 P2를 재현했다. 아래 dcd262a/a1a41b0 기록은 각 당시의 실패 이력으로 유지한다.

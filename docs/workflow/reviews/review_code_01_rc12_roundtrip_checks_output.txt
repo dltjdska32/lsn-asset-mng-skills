@@ -1,0 +1,9 @@
+RC12 refresh: actual configured equity replay exposes final_briefing CHANGED with both stored fingerprints.
+test_actual_equity_refresh_includes_final_briefing_delta (__main__.BriefingRoundtripChecks.test_actual_equity_refresh_includes_final_briefing_delta) ... ok
+RC12 roundtrip: two immutable versions, identical-render ref reuse, exact rendered text and typed WAIT restored; hashes verified.
+test_prior_and_current_briefing_survive_reopen_with_verified_content_hash (__main__.BriefingRoundtripChecks.test_prior_and_current_briefing_survive_reopen_with_verified_content_hash) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 7.370s
+
+OK

@@ -2,6 +2,12 @@
 
 Last updated: 2026-09-28
 
+## Independently Reviewed Integration — `4e55a56` (2026-09-28)
+
+An independent Codex review directly checked commit `4e55a560b4245ad5fb63cf4de8a2ce9813a2752a` in a separate worktree and passed the implemented code scope. Root and reviewer each rebuilt wheel/sdist and ran the full suite: **600 tests OK, 1 skipped**. The reviewer also passed 20/20 preserved independent probes, 10/10 refresh-manifest boundary checks, two briefing roundtrip/refresh checks, and 11/11 clean installed-wheel packaging checks. See [the review](docs/workflow/reviews/REVIEW-CODE-01.md). This is an independent code-review result; another Codex task's final verification is still required.
+
+Refresh now carries the replay's stored PARTIAL state and missing inputs through internal and external fixed runners. Multi-manager 13F direction uses validated per-manager period chains. Equity reports render a five-part Korean **WAIT** briefing, persist both its rendered and typed forms under an immutable content reference, and include its fingerprint in the report reference and refresh delta. No buy/sell quantity or automatic order is authorized. Verified chart/13F evidence is not yet bound into the complete action briefing; the approval policy, sizing criteria, general market-calendar coverage, live vendor breadth, and default CLI host wiring remain outside this checked scope.
+
 ## R15 PACKAGE-01 — 2026-09-27 checkpoint
 
 - Work is isolated on `codex/luna-r15-package-01` from root base `fd4355e5d4ed13f4aeacd34eacb7e40e74431342`.
