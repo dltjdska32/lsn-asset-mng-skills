@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from investment_stack.calculations import BusinessType
 from investment_stack.calculations.common import AnalysisStatus
-from investment_stack.deep_research import EquityResearchOutcome, EquityResearchSpec, LiveDeepResearchRuntime
+from investment_stack.deep_research import EquityResearchOutcome, EquityResearchSpec, LiveDeepResearchRuntime, _observation_metrics
 from investment_stack.evidence import RunDatabaseManager
 from investment_stack.pipelines import PipelineStep
 from investment_stack.reporting.models import Availability as ReportAvailability, ReportSectionInput
@@ -165,6 +165,37 @@ def equity_analysis_services(
                         collected[name].add(str(value).strip().upper())
             return {name: sorted(values) for name, values in collected.items()}
 
+        context_aliases = {
+            "period_end": ("period_end", "end"),
+            "period_start": ("start",),
+            "reporting_frequency": ("reporting_frequency", "form"),
+            "reporting_period": ("reporting_period", "fp"),
+            "accounting_standard": ("accounting_standard", "basis"),
+            "consolidation": ("consolidation",),
+            "adjustment_basis": ("adjustment_basis",),
+            "restatement": ("restatement",),
+        }
+        required_context = tuple(context_aliases)
+
+        def context_signature(metadata) -> tuple[str, ...] | None:
+            values = []
+            for keys in context_aliases.values():
+                value = next((metadata.get(key) for key in keys if metadata.get(key) not in (None, "")), None)
+                if value is None:
+                    return None
+                values.append(str(value).strip().upper())
+            return tuple(values)
+
+        def metric_contexts(outcome: EquityResearchOutcome) -> dict[str, set[tuple[str, ...] | None]]:
+            contexts: dict[str, set[tuple[str, ...] | None]] = {}
+            for observation in outcome.fundamentals.selected.selected_observations:
+                if observation.evidence_type != "financial":
+                    continue
+                signature = context_signature(observation.metadata)
+                for canonical, _value in _observation_metrics(observation):
+                    contexts.setdefault(canonical, set()).add(signature)
+            return contexts
+
         rows = []
         all_compatible = True
         all_analyses_complete = True
@@ -174,10 +205,6 @@ def equity_analysis_services(
             period_compatible = len(left_periods) == len(right_periods) == 1 and left_periods == right_periods
             left_context = reporting_context(by_id[left_id])
             right_context = reporting_context(by_id[right_id])
-            required_context = (
-                "period_start", "reporting_frequency", "reporting_period",
-                "accounting_standard", "consolidation", "adjustment_basis", "restatement",
-            )
             context_well_formed = all(
                 len(left_context[name]) == 1 and len(right_context[name]) == 1
                 for name in required_context
@@ -217,8 +244,10 @@ def equity_analysis_services(
             })
 
         comparisons = []
+        metric_context_checks: dict[str, dict[str, object]] = {}
         if all_compatible:
             comparison_values = []
+            per_asset_contexts = [metric_contexts(outcome) for outcome in outcomes]
             for outcome in outcomes:
                 values: dict[str, Decimal] = dict(outcome.normalized_metrics)
                 values.update({
@@ -229,9 +258,37 @@ def equity_analysis_services(
                 comparison_values.append(values)
             metric_sets = [set(values) for values in comparison_values]
             common_metrics = sorted(set.intersection(*metric_sets)) if metric_sets else []
+            valuation_dependencies = {
+                "valuation.pe": ("eps",),
+                "valuation.pb": ("equity", "shares_outstanding"),
+                "valuation.ev_to_ebitda": ("total_debt", "cash", "shares_outstanding", "ebitda"),
+                "valuation.price_to_sales": ("shares_outstanding", "revenue"),
+                "valuation.dividend_yield": ("dividend_per_share",),
+            }
             for metric_name in common_metrics:
                 values = [asset_values[metric_name] for asset_values in comparison_values]
                 if metric_name in _CURRENCY_METRICS and len({spec.currency.upper() for spec in specs}) != 1:
+                    continue
+                dependencies = valuation_dependencies.get(metric_name, (metric_name,))
+                signatures = []
+                context_reason = None
+                for asset_contexts in per_asset_contexts:
+                    for dependency in dependencies:
+                        found = asset_contexts.get(dependency, set())
+                        if len(found) != 1 or None in found:
+                            context_reason = f"missing or conflicting context for {dependency}"
+                            break
+                        signatures.extend(found)
+                    if context_reason:
+                        break
+                if context_reason is None and len(set(signatures)) != 1:
+                    context_reason = "metric source contexts differ across assets or inputs"
+                metric_context_checks[metric_name] = {
+                    "compatible": context_reason is None,
+                    "dependencies": list(dependencies),
+                    "reason": context_reason,
+                }
+                if context_reason is not None:
                     continue
                 if all(isinstance(value, Decimal) and value.is_finite() for value in values):
                     comparisons.append({
@@ -242,6 +299,14 @@ def equity_analysis_services(
                             for index, (outcome, value) in enumerate(zip(outcomes, values)) if index
                         },
                     })
+        metric_context_complete = all(item["compatible"] for item in metric_context_checks.values())
+        if not metric_context_complete:
+            for row in rows:
+                row["metric_context_compatible"] = False
+                row["reasons"].append("one or more metric comparisons lack complete matching source context")
+        else:
+            for row in rows:
+                row["metric_context_compatible"] = True
         matrix = {
             "assets": [{
                 "instrument_id": spec.instrument_id,
@@ -251,10 +316,11 @@ def equity_analysis_services(
                 "financial_reporting_context": reporting_context(by_id[spec.instrument_id]),
             } for spec in specs],
             "pairwise_compatibility": rows,
-            "complete": all_compatible,
+            "complete": all_compatible and metric_context_complete,
+            "metric_context_checks": metric_context_checks,
             "asset_analyses_complete": all_analyses_complete,
             "ranking_emitted": False,
-            "ranking_reason": None if all_compatible else "comparison compatibility matrix is incomplete; no total ranking was produced",
+            "ranking_reason": None if all_compatible and metric_context_complete else "comparison compatibility matrix or metric-level source contexts are incomplete; no total ranking was produced",
         }
         calculation_id = f"calc:comparison:{uuid4().hex}"
         run_db = deep_research.analysis.run_db
@@ -267,11 +333,14 @@ def equity_analysis_services(
                 "evidence_ids": list(research.evidence_refs),
                 "source_calculation_ids": list(research.calculation_refs),
             },
-            result={"comparisons": comparisons, "ranking_emitted": False},
+            result={"comparisons": comparisons, "ranking_emitted": False,
+                    "metric_context_checks": metric_context_checks},
         )
         missing_values = []
         if not all_compatible:
             missing_values.append("complete_period_currency_business_type_compatibility_matrix")
+        if not metric_context_complete:
+            missing_values.append("complete_metric_level_reporting_context")
         if not all_analyses_complete:
             missing_values.append("complete_asset_analysis_data")
         return StepResult(

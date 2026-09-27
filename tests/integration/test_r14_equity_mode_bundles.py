@@ -34,6 +34,7 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
     def bundle(
         self, specs: tuple[EquityResearchSpec, ...], *, second_period: str = "2026-06-30",
         first_context: dict[str, str | None] | None = None, second_context: dict[str, str | None] | None = None,
+        second_metric_contexts: dict[str, dict[str, str | None]] | None = None,
     ) -> dict[str, object]:
         responses: list[dict[str, object]] = []
         for index, spec in enumerate(specs):
@@ -70,7 +71,11 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
                     "title": f"{spec.display_name} synthetic {metric}", "value": value, "unit": unit,
                     "currency": spec.currency, "published_at": "2026-08-01T15:00:00+09:00",
                     "source_tier": 2, "source_kind": "official_ir", "official_confirmation_status": "OFFICIAL",
-                    "metadata": {"metric": metric, "canonical_metric": metric, "period_end": period, **(context or {})},
+                    "metadata": {
+                        "metric": metric, "canonical_metric": metric, "period_end": period,
+                        **(context or {}),
+                        **((second_metric_contexts or {}).get(metric, {}) if index == 1 else {}),
+                    },
                 } for metric, value, unit in metrics],
             })
         return {"responses": responses}
@@ -78,6 +83,7 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
     def make_services(
         self, run_id: str, specs: tuple[EquityResearchSpec, ...], *, second_period: str = "2026-06-30",
         first_context: dict[str, str | None] | None = None, second_context: dict[str, str | None] | None = None,
+        second_metric_contexts: dict[str, dict[str, str | None]] | None = None,
         mode: RequestMode = RequestMode.SINGLE_ASSET_ANALYSIS,
     ):
         temporary = tempfile.TemporaryDirectory()
@@ -94,6 +100,7 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
             evidence=EvidenceResearchStore(run),
             web_research=WebResearchAdapter(WebResearchBundleBackend(self.bundle(
                 specs, second_period=second_period, first_context=first_context, second_context=second_context,
+                second_metric_contexts=second_metric_contexts,
             ))),
         )
         analysis = Phase5AssetAnalysisRuntime(
@@ -200,6 +207,27 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
                 self.assertFalse(pair["compatible"])
                 self.assertFalse(inputs["compatibility_matrix"]["complete"])
                 self.assertEqual([], result_data["comparisons"])
+
+    def test_metric_comparison_rejects_context_missing_on_that_metric_only(self) -> None:
+        specs = self.specs()
+        run, services = self.make_services(
+            "r14-metric-context", specs, mode=RequestMode.ASSET_COMPARISON,
+            second_metric_contexts={"eps": {"start": None, "restatement": None}},
+        )
+        result = execute_mode(ModeRequest("r14-metric-context", RequestMode.ASSET_COMPARISON,
+            {"research_specs": specs}), services)
+        self.assertEqual(Availability.PARTIAL, result.availability)
+        calculation = next(row for row in run.fetch_phase6_context()["calculations"]
+            if row["calculation_name"] == "asset_comparison")
+        inputs = json.loads(calculation["inputs_json"])
+        result_data = json.loads(calculation["result_json"])
+        checks = inputs["compatibility_matrix"]["metric_context_checks"]
+        metrics = {item["metric"]: item for item in result_data["comparisons"]}
+        self.assertFalse(inputs["compatibility_matrix"]["complete"])
+        self.assertFalse(checks["eps"]["compatible"])
+        self.assertNotIn("eps", metrics)
+        self.assertIn("revenue", metrics)
+        self.assertEqual("0", metrics["revenue"]["delta_vs_first_requested"]["KEYENCE"])
 
     def test_comparison_requires_two_resolved_assets(self) -> None:
         specs = self.specs()[:1]
