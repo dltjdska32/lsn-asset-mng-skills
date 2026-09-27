@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import uuid
 from dataclasses import replace
 from datetime import datetime
 
@@ -168,7 +167,6 @@ class InvestmentReportBuilder:
             unknowns=tuple(unknowns),
             markdown="",
             briefing=briefing_md,
-            report_ref=f"report:{uuid.uuid4().hex}",
         )
         markdown = self._render(replace(report, markdown=""), evidence_by_id)
         report = replace(report, markdown=markdown)
@@ -305,19 +303,14 @@ class InvestmentReportBuilder:
                 source = row.get("source_name") or row.get("provider_id") or "출처 확인 불가"
                 details.append(f"- 근거 `{evidence_id}` — {source}; 자료 시각: {data_time}; 시세 상태: {ko_status(row.get('freshness_status'))}")
             if section.calculation_ids:
+                details.append("### 상세 계산 근거")
                 details.append("- 계산 ID: " + ", ".join(f"`{cid}`" for cid in section.calculation_ids))
         if details:
             lines.extend(("", "## 상세 근거", *details))
         return "\n".join(lines) + "\n"
 
     def _persist(self, report: InvestmentReport) -> None:
-        sections = list(report.sections)
-        if report.briefing:
-            sections.append(ReportSection(
-                "investment_briefing", "투자 판단 브리핑", tuple(report.briefing.splitlines()),
-                report.availability, (), (), {"rendered_markdown": report.briefing},
-            ))
-        for section in sections:
+        for section in report.sections:
             payload = {
                 "title": section.title,
                 "lines": list(section.lines),
@@ -327,12 +320,11 @@ class InvestmentReportBuilder:
                 "report_availability": report.availability.value,
                 "report_confidence": report.confidence.value,
                 "analysis_as_of": report.as_of.analysis_as_of,
-                "report_ref": report.report_ref,
             }
             canonical = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
             digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
             self.run_db.upsert_report_section(
-                section_id=f"{report.report_ref}:section:{section.name}",
+                section_id=f"section:{section.name}",
                 section_name=section.name,
                 section_status=section.status.value,
                 content_reference=f"inline-sha256:{digest}",

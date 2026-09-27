@@ -7,16 +7,16 @@
 
 - Replaced English provider/freshness/conflict and review-code messages in user-facing report sections with concise Korean explanations. Kept report status, confidence, analysis as-of, source timestamps, and non-fresh market status visible.
 - Moved evidence and calculation identifiers into a dedicated `상세 근거` section.
-- Added a unique `report_ref` to each report and report-section persistence key, preventing later report builds from overwriting saved sections.
-- Persisted the rendered non-posting investment briefing as a report section alongside existing run-local report data.
-- Added tests for a partial unresolved conflict report, identifier suppression from the main body, distinct saved report refs, and briefing persistence.
+- Kept report identity and immutable briefing persistence with the mode runtime: `analysis_modes.py` already stores `final_briefing` and a manifest-derived `run-report:...sha256:...` reference. The report builder does not issue a competing random `report_ref` or duplicate briefing section. Its established `section:<name>` persistence remains compatible with the manifest collector.
+- Added tests for a partial unresolved conflict report, identifier suppression from the main body, and leaving final report identity/briefing storage to the mode runtime.
 
 ## Validation
 
-- Ran `PYTHONPATH=runtime C:\Users\lsn\lsn-asset-mng-skills\.venv\Scripts\python.exe -m unittest tests.unit.test_phase6_report_review -v` from this worktree: 13 passed.
+- Ran the report, fixed-mode, refresh, and integration regressions from this worktree using the root `.venv`: 36 passed.
 - Tests use temporary synthetic run databases. No personal database, live data, or order path was used.
 - Broader suite and live-source checks were not run.
 
 ## Remaining
 
 - Integration with the assigned B/C and decision-layer work remains for the coordinator; this worktree intentionally does not modify `decisions/briefing.py` or `execution/analysis_modes.py`.
+- Integration review verified that final `report_ref` identity and immutable `final_briefing` storage are owned by the mode runtime, while the generic builder retains its section persistence contract.
