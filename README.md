@@ -69,7 +69,7 @@ run-local derived outputs rather than a personal Source of Truth.
 
 ## Run locally
 
-The runtime dependencies include `tzdata` (for Windows) and `truststore>=0.9.1` (for scoped TLS on Windows).
+The declared runtime dependencies include `tzdata` on Windows and `truststore>=0.9.1`. The current provider HTTP transport has not yet been connected to a scoped Windows truststore context; that integration remains pending.
 
 For an isolated environment, use the following Windows PowerShell commands to create a virtual environment, activate it, install the package in editable mode, and run the validations using the same virtual environment interpreter:
 
