@@ -97,6 +97,8 @@ def parse_submissions_json(
     raw_cik = str(data.get("cik", "")).strip()
     if not raw_cik:
         raise Sec13FSubmissionsError("Submissions data missing 'cik'")
+    if not raw_cik.isdigit():
+        raise Sec13FSubmissionsError("Submissions data contains a non-numeric 'cik'")
     manager_cik = raw_cik.zfill(10)
     manager_name = str(data.get("name", "")).strip() or f"CIK-{manager_cik}"
 
@@ -127,6 +129,8 @@ def parse_submissions_json(
             continue
 
         accession = str(accession_list[i]).strip()
+        if not accession:
+            raise Sec13FSubmissionsError(f"Submissions row {i} is missing accessionNumber")
         filing_date = str(filing_date_list[i]).strip() if i < len(filing_date_list) else ""
         report_period = str(report_date_list[i]).strip() if i < len(report_date_list) else ""
         accepted_at_str = str(acceptance_dt_list[i]).strip() if i < len(acceptance_dt_list) else ""

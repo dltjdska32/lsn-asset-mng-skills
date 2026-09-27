@@ -112,30 +112,79 @@ def synthesize_effective_holdings(
         )
     )
 
-    base_filing_id = eligible[0][0].filing_id
+    # Filing metadata controls the point-in-time selection; the attached holding
+    # table must independently identify that same filing, manager, and period.
+    # Reject mismatched payloads instead of letting rows cross filing boundaries.
+    valid_eligible: list[tuple[Filing13F, HoldingSet13F]] = []
+    input_integrity_errors: list[str] = []
+    for filing, h_set in eligible:
+        problems: list[str] = []
+        if h_set.filing_id != filing.filing_id:
+            problems.append("holding-set filing_id does not match filing")
+        if h_set.manager_cik != filing.manager_cik:
+            problems.append("holding-set manager_cik does not match filing")
+        if h_set.report_period != filing.report_period:
+            problems.append("holding-set report_period does not match filing")
+        if any(h.filing_id != filing.filing_id for h in h_set.holdings):
+            problems.append("one or more holding rows belong to a different filing")
+        if problems:
+            input_integrity_errors.append(
+                f"Rejected filing {filing.accession}: " + "; ".join(problems)
+            )
+        else:
+            valid_eligible.append((filing, h_set))
+
+    if not valid_eligible:
+        return None
+
+    base_filing_id = ""
     contributing_accessions: list[str] = []
     active_holdings: dict[tuple[str, str, str, str], Holding13F] = {}
     has_restatements = False
     has_additions = False
-    has_unresolved = False
-    unresolved_reasons: list[str] = []
+    has_unresolved = bool(input_integrity_errors)
+    unresolved_reasons: list[str] = list(input_integrity_errors)
     synth_warnings: list[str] = []
+    used_pairs: list[tuple[Filing13F, HoldingSet13F]] = []
+    base_accession: str | None = None
 
-    for filing, h_set in eligible:
-        contributing_accessions.append(filing.accession)
+    for filing, h_set in valid_eligible:
 
         if filing.form == Form13FKind.HR or (
             filing.form == Form13FKind.HR_A and filing.amendment_type == AmendmentType.RESTATED
         ):
+            if filing.form == Form13FKind.HR_A and filing.base_accession and base_accession and filing.base_accession != base_accession:
+                has_unresolved = True
+                unresolved_reasons.append(
+                    f"Restatement {filing.accession} references unexpected base accession {filing.base_accession}"
+                )
+                continue
             if filing.form == Form13FKind.HR_A:
                 has_restatements = True
+            if not base_filing_id:
+                base_filing_id = filing.filing_id
+                base_accession = filing.accession
             # Complete replacement of holdings
             active_holdings.clear()
             for h in h_set.holdings:
                 key = (h.cusip, h.security_class or "", str(h.put_call), str(h.quantity_type))
                 active_holdings[key] = h
+            contributing_accessions.append(filing.accession)
+            used_pairs.append((filing, h_set))
 
         elif filing.form == Form13FKind.HR_A and filing.amendment_type == AmendmentType.ADD_NEW_HOLDINGS:
+            if filing.base_accession and base_accession and filing.base_accession != base_accession:
+                has_unresolved = True
+                unresolved_reasons.append(
+                    f"Addition {filing.accession} references unexpected base accession {filing.base_accession}"
+                )
+                continue
+            if not base_filing_id:
+                has_unresolved = True
+                unresolved_reasons.append(
+                    f"Addition {filing.accession} has no prior complete holdings filing to extend"
+                )
+                continue
             has_additions = True
             # Additive merge
             for h in h_set.holdings:
@@ -154,6 +203,8 @@ def synthesize_effective_holdings(
                     # Identical duplicates are redundant; conflicting duplicates stay unresolved.
                     continue
                 active_holdings[key] = h
+            contributing_accessions.append(filing.accession)
+            used_pairs.append((filing, h_set))
 
         elif filing.form == Form13FKind.HR_A and filing.amendment_type is None:
             # Ambiguous amendment without explicit restatement vs addition designation
@@ -178,7 +229,7 @@ def synthesize_effective_holdings(
     has_missing_rows = False
     total_missing_rows = 0
     scale_uncertain = False
-    for filing, h_set in eligible:
+    for filing, h_set in used_pairs:
         if getattr(h_set, "missing_row_count", 0) > 0:
             has_missing_rows = True
             total_missing_rows += getattr(h_set, "missing_row_count", 0)
@@ -199,6 +250,9 @@ def synthesize_effective_holdings(
             key=lambda h: (h.cusip, h.security_class or "", str(h.put_call), h.holding_id),
         )
     )
+    if not base_filing_id:
+        # A notice or unattached amendment alone is not a holdings snapshot.
+        return None
     if scale_uncertain:
         total_val = Decimal("0")
     else:

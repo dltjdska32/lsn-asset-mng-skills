@@ -43,3 +43,16 @@ C:/Users/lsn/lsn-asset-mng-skills/.venv/Scripts/python.exe -m unittest tests.uni
 ## 소유권
 
 변경 파일은 C 담당인 `providers/sec_13f.py`, `institutional/{models,normalize,scoring}.py`, `decisions/briefing.py`와 해당 C 전용 unit/decision tests, 이 handoff뿐이다. 공통 계약·A/B 파일·개인 DB는 수정하지 않았다. 총괄은 이 branch를 검토한 후 자신의 통합 절차로 반영한다.
+
+## LUNA-C-02 후속 수직 슬라이스
+
+- **시작 기준 SHA**: `d341375f6687dbec4577a57a8226abfdb68cbfee`
+- **수정 범위**: C 소유 `providers/sec_13f.py`, `institutional/normalize.py`, `institutional/compare.py`, `decisions/briefing.py`, `tests/unit/test_r12_sec_13f.py` 및 본 handoff.
+- SEC submissions의 CIK가 숫자가 아니거나 제출 행에 accession이 없으면 파싱을 거부한다. 정정 합성은 filing과 holding set/개별 행의 filing ID·manager·보고기간 일치가 확인된 데이터만 수용하며, 모든 입력이 불일치하면 effective holdings를 반환하지 않는다.
+- RESTATED/ADD_NEW_HOLDINGS가 선언한 `base_accession`이 현재 원본 filing과 다르면 정정을 적용하지 않고 unresolved 상태로 유지한다.
+- 누락 행·기밀 누락 등 incomplete coverage에서는 보고 포트폴리오 총액을 분모로 한 `reported_weight`를 계산하지 않는다. 두 기간 모두 확인된 개별 수량의 변화는 남길 수 있으나 총액/비중 필드는 unavailable이다.
+- manager/보고기간/원본 holdings snapshot 자체가 비교 불가능하면 부분적인 position delta 목록도 반환하지 않고 비교 사유만 남긴다.
+- `make_institutional_briefing_context`가 동일 cutoff의 validation report, contributing accessions, 선택된 filing의 manager/report period/public availability를 결속한다. 요약은 보고 기준일·공개시점·미검증/불완전 상태만 표시하고 13F 수치·가중치는 노출하거나 판단에 반영하지 않는다.
+- 신규 synthetic E2E는 주입 transport → submissions 파싱 → cutoff별 filing 선택 → Information Table 파싱 → amendment-effective holdings → cutoff audit → 한국어 briefing까지 실행한다. 과거 cutoff에는 정정이 빠지고, 이후 cutoff에는 정정 holdings가 선택되며 브리핑은 `UNVALIDATED`와 WAIT를 유지한다.
+
+이 슬라이스에서 직접 실행한 명령은 앞선 5개 테스트 모듈 실행 명령과 같다. tzdata 포함 총괄 interpreter로 **46 tests, OK**. 실제 SEC 네트워크, 실제 archive index/cover XML 기반 table URL 발견, live identity mapping, point-in-time backtest는 실행하지 않았다. 테스트는 HTTP 대신 합성 in-memory transport를 사용했다. R13은 계속 미검증이며 C 소유 브리핑 연결만 확인했으므로 root 통합/전체 저장소 회귀는 수행하지 않았다.

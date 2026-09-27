@@ -82,27 +82,32 @@ def compare_portfolios(
             f"Current period has unresolved amendments: {current_set.unresolved_reasons}"
         )
 
-    factors = split_factors or {}
-
-    prior_scale_unc = getattr(prior_set, "scale_uncertain", False) or any(
-        h.value_scale is None for h in prior_set.holdings
-    )
-    curr_scale_unc = getattr(current_set, "scale_uncertain", False) or any(
-        h.value_scale is None for h in current_set.holdings
-    )
-    is_val_comparable = not (prior_scale_unc or curr_scale_unc)
-    comparison_warnings: list[str] = []
-    if not is_val_comparable:
-        comparison_warnings.append(
-            "Value comparison unavailable: one or more observation periods have unverified/missing value scale (value_scale is None)"
+    if not is_comparable:
+        prior_filing_id = prior_set.base_filing_id if isinstance(prior_set, EffectiveHoldingSet) else prior_set.filing_id
+        current_filing_id = current_set.base_filing_id if isinstance(current_set, EffectiveHoldingSet) else current_set.filing_id
+        return InstitutionalPortfolioComparison(
+            manager_cik=prior_set.manager_cik,
+            prior_period=prior_set.report_period,
+            current_period=current_set.report_period,
+            prior_filing_id=prior_filing_id,
+            current_filing_id=current_filing_id,
+            changes=(),
+            total_eligible_value_prior=prior_set.total_eligible_value,
+            total_eligible_value_current=current_set.total_eligible_value,
+            is_comparable=False,
+            incomparable_reasons=tuple(incomparable_reasons),
+            is_value_comparable=False,
+            coverage_status="INCOMPARABLE",
+            comparison_warnings=("No position deltas or portfolio weights were calculated because the filing sets are not comparable.",),
         )
+
+    factors = split_factors or {}
 
     prior_cov = getattr(prior_set, "coverage_status", "COMPLETE")
     curr_cov = getattr(current_set, "coverage_status", "COMPLETE")
     prior_missing = getattr(prior_set, "missing_row_count", 0)
     curr_missing = getattr(current_set, "missing_row_count", 0)
-
-    has_partial_coverage = (
+    incomplete_coverage = (
         coverage_uncertain
         or is_confidential_omission
         or prior_cov != "COMPLETE"
@@ -110,6 +115,23 @@ def compare_portfolios(
         or prior_missing > 0
         or curr_missing > 0
     )
+
+    prior_scale_unc = getattr(prior_set, "scale_uncertain", False) or any(
+        h.value_scale is None for h in prior_set.holdings
+    )
+    curr_scale_unc = getattr(current_set, "scale_uncertain", False) or any(
+        h.value_scale is None for h in current_set.holdings
+    )
+    # Reported weights use the reported portfolio total as denominator. If any
+    # rows are missing or confidentially omitted, that denominator is incomplete.
+    is_val_comparable = not (prior_scale_unc or curr_scale_unc or incomplete_coverage)
+    comparison_warnings: list[str] = []
+    if not is_val_comparable:
+        comparison_warnings.append(
+            "Reported values and weights unavailable: value scale or complete portfolio coverage is not established"
+        )
+
+    has_partial_coverage = incomplete_coverage
     overall_coverage_status = "PARTIAL" if has_partial_coverage else "COMPLETE"
     if prior_missing > 0:
         comparison_warnings.append(f"Prior period has {prior_missing} missing/skipped rows")

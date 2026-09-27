@@ -3,12 +3,80 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from decimal import Decimal
 from typing import Mapping
 
 from investment_stack.contracts.calculation import CalculationRecord, DataAvailabilityStatus, InvestmentDecision
+from investment_stack.contracts.context import PublicAvailabilityKind
+from investment_stack.contracts.institutional import Filing13F
 from investment_stack.contracts.slots import SelectedInputSet
 from investment_stack.contracts.errors import ContractValidationError
+from investment_stack.institutional.models import EffectiveHoldingSet, ValidationReport
+
+
+@dataclass(frozen=True, slots=True)
+class InstitutionalBriefingContext:
+    """Source-bound, non-scoring 13F summary for a user-facing briefing."""
+
+    report_period: str
+    publication_label: str
+    validation_status: str
+    accessions: tuple[str, ...]
+
+
+def make_institutional_briefing_context(
+    effective: EffectiveHoldingSet,
+    selected_filings: tuple[Filing13F, ...],
+    validation: ValidationReport,
+) -> InstitutionalBriefingContext:
+    """Bind an effective 13F snapshot to its selected public filings and audit cutoff."""
+    if effective.as_of != validation.as_of:
+        raise ContractValidationError("13F effective holdings and validation report must share the same cutoff")
+    filing_by_accession = {filing.accession: filing for filing in selected_filings}
+    if len(filing_by_accession) != len(selected_filings):
+        raise ContractValidationError("selected 13F accessions must be unique")
+    missing = [accession for accession in effective.contributing_accessions if accession not in filing_by_accession]
+    if missing:
+        raise ContractValidationError("effective 13F holdings reference missing selected filings")
+
+    bound = [filing_by_accession[accession] for accession in effective.contributing_accessions]
+    for filing in bound:
+        if filing.manager_cik != effective.manager_cik or filing.report_period != effective.report_period:
+            raise ContractValidationError("13F contributing filing identity does not match effective holdings")
+        if not filing.public_availability.is_point_in_time_available(effective.as_of):
+            raise ContractValidationError("13F contributing filing was not public at the pinned cutoff")
+
+    exact_times = [
+        filing.public_availability.public_available_at
+        for filing in bound
+        if filing.public_availability.kind == PublicAvailabilityKind.EXACT
+    ]
+    date_bounds = [
+        filing.public_availability.interval_end
+        for filing in bound
+        if filing.public_availability.kind == PublicAvailabilityKind.DATE_INTERVAL
+    ]
+    has_unknown = any(
+        filing.public_availability.kind == PublicAvailabilityKind.UNKNOWN for filing in bound
+    )
+    if has_unknown or not bound:
+        publication_label = "공개시각 확인 불가"
+    elif date_bounds and (not exact_times or max(date_bounds) >= max(exact_times)):
+        publication_label = f"날짜만 확인; 보수적 공개 경계 {max(date_bounds).isoformat()}"
+    else:
+        publication_label = f"공개 확인 {max(exact_times).isoformat()}"
+
+    if validation.score_status == "REJECTED":
+        validation_status = "검증 실패"
+    elif effective.has_unresolved_amendments or effective.coverage_status != "COMPLETE":
+        validation_status = "불완전·미검증"
+    else:
+        validation_status = "미검증"
+    return InstitutionalBriefingContext(
+        report_period=effective.report_period,
+        publication_label=publication_label,
+        validation_status=validation_status,
+        accessions=tuple(effective.contributing_accessions),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +110,7 @@ def generate_briefing(
     has_price: bool,
     has_policy: bool,
     has_personal_snapshot: bool,
+    institutional_context: InstitutionalBriefingContext | None = None,
 ) -> NonPostingBriefing:
     """Generate a 5-section Korean briefing without posting any trades."""
     reasons = []
@@ -132,6 +201,19 @@ def generate_briefing(
     # policy provenance, or a pinned personal snapshot. Keep all executable actions
     # unavailable until those typed integrations exist.
     reasons.append("적격 가격·가치평가 결과와 승인 정책 출처가 검증되지 않아 행동 판단을 보류합니다.")
+    core_lines = [
+        "13F 자료는 공개 지연이 있는 보조 근거이며, UNVALIDATED 점수는 판단 가중치나 거래 신호로 쓰지 않습니다."
+    ]
+    detail_lines = list(reasons)
+    if institutional_context is not None:
+        core_lines.append(
+            f"13F 보고 기준일 {institutional_context.report_period}; 공개시점: {institutional_context.publication_label}; "
+            f"점수 {institutional_context.validation_status}, 거래 판단 미반영."
+        )
+        detail_lines.append(
+            "13F 원문 accession: " + (", ".join(institutional_context.accessions) or "확인 불가")
+        )
+
     return NonPostingBriefing(
         status=DataAvailabilityStatus.PARTIAL,
         decision=InvestmentDecision.WAIT,
@@ -143,11 +225,16 @@ def generate_briefing(
             "축소 구간": "계산 불가: 승인된 축소 정책 미확인",
             "금액·수량": "계산 불가: 승인 정책 provenance 미검증",
         },
-        section_core=("13F 자료는 공개 지연이 있는 보조 근거이며, UNVALIDATED 점수는 판단 가중치나 거래 신호로 쓰지 않습니다.",),
+        section_core=tuple(core_lines),
         section_conditions=("A 도메인의 적격 가격과 가치평가 결과가 결속될 때 재평가합니다.", "승인된 정책 출처와 같은 시점의 개인 상태가 검증된 뒤에만 규모를 계산합니다."),
-        section_details=tuple(reasons),
+        section_details=tuple(detail_lines),
         reasons=tuple(reasons),
         verified_hash=inputs.snapshot_hash
     )
 
-__all__ = ["NonPostingBriefing", "generate_briefing"]
+__all__ = [
+    "InstitutionalBriefingContext",
+    "NonPostingBriefing",
+    "generate_briefing",
+    "make_institutional_briefing_context",
+]

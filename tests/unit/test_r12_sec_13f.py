@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 import unittest
 from datetime import datetime, timezone
 from decimal import Decimal
 
 from investment_stack.contracts.context import PublicAvailability
+from investment_stack.contracts.calculation import CalculationRecord, CalculationStatus, InvestmentDecision
 from investment_stack.contracts.errors import (
     ContractValidationError,
     DecimalValidationError,
@@ -28,11 +30,15 @@ from investment_stack.institutional.models import (
     EffectiveHoldingSet,
     HoldingChangeStatus,
     InstitutionalPortfolioComparison,
+    ParsedHoldingSet13F,
 )
 from investment_stack.institutional.normalize import (
     apply_split_adjustment,
     synthesize_effective_holdings,
 )
+from investment_stack.institutional.validation import run_point_in_time_audit, validate_amendment_cutoff_invariance
+from investment_stack.contracts.slots import SelectedInputSet
+from investment_stack.decisions.briefing import generate_briefing, make_institutional_briefing_context
 from investment_stack.providers.sec_13f import (
     Sec13FAdapter,
     Sec13FSubmissionsError,
@@ -166,6 +172,65 @@ SAMPLE_INFOTABLE_XML_PRE_2023 = """<?xml version="1.0" encoding="UTF-8"?>
 
 
 class TestSec13FSubmissionsParsing(unittest.TestCase):
+    def test_provider_to_point_in_time_holdings_to_briefing(self) -> None:
+        restatement_xml = b"""<informationTable><infoTable><nameOfIssuer>APPLE INC</nameOfIssuer>
+        <titleOfClass>COM</titleOfClass><cusip>037833100</cusip><value>210000000</value>
+        <shrsOrPrnAmt><sshPrnamt>1200000</sshPrnamt><sshPrnamtType>SH</sshPrnamtType></shrsOrPrnAmt>
+        </infoTable></informationTable>"""
+        tables = {
+            "fixture://0001193125-24-200002": SAMPLE_INFOTABLE_XML_POST_2023.encode(),
+            "fixture://0001193125-24-200003": restatement_xml,
+        }
+
+        def transport(url, _headers, _timeout):
+            if url.startswith("https://data.sec.gov/submissions/"):
+                return json.dumps(SAMPLE_SUBMISSIONS_JSON).encode()
+            return tables[url]
+
+        adapter = Sec13FAdapter(transport=transport)
+        filings = adapter.fetch_submissions("1067983")
+        report_period = "2024-03-31"
+        relevant = [filing for filing in filings if filing.report_period == report_period]
+        all_pairs = [
+            (filing, adapter.fetch_information_table(f"fixture://{filing.accession}", filing))
+            for filing in relevant
+        ]
+
+        before_cutoff = datetime(2024, 6, 1, tzinfo=timezone.utc)
+        before_selected = [f for f in filter_filings_by_cutoff(filings, before_cutoff) if f.report_period == report_period]
+        before_pairs = [(f, h) for f, h in all_pairs if f in before_selected]
+        before = synthesize_effective_holdings("0001067983", report_period, before_pairs, before_cutoff)
+        self.assertIsNotNone(before)
+        self.assertEqual(3, len(before.holdings))
+        self.assertNotIn("0001193125-24-200003", before.contributing_accessions)
+        self.assertFalse(validate_amendment_cutoff_invariance("0001067983", report_period, all_pairs, before_cutoff)[0])
+
+        cutoff = datetime(2024, 7, 1, tzinfo=timezone.utc)
+        selected = [f for f in filter_filings_by_cutoff(filings, cutoff) if f.report_period == report_period]
+        pairs = [(f, h) for f, h in all_pairs if f in selected]
+        effective = synthesize_effective_holdings("0001067983", report_period, pairs, cutoff)
+        self.assertIsNotNone(effective)
+        self.assertEqual(1, len(effective.holdings))
+        self.assertTrue(effective.holdings[0].filing_id.endswith("0001193125-24-200003"))
+
+        audit = run_point_in_time_audit("synthetic-audit", cutoff, 1, selected, [], pre_registered_baseline=None)
+        with self.assertRaises(ContractValidationError):
+            make_institutional_briefing_context(effective, tuple(), audit)
+        context = make_institutional_briefing_context(effective, tuple(selected), audit)
+        input_set = SelectedInputSet.create("synthetic-run", "ASSET_ANALYSIS", 1, slots=[])
+        calculation = CalculationRecord.create(
+            "synthetic-calc", "synthetic-run", "placeholder", "placeholder", "1",
+            CalculationStatus.UNAVAILABLE, [], input_set.snapshot_hash,
+        )
+        briefing = generate_briefing(
+            input_set, {"synthetic-calc": calculation}, True, True, True,
+            institutional_context=context,
+        )
+        self.assertEqual(InvestmentDecision.WAIT, briefing.decision)
+        self.assertIn("2024-03-31", " ".join(briefing.section_core))
+        self.assertIn("미검증", " ".join(briefing.section_core))
+        self.assertIn("0001193125-24-200003", " ".join(briefing.section_details))
+
     def test_parse_submissions_json_success(self) -> None:
         filings = parse_submissions_json(SAMPLE_SUBMISSIONS_JSON)
         self.assertEqual(4, len(filings))
@@ -193,6 +258,16 @@ class TestSec13FSubmissionsParsing(unittest.TestCase):
         bad_data = {"filings": {"recent": {}}}
         with self.assertRaises(Sec13FSubmissionsError):
             parse_submissions_json(bad_data)
+
+    def test_parse_submissions_json_rejects_invalid_identity(self) -> None:
+        bad_cik = json.loads(json.dumps(SAMPLE_SUBMISSIONS_JSON))
+        bad_cik["cik"] = "manager-1"
+        with self.assertRaises(Sec13FSubmissionsError):
+            parse_submissions_json(bad_cik)
+        missing_accession = json.loads(json.dumps(SAMPLE_SUBMISSIONS_JSON))
+        missing_accession["filings"]["recent"]["accessionNumber"][1] = ""
+        with self.assertRaises(Sec13FSubmissionsError):
+            parse_submissions_json(missing_accession)
 
 
 class TestSec13FInformationTableXmlParsing(unittest.TestCase):
@@ -387,6 +462,27 @@ class TestAmendmentChainSynthesis(unittest.TestCase):
         self.assertTrue(effective.has_unresolved_amendments)
         self.assertEqual(len(self.hset_orig.holdings), len(effective.holdings))
 
+    def test_filing_and_holding_set_identity_mismatch_is_rejected(self) -> None:
+        mismatched_set = dataclasses.replace(self.hset_orig, manager_cik="9999999999")
+        cutoff = datetime(2024, 6, 1, tzinfo=timezone.utc)
+        effective = synthesize_effective_holdings(
+            "0001067983", "2024-03-31", [(self.filing_orig, mismatched_set)], cutoff
+        )
+        self.assertIsNone(effective)
+
+    def test_amendment_with_different_base_accession_is_not_applied(self) -> None:
+        wrong_base = dataclasses.replace(self.filing_restate, base_accession="unrelated-accession")
+        cutoff = datetime(2024, 7, 1, tzinfo=timezone.utc)
+        effective = synthesize_effective_holdings(
+            "0001067983", "2024-03-31",
+            [(self.filing_orig, self.hset_orig), (wrong_base, self.hset_restate)],
+            cutoff,
+        )
+        self.assertIsNotNone(effective)
+        self.assertTrue(effective.has_unresolved_amendments)
+        self.assertEqual(len(self.hset_orig.holdings), len(effective.holdings))
+        self.assertNotIn(wrong_base.accession, effective.contributing_accessions)
+
     def test_notice_only_filing_does_not_clear_last_holdings(self) -> None:
         notice = dataclasses.replace(
             self.filing_restate,
@@ -414,6 +510,27 @@ class TestAmendmentChainSynthesis(unittest.TestCase):
 
 
 class TestPortfolioComparison(unittest.TestCase):
+    def test_partial_report_cannot_supply_portfolio_weight_denominator(self) -> None:
+        prior = HoldingSet13F.create(
+            "prior", "manager", "2024-03-31",
+            [Holding13F("p1", "prior", "037833100", "APPLE", Decimal("10"), Decimal("100"), Decimal("100"), Decimal("10"), value_scale=Decimal("1"))],
+        )
+        current = ParsedHoldingSet13F.create_parsed(
+            "current", "manager", "2024-06-30",
+            [Holding13F("c1", "current", "037833100", "APPLE", Decimal("12"), Decimal("120"), Decimal("120"), Decimal("12"), value_scale=Decimal("1"))],
+            total_eligible_value=Decimal("120"),
+            missing_row_count=1,
+            total_rows_observed=2,
+            coverage_status="PARTIAL_MISSING_ROWS",
+        )
+        comparison = compare_portfolios(prior, current)
+        self.assertTrue(comparison.is_comparable)
+        self.assertFalse(comparison.is_value_comparable)
+        apple = next(change for change in comparison.changes if change.cusip == "037833100")
+        self.assertIsNone(apple.prior_weight)
+        self.assertIsNone(apple.current_weight)
+        self.assertIsNone(apple.weight_change)
+
     def test_comparison_metrics_and_split_adjustment(self) -> None:
         # Prior period: Q1 with 1,000,000 AAPL shares ($175M)
         f_q1 = Filing13F(
@@ -513,6 +630,7 @@ class TestPortfolioComparison(unittest.TestCase):
         comp_diff = compare_portfolios(set_prn, set_diff_mgr)
         self.assertFalse(comp_diff.is_comparable)
         self.assertIn("Manager mismatch", comp_diff.incomparable_reasons[0])
+        self.assertEqual((), comp_diff.changes)
 
         # Identical period -> is_comparable = False
         h_f4 = [dataclasses.replace(h, filing_id="f4", holding_id=f"f4:{h.cusip}") for h in h_sh]
@@ -734,7 +852,7 @@ class TestSourceVintageAndMissingRowCoverage(unittest.TestCase):
         comp = compare_portfolios(set_prior, set_curr)
         self.assertTrue(comp.is_comparable)
         self.assertFalse(comp.is_value_comparable)
-        self.assertTrue(any("Value comparison unavailable" in w for w in comp.comparison_warnings))
+        self.assertTrue(any("Reported values and weights unavailable" in w for w in comp.comparison_warnings))
         ch = comp.changes[0]
         self.assertIsNone(ch.prior_value)
         self.assertIsNone(ch.prior_weight)
