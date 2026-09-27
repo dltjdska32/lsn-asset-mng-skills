@@ -1,5 +1,7 @@
 # 작업 상태표
 
+**독립 검토 진행 — 기준 `57aca43`:** 새 별도 Codex task `01a0e30c-b115-7db0-9a6c-b05a962b2d8c`/독립 89b8 worktree가 현재 통합 코드의 P1 반례 4건을 직접 재현했다. (1) Yahoo `exchangeDataDelayedBy=15`가 미승인 현재가로 통과(R01); (2) 포트폴리오 위험 계산이 FX 환산 전 position 금액을 환산 후 분모와 혼용(R10/R14); (3) 원장 게시 뒤 상태 기록과 오류 기록이 연속 실패할 때 게시 영수증 반환이 예외로 끊김(R14/R17); (4) 비교가 동일 period_end만으로 ANNUAL/QUARTER·US-GAAP/IFRS 차이를 무시(R02/R14/R17). 1번은 A 현재 R01 branch, 2번은 C 새 수정 branch에 즉시 회송했다. 3·4번은 A R01 인계 뒤 별도 branch 수정 배정 예정. 독립 리뷰의 첫 패스 문서/최종 SHA 재검토와 별도 최종 검증은 아직 진행 중이며 완료 아님.
+
 **최신 통합 — C 포트폴리오/가상 시나리오 서비스:** C `codex/luna-c-portfolio-modes-01`(a3b7, 기준 `27d95e4`) source `d9d3e15`·기록 `a0e0773`·FX baseline 보정 `729b727`·인계 `5c30925`를 root `df39667`→`32eb2fc`로 순서대로 통합. 총괄 직접 관련 **45/45 PASS**, 전체 **558 OK, skip1**. 실제 baseline FX 없이 시나리오 환율로 before/delta를 확정하던 반례를 발견해 C에 회송·수정·재확인했다. 두 모드의 비게시 typed 계산/보고 서비스는 있으나 고정 dispatcher/state pin·deep research 연결은 A 후속이다. A는 R01 주말 종가 제품 경로와 기존 웹 시세 회귀를 수정 중. 독립 전체 검토·다른 최종 검증은 아직 미실행. 인계 `handoffs/LUNA-C-PORTFOLIO-MODES-01.md`.
 
 **최신 일정 범위 판정:** B `codex/luna-b-calendar-coverage-01`의 공식 자료 조사 source `3f261fe`를 root `9a844b0`으로 통합(문서만 변경, 런타임 테스트 재실행 불필요). Nasdaq 2026 휴장표와 KRX 휴장 규칙·특정 공고만으로 전체 연속 세션/임시 휴장 부재를 입증할 수 없어, 임의 평일 보간 없이 기존 NASDAQ 9/24–28·KRX 9/22–28만 pinned coverage로 유지한다. 다른 주말은 검증된 거래소 일정이 추가될 때까지 UNAVAILABLE. 구체 근거 `handoffs/LUNA-B-CALENDAR-COVERAGE-01.md`; A의 실제 계산 연결은 계속 진행 중.
