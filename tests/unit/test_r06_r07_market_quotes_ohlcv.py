@@ -226,11 +226,23 @@ class TestMarketQuotesR06(unittest.TestCase):
         self.assertEqual(res.quote.price, Decimal("225.50"))
         self.assertEqual(res.quote.currency, "USD")
         self.assertEqual(res.quote.exchange, "NASDAQ")
+        self.assertEqual(res.quote.quote_kind, QuoteKind.DELAYED)
+        self.assertIsNone(res.quote.delay_minutes)
+        delayed = json.loads(json.dumps(payload))
+        delayed["chart"]["result"][0]["meta"]["exchangeDataDelayedBy"] = 15
+        delayed_result = parse_yahoo_quote(delayed, instrument_id="NASDAQ:AAPL")
+        self.assertEqual(delayed_result.quote.delay_minutes, 15)
 
         # Identity mismatch
         res_mismatch = parse_yahoo_quote(payload, instrument_id="NASDAQ:MSFT")
         self.assertFalse(res_mismatch.is_usable)
         self.assertIn("IDENTITY_MISMATCH", res_mismatch.error_reasons[0])
+
+        wrong_market = json.loads(json.dumps(payload))
+        wrong_market["chart"]["result"][0]["meta"]["exchangeName"] = "NYSE"
+        wrong_market = parse_yahoo_quote(wrong_market, instrument_id="NASDAQ:AAPL")
+        self.assertFalse(wrong_market.is_usable)
+        self.assertIn("MARKET_METADATA_MISMATCH", wrong_market.error_reasons[0])
 
 
     def test_btc_eur_is_rejected_before_usd_transport(self) -> None:
@@ -268,6 +280,43 @@ class TestMarketQuotesR06(unittest.TestCase):
         self.assertEqual(checked, ["COINBASE", "KRAKEN"])
         self.assertIn("INELIGIBLE", result.metadata["attempts"][0]["reason"])
 
+    def test_provider_without_freshness_evaluator_never_returns_available(self) -> None:
+        as_of = datetime(2026, 9, 23, 9, 30, tzinfo=timezone.utc)
+        payload = {"price": "63500.50", "time": "2026-09-23T09:29:00Z"}
+        provider = MarketQuoteProvider(
+            transport=lambda url, *_: (200, json.dumps(payload).encode(), {}), clock=lambda: as_of,
+        )
+        result = provider.fetch_current("CRYPTO:BTC/USD", analysis_as_of=as_of)
+        self.assertEqual(result.status.value, "UNAVAILABLE")
+        self.assertEqual(result.reason, "FRESHNESS_EVALUATOR_NOT_CONFIGURED")
+        self.assertNotIn("contract_quote", result.metadata)
+        self.assertTrue(any("FRESHNESS_EVALUATOR_NOT_CONFIGURED" in a["reason"] for a in result.metadata["attempts"]))
+
+    def test_provider_evaluator_error_is_recorded_and_fails_closed(self) -> None:
+        as_of = datetime(2026, 9, 23, 9, 30, tzinfo=timezone.utc)
+        payload = {"price": "63500.50", "time": "2026-09-23T09:29:00Z"}
+        provider = MarketQuoteProvider(
+            transport=lambda url, *_: (200, json.dumps(payload).encode(), {}), clock=lambda: as_of,
+        )
+        def broken_evaluator(quote, cutoff):
+            raise RuntimeError("fixture failure")
+        result = provider.fetch_current("CRYPTO:BTC/USD", analysis_as_of=as_of,
+            eligibility_evaluator=broken_evaluator)
+        self.assertEqual(result.status.value, "UNAVAILABLE")
+        self.assertTrue(any("ELIGIBILITY_EVALUATOR_ERROR: RuntimeError" in a["reason"] for a in result.metadata["attempts"]))
+
+    def test_provider_all_candidates_failed_is_audited(self) -> None:
+        calls = []
+        provider = MarketQuoteProvider(transport=lambda url, *_: (calls.append(url) or (403, b"denied", {})))
+        result = provider.fetch_current(
+            "CRYPTO:BTC/USD", analysis_as_of=datetime(2026, 9, 23, tzinfo=timezone.utc),
+            eligibility_evaluator=lambda quote, cutoff: (True, None),
+        )
+        self.assertEqual(result.status.value, "UNAVAILABLE")
+        self.assertEqual(result.reason, "CANDIDATES_EXHAUSTED")
+        self.assertEqual(len(calls), 3)
+        self.assertTrue(all(a["status_code"] == 403 for a in result.metadata["attempts"]))
+
     def test_fundamentals_candidate_is_not_called_for_current_price(self) -> None:
         calls = []
         provider = MarketQuoteProvider(
@@ -288,9 +337,48 @@ class TestMarketQuotesR06(unittest.TestCase):
         result = execute_quote_fallback_sequence(
             "CRYPTO:BTC/USD", transport=lambda *args: (200, json.dumps(payload).encode(), {}),
             analysis_as_of=cutoff, clock=lambda: retrieved,
+            eligibility_evaluator=lambda quote, as_of: (True, None),
         )
         self.assertEqual(result.status, "SUCCESS")
         self.assertEqual(result.selected_quote.retrieved_at, retrieved)
+
+    def test_quote_fallback_helper_without_evaluator_does_not_select_candidate(self) -> None:
+        cutoff = datetime(2026, 9, 23, 9, 30, tzinfo=timezone.utc)
+        payload = {"price": "63500.50", "time": "2026-09-23T09:29:00Z"}
+        result = execute_quote_fallback_sequence(
+            "CRYPTO:BTC/USD", transport=lambda *args: (200, json.dumps(payload).encode(), {}),
+            analysis_as_of=cutoff,
+        )
+        self.assertEqual(result.status, "FRESHNESS_EVALUATOR_REQUIRED")
+        self.assertIsNone(result.selected_quote)
+        self.assertTrue(any(a.error_reason == "FRESHNESS_EVALUATOR_NOT_CONFIGURED" for a in result.attempts))
+
+    def test_quote_fallback_helper_stale_candidate_advances_to_fresh_alternate(self) -> None:
+        cutoff = datetime(2026, 9, 23, 9, 30, tzinfo=timezone.utc)
+        stale_coinbase = {"price": "63000", "time": "2026-09-23T08:00:00Z"}
+        fresh_kraken = {"error": [], "result": {"XXBTZUSD": [["63501", "0.1", cutoff.timestamp() - 30, "b", "l", "", "2"]], "last": "cursor"}}
+        result = execute_quote_fallback_sequence(
+            "CRYPTO:BTC/USD", transport=lambda *args: (503, b"", {}), analysis_as_of=cutoff,
+            fixtures_by_source={"coinbase_public": stale_coinbase, "kraken_trades": fresh_kraken},
+            clock=lambda: cutoff,
+            eligibility_evaluator=lambda quote, as_of: (quote.venue == "KRAKEN", "stale or unapproved source"),
+        )
+        self.assertEqual(result.status, "SUCCESS")
+        self.assertEqual(result.selected_quote.venue, "KRAKEN")
+        self.assertFalse(result.attempts[0].success)
+        self.assertTrue(result.attempts[1].success)
+
+    def test_quote_fallback_helper_rejects_future_observation_even_if_evaluator_accepts(self) -> None:
+        cutoff = datetime(2026, 9, 23, 9, 30, tzinfo=timezone.utc)
+        payload = {"price": "63500", "time": "2026-09-23T09:31:00Z"}
+        result = execute_quote_fallback_sequence(
+            "CRYPTO:BTC/USD", transport=lambda *args: (200, json.dumps(payload).encode(), {}),
+            analysis_as_of=cutoff, clock=lambda: cutoff,
+            eligibility_evaluator=lambda quote, as_of: (True, None),
+        )
+        self.assertEqual(result.status, "CANDIDATES_EXHAUSTED")
+        self.assertIsNone(result.selected_quote)
+        self.assertTrue(any(a.error_reason and a.error_reason.startswith("FUTURE_PRICE") for a in result.attempts))
 
 
 class TestOHLCVR07(unittest.TestCase):

@@ -40,6 +40,31 @@ def _supports_btc_usd(instrument_id: str, currency: str = "USD") -> bool:
     return currency.upper() == "USD" and pair in {"BTC/USD", "XBT/USD", "BTCUSD", "XBTUSD"}
 
 
+def quote_matches_requested_market(quote: MarketQuote, instrument_id: str) -> tuple[bool, str | None]:
+    """Check response identity, exchange, and currency against the requested listing."""
+    if quote.instrument_id != instrument_id:
+        return False, "IDENTITY_MISMATCH: normalized quote instrument differs from request"
+    prefix, _, _ticker = instrument_id.partition(":")
+    prefix = prefix.upper()
+    expectations = {
+        "KRX": ("KRX", "KRW"), "KOSDAQ": ("KOSDAQ", "KRW"),
+        "NASDAQ": ("NASDAQ", "USD"), "NYSE": ("NYSE", "USD"),
+        "TSE": ("JPX", "JPY"), "JPX": ("JPX", "JPY"),
+    }
+    expected = expectations.get(prefix)
+    if expected is not None:
+        expected_exchange, expected_currency = expected
+        if quote.currency.upper() != expected_currency:
+            return False, f"CURRENCY_MISMATCH: expected {expected_currency}, got {quote.currency}"
+        exchange_aliases = {"KS": "KRX", "KQ": "KOSDAQ", "NMS": "NASDAQ", "NASDAQGS": "NASDAQ", "NYQ": "NYSE", "TSE": "JPX"}
+        actual_exchange = exchange_aliases.get((quote.exchange or "").upper(), (quote.exchange or "").upper())
+        if actual_exchange != expected_exchange:
+            return False, f"EXCHANGE_MISMATCH: expected {expected_exchange}, got {quote.exchange or 'UNKNOWN'}"
+    if prefix == "CRYPTO" and not _supports_btc_usd(instrument_id, quote.currency):
+        return False, "UNSUPPORTED_SOURCE_PAIR: requested pair is not BTC/USD"
+    return True, None
+
+
 class MarketQuoteError(Exception):
     """Base exception for market quote parsing and retrieval errors."""
 
@@ -149,6 +174,13 @@ def parse_naver_basic_quote(
         exchange_code = str(data["stockExchangeName"]).strip().upper()
 
     metadata = _EXCHANGE_METADATA.get(exchange_code, {})
+    requested_prefix = instrument_id.split(":", 1)[0].upper() if instrument_id and ":" in instrument_id else ""
+    if requested_prefix in {"KRX", "KOSDAQ"} and not metadata:
+        return MarketQuoteParseResult(quote=None, observation=None,
+            error_reasons=("UNVERIFIED_EXCHANGE_IDENTITY: Naver response lacks a recognized exchange code",))
+    if requested_prefix in {"KRX", "KOSDAQ"} and metadata.get("exchange") != requested_prefix:
+        return MarketQuoteParseResult(quote=None, observation=None,
+            error_reasons=(f"EXCHANGE_MISMATCH: expected {requested_prefix}, got {metadata.get('exchange')}",))
     currency = metadata.get("currency")
     exchange_name = metadata.get("exchange", exchange_code or "KRX")
     tz_name = metadata.get("timezone", "Asia/Seoul")
@@ -396,7 +428,7 @@ def parse_coinbase_ticker(
         venue="COINBASE",
         market_session_date=claimed_market_time.strftime("%Y-%m-%d"),
         claimed_market_time=claimed_market_time,
-        delay_minutes=0,
+        delay_minutes=None,
         is_trade=True,
     )
 
@@ -534,7 +566,7 @@ def parse_kraken_trades(
         venue="KRAKEN",
         market_session_date=claimed_market_time.strftime("%Y-%m-%d"),
         claimed_market_time=claimed_market_time,
-        delay_minutes=0,
+        delay_minutes=None,
         is_trade=True,
     )
 
@@ -628,8 +660,17 @@ def parse_yahoo_quote(
             quote=None, observation=None, error_reasons=(f"INVALID_PRICE_FORMAT: {exc}",)
         )
 
-    currency = str(meta.get("currency", "USD")).strip().upper()
-    exchange_name = str(meta.get("exchangeName", "NASDAQ")).strip()
+    currency = str(meta.get("currency", "")).strip().upper()
+    exchange_name = str(meta.get("exchangeName", "")).strip()
+    requested_prefix = instrument_id.split(":", 1)[0].upper() if ":" in instrument_id else ""
+    exchange_alias = {"NMS": "NASDAQ", "NASDAQGS": "NASDAQ", "NYQ": "NYSE", "NYSE": "NYSE"}
+    normalized_exchange = exchange_alias.get(exchange_name.upper(), exchange_name.upper())
+    expected_us = {"NASDAQ": ("NASDAQ", "USD"), "NYSE": ("NYSE", "USD")}.get(requested_prefix)
+    if not currency or not exchange_name:
+        return MarketQuoteParseResult(quote=None, observation=None, error_reasons=("MISSING_EXCHANGE_OR_CURRENCY",))
+    if expected_us and (normalized_exchange != expected_us[0] or currency != expected_us[1]):
+        return MarketQuoteParseResult(quote=None, observation=None,
+            error_reasons=(f"MARKET_METADATA_MISMATCH: expected {expected_us[0]}/{expected_us[1]}, got {normalized_exchange}/{currency}",))
     tz_name = str(meta.get("exchangeTimezoneName", "America/New_York")).strip()
 
     epoch_time = meta.get("regularMarketTime")
@@ -653,20 +694,32 @@ def parse_yahoo_quote(
         available_at=claimed_market_time, locator=resolved_source_url
     )
 
+    delay_minutes: int | None = None
+    raw_delay = meta.get("exchangeDataDelayedBy")
+    if raw_delay is not None and not isinstance(raw_delay, bool):
+        try:
+            parsed_delay = int(raw_delay)
+            if parsed_delay < 0:
+                raise ValueError("negative delay")
+            delay_minutes = parsed_delay
+        except (TypeError, ValueError):
+            return MarketQuoteParseResult(quote=None, observation=None,
+                error_reasons=("INVALID_DELAY_METADATA",))
+    quote_kind = QuoteKind.DELAYED if delay_minutes is None or delay_minutes > 0 else QuoteKind.REGULAR
     quote = MarketQuote(
         quote_id=f"quote_{resolved_evidence_id}",
         evidence_id=resolved_evidence_id,
         instrument_id=instrument_id,
         currency=currency,
         price=price,
-        quote_kind=QuoteKind.REGULAR,
+        quote_kind=quote_kind,
         retrieved_at=retrieved,
         public_availability=pub_avail,
         exchange=exchange_name,
         venue=exchange_name,
         market_session_date=claimed_market_time.strftime("%Y-%m-%d"),
         claimed_market_time=claimed_market_time,
-        delay_minutes=None,
+        delay_minutes=delay_minutes,
         is_trade=True,
     )
 
@@ -687,8 +740,10 @@ def parse_yahoo_quote(
         market_session_date=quote.market_session_date,
         official_confirmation_status="EXCHANGE_CONFIRMED",
         metadata={
-            "quote_kind": str(QuoteKind.REGULAR),
+            "quote_kind": str(quote_kind),
             "exchange": exchange_name,
+            "delay_minutes": delay_minutes,
+            "delay_status": "UNKNOWN" if delay_minutes is None else "REPORTED",
         },
     )
 
@@ -979,6 +1034,9 @@ class MarketQuoteProvider:
             as_of_dt = datetime.fromisoformat(analysis_as_of)
         else:
             as_of_dt = analysis_as_of
+        if as_of_dt.tzinfo is None:
+            return ProviderResult(provider=self.name, capability=ProviderCapability.CURRENT_PRICE,
+                status=ProviderStatus.UNAVAILABLE, reason="ANALYSIS_AS_OF_MUST_BE_TIMEZONE_AWARE")
 
         now_clock = clock or self._clock
         current_retrieved_at = now_clock()
@@ -1091,6 +1149,13 @@ class MarketQuoteProvider:
 
             quote = parse_res.quote
 
+            identity_ok, identity_reason = quote_matches_requested_market(quote, instrument_id)
+            if not identity_ok:
+                attempt_record["success"] = False
+                attempt_record["reason"] = identity_reason
+                attempts.append(attempt_record)
+                continue
+
             # Universal Future Rejection Invariant
             if quote.claimed_market_time is not None:
                 q_time_utc = (
@@ -1107,14 +1172,25 @@ class MarketQuoteProvider:
                     attempts.append(attempt_record)
                     continue
 
-            # Explicit Caller Eligibility Evaluator Check (e.g. freshness/stale policy)
-            if eligibility_evaluator is not None:
+            # Parsing proves shape/identity only. Without the configured freshness policy,
+            # a candidate is never promoted to an AVAILABLE calculation input.
+            if eligibility_evaluator is None:
+                attempt_record["success"] = False
+                attempt_record["reason"] = "FRESHNESS_EVALUATOR_NOT_CONFIGURED"
+                attempts.append(attempt_record)
+                continue
+            try:
                 is_eligible, eval_reason = eligibility_evaluator(quote, as_of_dt)
-                if not is_eligible:
-                    attempt_record["success"] = False
-                    attempt_record["reason"] = f"INELIGIBLE: {eval_reason}"
-                    attempts.append(attempt_record)
-                    continue
+            except Exception as exc:
+                attempt_record["success"] = False
+                attempt_record["reason"] = f"ELIGIBILITY_EVALUATOR_ERROR: {type(exc).__name__}"
+                attempts.append(attempt_record)
+                continue
+            if not is_eligible:
+                attempt_record["success"] = False
+                attempt_record["reason"] = f"INELIGIBLE: {eval_reason}"
+                attempts.append(attempt_record)
+                continue
 
             # Success! Stop fallback sequence immediately
             attempt_record["success"] = True
@@ -1136,7 +1212,9 @@ class MarketQuoteProvider:
             provider=self.name,
             capability=ProviderCapability.CURRENT_PRICE,
             status=ProviderStatus.UNAVAILABLE,
-            reason="CANDIDATES_EXHAUSTED",
+            reason=("FRESHNESS_EVALUATOR_NOT_CONFIGURED" if any(
+                attempt.get("reason") == "FRESHNESS_EVALUATOR_NOT_CONFIGURED" for attempt in attempts
+            ) else "CANDIDATES_EXHAUSTED"),
             metadata={"attempts": tuple(attempts)},
         )
 

@@ -15,12 +15,14 @@ from typing import Any, Callable, Mapping, Sequence
 from investment_stack.contracts.market import MarketQuote
 from investment_stack.providers.market_quotes import (
     HttpTransport,
+    EligibilityEvaluator,
     parse_coinbase_ticker,
     parse_investing_quote,
     parse_kraken_ticker,
     parse_kraken_trades,
     parse_naver_basic_quote,
     parse_yahoo_quote,
+    quote_matches_requested_market,
 )
 
 
@@ -233,6 +235,7 @@ def execute_quote_fallback_sequence(
     prefer_extended_hours: bool = False,
     fixtures_by_source: Mapping[str, Any] | None = None,
     clock: Callable[[], datetime] | None = None,
+    eligibility_evaluator: EligibilityEvaluator | None = None,
 ) -> FallbackSequenceResult:
     """Execute prioritized candidate fallback sequence for an instrument.
 
@@ -255,6 +258,8 @@ def execute_quote_fallback_sequence(
             attempts=(),
             status="UNSUPPORTED_MARKET",
         )
+    if analysis_as_of.tzinfo is None:
+        return FallbackSequenceResult(instrument_id, market, None, (), "INVALID_ANALYSIS_AS_OF")
 
     candidates = SOURCE_CANDIDATE_ORDER.get(market, ())
     attempts: list[FallbackAttemptRecord] = []
@@ -318,6 +323,10 @@ def execute_quote_fallback_sequence(
 
             if parse_res and parse_res.is_usable and parse_res.quote:
                 quote = parse_res.quote
+                identity_ok, identity_reason = quote_matches_requested_market(quote, instrument_id)
+                if not identity_ok:
+                    attempts.append(FallbackAttemptRecord(spec.source_id, spec.priority, url, started, finished, False, 200, identity_reason))
+                    continue
                 if quote.claimed_market_time is not None:
                     q_time = (
                         quote.claimed_market_time
@@ -343,6 +352,18 @@ def execute_quote_fallback_sequence(
                             )
                         )
                         continue
+
+                if eligibility_evaluator is None:
+                    attempts.append(FallbackAttemptRecord(spec.source_id, spec.priority, url, started, finished, False, 200, "FRESHNESS_EVALUATOR_NOT_CONFIGURED"))
+                    continue
+                try:
+                    eligible, reason = eligibility_evaluator(quote, analysis_as_of)
+                except Exception as exc:
+                    attempts.append(FallbackAttemptRecord(spec.source_id, spec.priority, url, started, finished, False, 200, f"ELIGIBILITY_EVALUATOR_ERROR: {type(exc).__name__}"))
+                    continue
+                if not eligible:
+                    attempts.append(FallbackAttemptRecord(spec.source_id, spec.priority, url, started, finished, False, 200, f"INELIGIBLE: {reason}"))
+                    continue
 
                 attempts.append(
                     FallbackAttemptRecord(
@@ -434,6 +455,28 @@ def execute_quote_fallback_sequence(
                 parse_res = None
 
             if parse_res and parse_res.is_usable and parse_res.quote:
+                identity_ok, identity_reason = quote_matches_requested_market(parse_res.quote, instrument_id)
+                if not identity_ok:
+                    attempts.append(FallbackAttemptRecord(spec.source_id, spec.priority, url, started, finished, False, status_code, identity_reason))
+                    continue
+                quote_time = parse_res.quote.claimed_market_time
+                cutoff = analysis_as_of if analysis_as_of.tzinfo else analysis_as_of.replace(tzinfo=timezone.utc)
+                if quote_time is not None:
+                    quote_time = quote_time if quote_time.tzinfo else quote_time.replace(tzinfo=timezone.utc)
+                    if quote_time > cutoff:
+                        attempts.append(FallbackAttemptRecord(spec.source_id, spec.priority, url, started, finished, False, status_code, f"FUTURE_PRICE: {quote_time} > {cutoff}"))
+                        continue
+                if eligibility_evaluator is None:
+                    attempts.append(FallbackAttemptRecord(spec.source_id, spec.priority, url, started, finished, False, status_code, "FRESHNESS_EVALUATOR_NOT_CONFIGURED"))
+                    continue
+                try:
+                    eligible, reason = eligibility_evaluator(parse_res.quote, analysis_as_of)
+                except Exception as exc:
+                    attempts.append(FallbackAttemptRecord(spec.source_id, spec.priority, url, started, finished, False, status_code, f"ELIGIBILITY_EVALUATOR_ERROR: {type(exc).__name__}"))
+                    continue
+                if not eligible:
+                    attempts.append(FallbackAttemptRecord(spec.source_id, spec.priority, url, started, finished, False, status_code, f"INELIGIBLE: {reason}"))
+                    continue
                 attempts.append(
                     FallbackAttemptRecord(
                         source_id=spec.source_id,
@@ -482,10 +525,11 @@ def execute_quote_fallback_sequence(
                 )
             )
 
+    unqualified = any(a.error_reason == "FRESHNESS_EVALUATOR_NOT_CONFIGURED" for a in attempts)
     return FallbackSequenceResult(
         instrument_id=instrument_id,
         market=market,
         selected_quote=None,
         attempts=tuple(attempts),
-        status="CANDIDATES_EXHAUSTED",
+        status="FRESHNESS_EVALUATOR_REQUIRED" if unqualified else "CANDIDATES_EXHAUSTED",
     )
