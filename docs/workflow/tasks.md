@@ -1,5 +1,9 @@
 # 작업 상태표
 
+**RC05 분기 순서·연속성 수정 통합 — root `b5ff354`:** C source `fa797fe`를 통합. 역순·비인접·비분기말 13F 비교와 관리자별 gap/중복 chain을 fail-closed로 차단하고 정상 인접 분기만 PIT/연속 보유를 계산한다. C는 전체 578 OK(skip1)를 자기 branch에서 직접 실행했고, 총괄은 root에서 독립 첫 패스 5/5, 독립 중간 3/3 및 RC05 전용 3/3 PASS를 재실행했다. 현재 root 전체 회귀·최종 독립 재검토는 C/B 후속 수정 통합 뒤 필요하다.
+
+**독립 신규 리뷰 RC08/RC09:** reviewer가 b1f4514에서 R15 P2 RC08(sdist에 포함된 packaging test가 제외된 ARCHITECTURE.md를 읽어 unpacked sdist 실패), R14 P2 RC09(refresh 상태 pin 전용 handler가 등록되지 않아 typed_portfolio_request 누락을 잘못 반환)을 합성 반례로 재현했다. RC06/07와 합쳐 네 probe는 현재 4/4 FAIL. RC08은 B, RC09와 RC06/07·A/C replay 연결은 C에 배정했다. 독립 probe/보고서 인수·수정·재검증 전이며 완료 아님.
+
 **독립 신규 번들 검토 P1 회송:** REVIEW-CODE-01 세션이 root `b1f4514`의 C 네 모드 번들에서 두 합성 반례를 직접 재현했다. RC06 refresh에서 enriched report_ref 기록 시 metadata 병합 순서가 옛 ref로 덮어써 반환 ref를 run.db manifest에서 조회 못 함. RC07 THESIS_REVIEW가 요청 run ID/모드/시각과 bound run.db를 대조하지 않아 다른 run.db에 결과를 저장하고 요청 cutoff 뒤 증거를 승인함. C에 현재 RC05 기간 순서 수정 인계 뒤 별도 branch/worktree 보정 배정, reviewer는 재현 코드·보고서 작성 중. 최신 통합 번들은 이 두 반례 수정 전이므로 완료 아님.
 
 **RC04 지표별 근거 보정 통합 — root `5448863`:** A source `b8a961e`를 통합. 선택된 각 재무 observation의 기간/회계 context를 metric 단위로 검사해 EPS만 누락된 경우 EPS 숫자/delta를 제외하고 정상 revenue 비교를 유지한다. 총괄 관련 7/7 PASS, 독립 중간 3반례 중 RC04 1개 PASS·RC05 역순/gap 2개는 여전히 FAIL로 확인. A는 C refresh 경계 중 A 소유 analysis_modes pin/replay 후속 진행 중이다.
