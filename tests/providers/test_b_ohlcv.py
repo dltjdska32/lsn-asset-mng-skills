@@ -29,7 +29,8 @@ class TestBOHLCV(unittest.TestCase):
             payload,
             instrument_id="KRX:005930",
             analysis_as_of=as_of,
-            adjustment_verified=True
+            adjustment_verified=True,
+            adjustment_receipt="fixture:reviewed-adjustment",
         )
 
         self.assertTrue(res.is_usable)
@@ -59,7 +60,8 @@ class TestBOHLCV(unittest.TestCase):
             payload,
             instrument_id="KRX:005930",
             analysis_as_of=as_of,
-            adjustment_verified=True
+            adjustment_verified=True,
+            adjustment_receipt="fixture:reviewed-adjustment",
         )
 
         self.assertEqual(len(res.bars), 0)

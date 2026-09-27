@@ -308,7 +308,6 @@ def parse_naver_basic_quote(
             "delay_minutes": delay_minutes,
             "fluctuations_ratio": data.get("fluctuationsRatio"),
             "market_session_type": market_session_type,
-            "calculation_input_approved": True,
         },
     )
 
@@ -422,7 +421,6 @@ def parse_coinbase_ticker(
             "trade_id": data.get("trade_id"),
             "volume_24h": str(data.get("volume", "")),
             "venue": "COINBASE",
-            "calculation_input_approved": True,
         },
     )
 
@@ -563,7 +561,6 @@ def parse_kraken_trades(
             "side": str(row[3]),
             "order_type": str(row[4]),
             "venue": "KRAKEN",
-            "calculation_input_approved": True,
         },
     )
 
@@ -692,7 +689,6 @@ def parse_yahoo_quote(
         metadata={
             "quote_kind": str(QuoteKind.REGULAR),
             "exchange": exchange_name,
-            "calculation_input_approved": True,
         },
     )
 
@@ -821,7 +817,6 @@ def parse_investing_quote(
         metadata={
             "quote_kind": str(quote_kind),
             "exchange": exchange,
-            "calculation_input_approved": True,
         },
     )
 
@@ -938,7 +933,6 @@ def parse_kraken_ticker(
         metadata={
             "quote_kind": str(QuoteKind.REGULAR),
             "pair": pair,
-            "calculation_input_approved": True,
         },
     )
 

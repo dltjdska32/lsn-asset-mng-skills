@@ -9,6 +9,10 @@ Guarantees:
   but NOT promoted to validated BarSet/technical input without explicit verification receipts.
 - Yahoo Chart OHLCV parser supporting live-verified 1d interval feeds.
 - Incomplete bars are strictly isolated and barred from completed BarSet series.
+
+Limits:
+- Exchange holidays/session gaps are not validated against an official calendar.
+- Adjustment receipts are caller-provided markers; this module does not verify them against corporate-action records.
 """
 
 from __future__ import annotations
@@ -17,7 +21,9 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
 import json
+import re
 from typing import Any, Callable, Mapping, Sequence
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 from investment_stack.contracts.codec import parse_finite_decimal
@@ -27,10 +33,19 @@ from investment_stack.providers.models import ProviderObservation, ProviderResul
 from investment_stack.providers.registry import ProviderCapability
 
 HttpTransport = Callable[[str, Mapping[str, str] | None, float], tuple[int, bytes, Mapping[str, str]]]
+_NAVER_NUMBER = re.compile(r"^[+-]?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?$")
 
 
 def _safe_json_loads(payload: str | bytes) -> Any:
     return json.loads(payload, parse_float=Decimal)
+
+
+def _parse_naver_decimal(value: Any) -> Decimal:
+    """Parse Naver's decimal strings, allowing only correctly grouped thousands commas."""
+    text = str(value).strip()
+    if not _NAVER_NUMBER.fullmatch(text):
+        raise ValueError(f"Invalid Naver numeric format: {text!r}")
+    return parse_finite_decimal(text.replace(",", ""))
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,7 +66,7 @@ class OHLCVParseResult:
 
 
 def parse_naver_ohlcv(
-    payload: Mapping[str, Any] | str | bytes,
+    payload: Mapping[str, Any] | Sequence[Mapping[str, Any]] | str | bytes,
     *,
     instrument_id: str = "KRX:005930",
     currency: str = "KRW",
@@ -60,6 +75,7 @@ def parse_naver_ohlcv(
     session_end: str = "15:30:00",
     interval: str = "1D",
     analysis_as_of: datetime | None = None,
+    request_url: str | None = None,
     evidence_id_prefix: str | None = None,
     adjustment_verified: bool = False,
     adjustment_receipt: str | None = None,
@@ -69,9 +85,8 @@ def parse_naver_ohlcv(
 
     Enforces:
     1. Identity check: payload code must match requested instrument.
-    2. Adjustment fidelity: If adjustment_verified is False and adjustment_receipt is None,
-       the bars are preserved in raw form (AdjustmentMode.RAW) and NOT promoted to BarSet,
-       returning is_usable=False with UNVERIFIED_ADJUSTMENT reason.
+    2. Adjustment fidelity: A strict `adjustment_verified is True` and a non-empty receipt
+       are both required to create a BarSet. Otherwise raw bars are preserved but blocked.
     3. Price bounds: low <= min(open, close) <= max(open, close) <= high.
     4. Session completeness: if session_close > analysis_as_of, bar is placed in incomplete_bars.
     """
@@ -84,7 +99,53 @@ def parse_naver_ohlcv(
                 error_reasons=(f"JSON_DECODE_ERROR: {exc}",),
             )
     else:
-        data = dict(payload)
+        data = payload
+
+    # Naver's public `/price` endpoint returns a top-level list with no echoed
+    # instrument id. Bind that response only to the exact public request route;
+    # a detached list fixture cannot establish which instrument it belongs to.
+    if isinstance(data, (list, tuple)):
+        parsed_url = urlparse(request_url or "")
+        route_parts = parsed_url.path.strip("/").split("/")
+        expected_code = instrument_id.split(":")[-1].strip()
+        if (
+            parsed_url.scheme != "https"
+            or parsed_url.hostname != "m.stock.naver.com"
+            or parsed_url.port not in (None, 443)
+            or len(route_parts) != 4
+            or route_parts[:2] != ["api", "stock"]
+            or route_parts[3] != "price"
+        ):
+            return OHLCVParseResult(
+                bar_set=None,
+                error_reasons=("UNBOUND_RESPONSE_IDENTITY: Naver list response requires its public /price request URL",),
+            )
+        route_code = route_parts[2]
+        if route_code != expected_code:
+            return OHLCVParseResult(
+                bar_set=None,
+                error_reasons=(f"IDENTITY_MISMATCH: request route code '{route_code}' does not match requested '{expected_code}'",),
+            )
+        normalized_items: list[dict[str, Any]] = []
+        for item in data:
+            if not isinstance(item, Mapping):
+                normalized_items.append({})
+                continue
+            raw_date = str(item.get("localTradedAt", "")).strip()
+            normalized_date = raw_date.replace("-", "") if len(raw_date) == 10 else raw_date
+            normalized_items.append({
+                "localDate": normalized_date,
+                "openPrice": item.get("openPrice"),
+                "highPrice": item.get("highPrice"),
+                "lowPrice": item.get("lowPrice"),
+                "closePrice": item.get("closePrice"),
+                "accumulatedTradingVolume": item.get("accumulatedTradingVolume"),
+            })
+        data = {"code": route_code, "priceInfos": normalized_items}
+    elif isinstance(data, Mapping):
+        data = dict(data)
+    else:
+        return OHLCVParseResult(bar_set=None, error_reasons=("INVALID_NAVER_PRICE_PAYLOAD",))
 
     # 1. Identity Check
     payload_code = data.get("code")
@@ -128,7 +189,10 @@ def parse_naver_ohlcv(
     discarded_bars: list[dict[str, Any]] = []
     seen_dates: set[str] = set()
 
-    is_adj_confirmed = adjustment_verified or bool(adjustment_receipt)
+    has_adjustment_receipt = (
+        isinstance(adjustment_receipt, str) and bool(adjustment_receipt.strip())
+    )
+    is_adj_confirmed = adjustment_verified is True and has_adjustment_receipt
     resolved_adj_mode = (
         AdjustmentMode.SPLIT_ADJUSTED if is_adj_confirmed else AdjustmentMode.RAW
     )
@@ -168,11 +232,11 @@ def parse_naver_ohlcv(
             continue
 
         try:
-            o = parse_finite_decimal(str(item["openPrice"]))
-            h = parse_finite_decimal(str(item["highPrice"]))
-            l = parse_finite_decimal(str(item["lowPrice"]))
-            c = parse_finite_decimal(str(item["closePrice"]))
-            v = parse_finite_decimal(str(item.get("accumulatedTradingVolume", "0")))
+            o = _parse_naver_decimal(item["openPrice"])
+            h = _parse_naver_decimal(item["highPrice"])
+            l = _parse_naver_decimal(item["lowPrice"])
+            c = _parse_naver_decimal(item["closePrice"])
+            v = _parse_naver_decimal(item.get("accumulatedTradingVolume", "0"))
         except Exception as exc:
             discarded_bars.append({"index": idx, "reason": f"DECIMAL_PARSE_ERROR: {exc}", "item": item})
             continue
@@ -206,7 +270,7 @@ def parse_naver_ohlcv(
         pub_avail = PublicAvailability.from_source_date(
             source_date=bar_date,
             source_timezone=timezone_str,
-            locator=f"naver_ohlcv:{instrument_id}",
+            locator=request_url or f"naver_ohlcv:{instrument_id}",
         )
 
         bar = Bar(
@@ -246,7 +310,7 @@ def parse_naver_ohlcv(
             incomplete_bars=tuple(incomplete_bars),
             discarded_bars=tuple(discarded_bars),
             error_reasons=(
-                "UNVERIFIED_ADJUSTMENT: source payload lacks explicit split/adjustment metadata or corporate action receipt",
+                "UNVERIFIED_ADJUSTMENT: requires a strict verified flag and a non-empty adjustment receipt",
             ),
             adjustment_verified=False,
         )
@@ -633,6 +697,7 @@ class OHLCVProvider:
                     instrument_id=instrument_id,
                     interval=interval,
                     analysis_as_of=as_of_dt,
+                    request_url=bundle.get("source_url"),
                     adjustment_verified=adjustment_verified,
                     adjustment_receipt=adjustment_receipt,
                 )
@@ -693,6 +758,10 @@ class OHLCVProvider:
                 capability=ProviderCapability.HISTORICAL_PRICE,
                 status=ProviderStatus.UNAVAILABLE,
                 reason="; ".join(parsed.error_reasons) or "No valid completed bars in bundle",
+                metadata={
+                    "contract_ohlcv_parse_result": parsed,
+                    "source_url": bundle.get("source_url"),
+                },
             )
 
         # 2. Injected transport execution
@@ -708,6 +777,7 @@ class OHLCVProvider:
                             instrument_id=instrument_id,
                             interval=interval,
                             analysis_as_of=as_of_dt,
+                            request_url=url,
                             adjustment_verified=adjustment_verified,
                             adjustment_receipt=adjustment_receipt,
                         )
@@ -737,6 +807,24 @@ class OHLCVProvider:
                                 observations=(obs,),
                                 metadata={"contract_bar_set": parsed.bar_set},
                             )
+                        return ProviderResult(
+                            provider=self.name,
+                            capability=ProviderCapability.HISTORICAL_PRICE,
+                            status=ProviderStatus.UNAVAILABLE,
+                            reason="; ".join(parsed.error_reasons) or "No valid completed Naver bars",
+                            metadata={
+                                "contract_ohlcv_parse_result": parsed,
+                                "source_url": url,
+                                "http_status": status_code,
+                            },
+                        )
+                    return ProviderResult(
+                        provider=self.name,
+                        capability=ProviderCapability.HISTORICAL_PRICE,
+                        status=ProviderStatus.UNAVAILABLE,
+                        reason=f"HTTP_{status_code}",
+                        metadata={"source_url": url, "http_status": status_code},
+                    )
                 except Exception as exc:
                     return ProviderResult(
                         provider=self.name,
@@ -783,6 +871,24 @@ class OHLCVProvider:
                                 observations=(obs,),
                                 metadata={"contract_bar_set": parsed.bar_set},
                             )
+                        return ProviderResult(
+                            provider=self.name,
+                            capability=ProviderCapability.HISTORICAL_PRICE,
+                            status=ProviderStatus.UNAVAILABLE,
+                            reason="; ".join(parsed.error_reasons) or "No valid completed Yahoo bars",
+                            metadata={
+                                "contract_ohlcv_parse_result": parsed,
+                                "source_url": url,
+                                "http_status": status_code,
+                            },
+                        )
+                    return ProviderResult(
+                        provider=self.name,
+                        capability=ProviderCapability.HISTORICAL_PRICE,
+                        status=ProviderStatus.UNAVAILABLE,
+                        reason=f"HTTP_{status_code}",
+                        metadata={"source_url": url, "http_status": status_code},
+                    )
                 except Exception as exc:
                     return ProviderResult(
                         provider=self.name,

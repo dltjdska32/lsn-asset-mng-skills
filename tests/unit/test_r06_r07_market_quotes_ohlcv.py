@@ -318,8 +318,90 @@ class TestOHLCVR07(unittest.TestCase):
         self.assertEqual(len(res.bars), 1)  # Raw bars preserved
         self.assertIn("UNVERIFIED_ADJUSTMENT", res.error_reasons[0])
 
+    def test_naver_live_price_list_schema_requires_bound_request_route(self) -> None:
+        """Naver's live /price list has no echoed symbol; bind it to its exact request URL."""
+        payload = [
+            {
+                "localTradedAt": "2026-09-25",
+                "openPrice": "80,000",
+                "highPrice": "82,000",
+                "lowPrice": "79,000",
+                "closePrice": "81,000",
+                "accumulatedTradingVolume": "1,200",
+            }
+        ]
+        url = "https://m.stock.naver.com/api/stock/005930/price?page=1&pageSize=1"
+        as_of = datetime(2026, 9, 27, 0, 0, tzinfo=timezone.utc)
+
+        unbound = parse_naver_ohlcv(payload, instrument_id="KRX:005930", analysis_as_of=as_of)
+        self.assertIn("UNBOUND_RESPONSE_IDENTITY", unbound.error_reasons[0])
+        self.assertFalse(unbound.bars)
+
+        mismatch = parse_naver_ohlcv(
+            payload,
+            instrument_id="KRX:000660",
+            analysis_as_of=as_of,
+            request_url=url,
+        )
+        self.assertIn("IDENTITY_MISMATCH", mismatch.error_reasons[0])
+
+        parsed = parse_naver_ohlcv(
+            payload,
+            instrument_id="KRX:005930",
+            analysis_as_of=as_of,
+            request_url=url,
+        )
+        self.assertIn("UNVERIFIED_ADJUSTMENT", parsed.error_reasons[0])
+        self.assertIsNone(parsed.bar_set)
+        self.assertEqual(parsed.bars[0].session_date, "2026-09-25")
+        self.assertEqual(parsed.bars[0].close, Decimal("81000"))
+        self.assertEqual(parsed.bars[0].public_availability.source_locator, url)
+
+    def test_naver_adjustment_flag_without_receipt_is_not_enough(self) -> None:
+        payload = {
+            "code": "005930",
+            "priceInfos": [
+                {
+                    "localDate": "20260920",
+                    "openPrice": 100,
+                    "highPrice": 110,
+                    "lowPrice": 95,
+                    "closePrice": 105,
+                    "accumulatedTradingVolume": 1000,
+                }
+            ],
+        }
+        parsed = parse_naver_ohlcv(payload, instrument_id="KRX:005930", adjustment_verified=True)
+        self.assertIsNone(parsed.bar_set)
+        self.assertIn("UNVERIFIED_ADJUSTMENT", parsed.error_reasons[0])
+
+    def test_naver_live_schema_unverified_result_preserves_raw_bars(self) -> None:
+        payload = [
+            {
+                "localTradedAt": "2026-09-25",
+                "openPrice": "80,000",
+                "highPrice": "82,000",
+                "lowPrice": "79,000",
+                "closePrice": "81,000",
+                "accumulatedTradingVolume": "1,200",
+            }
+        ]
+
+        def transport(url, headers, timeout):
+            self.assertIn("/api/stock/005930/price", url)
+            return 200, json.dumps(payload).encode("utf-8"), {"content-type": "application/json"}
+
+        result = OHLCVProvider(transport=transport).fetch_historical_bars(
+            "KRX:005930", analysis_as_of=datetime(2026, 9, 27, tzinfo=timezone.utc)
+        )
+        self.assertEqual(result.status.name, "UNAVAILABLE")
+        self.assertIn("UNVERIFIED_ADJUSTMENT", result.reason)
+        parsed = result.metadata["contract_ohlcv_parse_result"]
+        self.assertEqual(len(parsed.bars), 1)
+        self.assertIsNone(parsed.bar_set)
+
     def test_ohlcv_verified_adjustment_accepted(self) -> None:
-        """When adjustment_verified=True or receipt passed, BarSet is created."""
+        """A strict verification flag plus a receipt is required before creating BarSet."""
         payload = {
             "code": "005930",
             "priceInfos": [
@@ -407,7 +489,13 @@ class TestOHLCVR07(unittest.TestCase):
             ],
         }
         midday_as_of = datetime(2026, 9, 23, 11, 0, 0, tzinfo=ZoneInfo("Asia/Seoul"))
-        res = parse_naver_ohlcv(payload, instrument_id="KRX:005930", analysis_as_of=midday_as_of, adjustment_verified=True)
+        res = parse_naver_ohlcv(
+            payload,
+            instrument_id="KRX:005930",
+            analysis_as_of=midday_as_of,
+            adjustment_verified=True,
+            adjustment_receipt="fixture:split-adjustment-reviewed",
+        )
 
         self.assertEqual(len(res.bars), 1)
         self.assertEqual(res.bars[0].session_date, "2026-09-22")
