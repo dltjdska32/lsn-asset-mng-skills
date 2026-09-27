@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-14
 
-## Current Status (Integration Checkpoint `a861b6b`)
+## Current Status (Integration Checkpoints `a861b6b`, `5d094a5`)
 
 As of **2026-09-27**, the system is undergoing a final multi-agent integration. The following milestones represent the current merged state:
 
@@ -11,13 +11,13 @@ As of **2026-09-27**, the system is undergoing a final multi-agent integration. 
   - Agent B: R06–08 deterministic technical calculations, signaling fail-closed gates, and 8-skill strict packaging (wheel/sdist).
   - Agent C: 13F filing structure, 5-section briefing formats, and WAIT action arithmetic precursors.
 - **Current Test Baseline:** 
-  - Root unittest: 470 OK, 1 skip.
+  - Root unittest: 470 OK, 1 skip at `a861b6b`; 475 OK, 1 skip after SEC parser integration at `5d094a5` plus the corrected empty-tag test.
   - Isolated venv wheel installation & package tests: 5 PASS (verified at prior commit `571101af`).
 - **Skill Discovery:** Repo-local 8 skills were successfully discovered in the current Codex Available skills list.
 
 ### Pending / Incomplete
 
-- Agent A: R02–05 / R09 (SEC parser is currently being modified and is pre-integration).
+- Agent A: R02–05 / R09 (SEC fact parser is integrated as a bounded slice; period-coherent consumption and provider fallback remain incomplete).
 - Agent C: Formal R10–11 integration.
 - Runtime Execution: Actual execution of the 7 request modes.
 - R17 Number Combination logic.
