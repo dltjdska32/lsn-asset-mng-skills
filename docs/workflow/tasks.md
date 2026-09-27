@@ -1,5 +1,7 @@
 # 작업 상태표
 
+**독립 검토 추가 반례 — 기준 root `a1a41b0`, 수정 대기:** reviewer가 RC10-R1(P1)을 재현했다. 재생된 PERSONAL_PORTFOLIO_ANALYSIS가 필수 materiality/selected-asset 조사 누락으로 PARTIAL이어도 REPORT_REFRESH 외부 결과가 COMPLETE·누락 없음·높은 신뢰도로 표시된다. `rerun_fixed_mode`의 snapshot 전달과 refresh 상태 전파를 C 소유 파일에서 보정하도록 회송했다. 추가 RC11(P2,R13)은 같은 인접 13F 분기의 정상적인 두 기관 증액 합의가 단일 기관용 chain 검사에 막혀 direction=None이 되는 회귀이며, C에 기관별 검증 후 합의 집계를 회송했다. 두 독립 probe/수정 커밋/총괄 회귀/최종 독립 재검토는 아직 대기 중이다. reviewer는 이 SHA의 실제 기본 Yahoo/Naver→Phase4→5를 다시 실행하여 각각 341.07 USD/286500 KRW의 `LAST_VALID_CLOSE`·비실시간 고지·합성 임시 DB 경로를 확인했다. 전체 595 OK(skip1)·기존 독립 13/13은 새 두 반례의 통과 증거가 아니다.
+
 **통합 회귀 체크포인트 — root `231bd6f`:** C source `2d08790`→root `35fd3b4`로 RC06(반환 report_ref 저장), RC07(thesis request/run DB/clock/mode 결속), RC09(refresh 전용 pin handler), RC10(부분 결과/누락의 한국어 보고서), C→A `refresh_context` 전달 및 네 모드 본문 가독성을 통합했다. A source `8ab6c80`→root `231bd6f`로 명시 주입된 ledger·equity·portfolio/thesis 번들의 같은 run.db 일곱 고정 모드 조립을 통합했다. 총괄 직접 세 번들 집중 **22/22 PASS**, wheel/sdist 재빌드 후 전체 **595 OK(skip1)**, 독립 reviewer 고정 5+3+5 = **13/13 PASS**. CLI 기본 `RuntimeServices()`는 configured host 없이 UNSUPPORTED이고 실제 개인 DB/외부 provider 자동 연결은 하지 않는다. 이 결과는 총괄 회귀로서 새 독립 최종 SHA 코드 검토와 별도 Codex 최종 검증을 대체하지 않는다.
 
 **R15 sdist 자체검증 보정 — root `22e6087`:** B 별도 `codex/r15-sdist-rc08` source `f69b13a`를 통합. `ARCHITECTURE.md`를 명시적 sdist allowlist에 포함하고, 풀린 sdist에서 배포된 버전 테스트를 별도 프로세스로 실제 실행한다. 총괄이 wheel/sdist 재빌드 후 R15 집중 11 OK(skip1), 독립 번들 5반례 중 RC08 PASS·C 소유 RC06/07/09/10 네 건 FAIL을 재확인. 외부 설치/배포 없음. C 후속 통합 뒤 전체 회귀 필요.
