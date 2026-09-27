@@ -1,5 +1,9 @@
 # 작업 상태표
 
+**독립 신규 번들 검토 P1 회송:** REVIEW-CODE-01 세션이 root `b1f4514`의 C 네 모드 번들에서 두 합성 반례를 직접 재현했다. RC06 refresh에서 enriched report_ref 기록 시 metadata 병합 순서가 옛 ref로 덮어써 반환 ref를 run.db manifest에서 조회 못 함. RC07 THESIS_REVIEW가 요청 run ID/모드/시각과 bound run.db를 대조하지 않아 다른 run.db에 결과를 저장하고 요청 cutoff 뒤 증거를 승인함. C에 현재 RC05 기간 순서 수정 인계 뒤 별도 branch/worktree 보정 배정, reviewer는 재현 코드·보고서 작성 중. 최신 통합 번들은 이 두 반례 수정 전이므로 완료 아님.
+
+**RC04 지표별 근거 보정 통합 — root `5448863`:** A source `b8a961e`를 통합. 선택된 각 재무 observation의 기간/회계 context를 metric 단위로 검사해 EPS만 누락된 경우 EPS 숫자/delta를 제외하고 정상 revenue 비교를 유지한다. 총괄 관련 7/7 PASS, 독립 중간 3반례 중 RC04 1개 PASS·RC05 역순/gap 2개는 여전히 FAIL로 확인. A는 C refresh 경계 중 A 소유 analysis_modes pin/replay 후속 진행 중이다.
+
 **C 네 모드 번들 통합 — root `9e87997`:** C 별도 `codex/luna-r14-r17-portfolio-thesis` source `84031d4`를 통합했다. `portfolio_thesis_services`가 PERSONAL_PORTFOLIO_ANALYSIS, PORTFOLIO_SCENARIO, THESIS_REVIEW, REPORT_REFRESH의 고정 step handler를 typed 서비스·합성 run.db/Phase6 보고서 참조에 연결한다. 총괄 직접 관련 42/42, wheel/sdist 재빌드 뒤 전체 **576 OK(skip1)**. 실제 개인 DB/외부 provider/자동주문 없음. materiality·selected asset 조사 등은 host callback과 적격 자료가 있어야 하고 없는 경우 부분/미지원 판정한다. refresh에서 단일/비교 자산 replay의 A 소유 run mode 경계와 fixed runner 결속은 인계에 명시된 후속 작업이다. 따라서 이 4모드 합성 실행을 7모드 완전 실사용으로 확대하지 않는다. C는 별도 branch에서 RC05 기간 순서/gap 수정 중.
 
 **R15 패키지 통합 — root `53f4a7a`:** B 별도 `codex/luna-r15-package-01` source `e903e54`를 통합했다. 정확한 8개 `skills/` 원본과 `.agents/skills/` 미러/UI 메타데이터, 이름별 5개 config 리소스, wheel/sdist 파일 allowlist 및 Windows 같은 인터프리터 설치 안내를 점검. B는 오프라인 clean wheel venv에서 focused 10/10·`pip check`·CLI check/plan/preflight smoke를 직접 확인했다. 총괄은 통합 소스로 wheel/sdist를 재빌드한 뒤 focused 10 OK(skip1), 미러 check, 전체 **575 OK(skip1)**를 직접 확인했다. Codex UI의 임의 venv 자동 스킬 검색, Python 3.11–3.13, 외부 연결·정책 자동 승인은 검증되지 않았다. 인계 `handoffs/PACKAGE-01.md`.
