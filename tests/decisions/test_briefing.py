@@ -54,7 +54,8 @@ class TestBriefingLogic(unittest.TestCase):
         self.assertIn("대기", briefing.section_judgement)
         self.assertIn("적격 가격 결과 미연결", briefing.section_table["현재가"])
         self.assertIn("승인 정책 provenance", briefing.section_table["금액·수량"])
-        self.assertTrue(any("Test Calc = 50.0 SHARE USD" in line for line in briefing.section_details))
+        self.assertFalse(any("50.0" in line for line in briefing.section_details))
+        self.assertFalse(any("50.0" in value for value in briefing.section_table.values()))
         self.assertTrue(any("UNVALIDATED" in line for line in briefing.section_core))
 
     def test_briefing_missing_price_inconclusive(self) -> None:

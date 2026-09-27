@@ -15,7 +15,7 @@
 - `ADD_NEW_HOLDINGS` 정정은 중복 종목을 덮어쓰지 않는다. 상충 값은 unresolved로 남기고, 유형 미확정 정정은 부분 행을 적용하지 않아 마지막 명확한 snapshot을 보존한다.
 - `13F-NT`는 기존 보유 세트를 지우지 않는다. holdings snapshot을 입증하지 않으므로 effective set을 unresolved로 표시해 비교를 차단한다.
 - 비교 가능한 종목 관측이 없으면 방향·coverage 결과를 중립 0으로 채우지 않고 `None`으로 유지한다. Filing 공개 timestamp가 비교 계약에 연결되지 않아 정보 지연 일수도 계산 불가로 둔다. 분기 말일로 실제 공개 나이를 추정하던 동작을 제거했다.
-- 브리핑은 기존 5개 섹션 순서를 유지한다. 적격 가격·가치평가 및 승인 정책 provenance가 완전히 결속되지 않은 경우 WAIT를 유지하고, 진입·축소 구간 및 금액·수량을 `계산 불가`로 표시한다. 실제 결속된 계산 레코드 결과만 계산명·단위·통화·ID와 함께 상세 근거에 노출한다. 13F 점수는 미검증 보조 근거로만 표시한다.
+- 브리핑은 기존 5개 섹션 순서를 유지한다. 적격 가격·가치평가 및 승인 정책 provenance가 완전히 결속되지 않은 경우 WAIT를 유지하고, 진입·축소 구간 및 금액·수량을 `계산 불가`로 표시한다. 13F 점수는 미검증 보조 근거로만 표시한다.
 
 ## 실행한 검증
 
@@ -26,7 +26,12 @@ $env:PYTHONPATH='runtime'
 C:/Users/lsn/lsn-asset-mng-skills/.venv/Scripts/python.exe -m unittest tests.unit.test_r12_sec_13f tests.unit.test_r13_validation tests.decisions.test_briefing tests.decisions.test_action tests.decisions.test_builder_briefing -v
 ```
 
-결과: **41 tests, OK**. 새 synthetic 검사는 notice-only filing, 미확정 정정 덮어쓰기 방지, 누락/비유한 수량, 관측 결측 표시, 5섹션 브리핑과 근거 숫자 결속을 포함한다.
+결과: **41 tests, OK**. 새 synthetic 검사는 notice-only filing, 미확정 정정 덮어쓰기 방지, 누락/비유한 수량, 관측 결측 표시, 5섹션 브리핑 및 타입 의미를 확인하지 않은 일반 계산값 비노출을 포함한다.
+
+## 총괄 독립 재검토 수정
+
+- 총괄 검토에서 `CalculationRecord.calculation_name`만으로 값이 적격 현재가·가치평가·거래 규모인지 입증되지 않는 점을 지적했다. 이에 일반 계산값의 상세 근거 노출을 제거했다. 입력 계산들은 lineage 검증에만 사용하고, 의미 whitelist/적격성 계약이 추가되기 전까지 출력 숫자는 표시하지 않는다.
+- 수정 검증: `test_briefing_available_wait`는 해당 계산 숫자가 상세 및 가격·행동 표에 나타나지 않는지 확인한다. tzdata 포함 interpreter로 위 5개 테스트 모듈을 재실행해 **41 tests, OK**.
 
 ## 미실행 검증 및 남은 의존성
 

@@ -132,14 +132,6 @@ def generate_briefing(
     # policy provenance, or a pinned personal snapshot. Keep all executable actions
     # unavailable until those typed integrations exist.
     reasons.append("적격 가격·가치평가 결과와 승인 정책 출처가 검증되지 않아 행동 판단을 보류합니다.")
-    bound_results = []
-    for calc_id, calc in sorted(calculations.items()):
-        if calc.result_numeric is None or str(calc.status) not in {"CALCULATED", "CONDITIONAL"}:
-            continue
-        unit = f" {calc.result_unit}" if calc.result_unit else ""
-        currency = f" {calc.result_currency}" if calc.result_currency else ""
-        bound_results.append(f"결속된 계산 결과: {calc.calculation_name} = {calc.result_numeric}{unit}{currency} (계산 근거 {calc_id})")
-    
     return NonPostingBriefing(
         status=DataAvailabilityStatus.PARTIAL,
         decision=InvestmentDecision.WAIT,
@@ -153,7 +145,7 @@ def generate_briefing(
         },
         section_core=("13F 자료는 공개 지연이 있는 보조 근거이며, UNVALIDATED 점수는 판단 가중치나 거래 신호로 쓰지 않습니다.",),
         section_conditions=("A 도메인의 적격 가격과 가치평가 결과가 결속될 때 재평가합니다.", "승인된 정책 출처와 같은 시점의 개인 상태가 검증된 뒤에만 규모를 계산합니다."),
-        section_details=tuple(reasons + bound_results),
+        section_details=tuple(reasons),
         reasons=tuple(reasons),
         verified_hash=inputs.snapshot_hash
     )
