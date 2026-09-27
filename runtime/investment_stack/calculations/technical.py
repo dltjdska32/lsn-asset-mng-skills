@@ -140,6 +140,7 @@ class TechnicalAnalysisResult:
     signal_status: str
     trend: TrendEvaluation | None = None
     reasons: tuple[str, ...] = ()
+    parameters: TechnicalParameters | None = None
 
 
 def calculate_verified_technical_analysis(parse_result: Any, params: TechnicalParameters) -> TechnicalAnalysisResult:
@@ -164,7 +165,7 @@ def calculate_verified_technical_analysis(parse_result: Any, params: TechnicalPa
     return TechnicalAnalysisResult("AVAILABLE" if complete else "PARTIAL", points, parse_result.source_url,
                                    _bar_fingerprint(bars), _validation_receipt_id(parse_result), "R08-v1",
                                    "UNAVAILABLE", trend,
-                                   () if complete else ("INSUFFICIENT_LOOKBACK_FOR_SOME_INDICATORS",))
+                                   () if complete else ("INSUFFICIENT_LOOKBACK_FOR_SOME_INDICATORS",), params)
 
 
 def _bar_fingerprint(bars: Sequence[Bar]) -> str:
