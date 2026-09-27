@@ -17,6 +17,7 @@ from investment_stack.asset_analysis import EquityDeepResult, Phase5AssetAnalysi
 from investment_stack.calculations import BusinessType, DcfScenario, EquityFundamentalInput, EquityValuationInput
 from investment_stack.freshness import FreshnessEngine, FreshnessStatus, observation_time
 from investment_stack.providers import ProviderCapability, ProviderObservation, ProviderRequest
+from investment_stack.providers.execution import assess_current_price_observation
 from investment_stack.research import Phase4ResearchRuntime, ResearchOutcome
 
 
@@ -432,6 +433,20 @@ class LiveDeepResearchRuntime:
             evidence_ids=valuation_evidence,
         )
         analyzed = self.analysis.analyze_equity(fundamental_input, valuation_input)
+        if market.selected.freshness is not None and market.selected.freshness.status is FreshnessStatus.LAST_VALID_CLOSE:
+            obs = market.selected.observation
+            assessment = market.selected.freshness
+            detail = (
+                f"가격 입력 기준: {assessment.market_session_date} 마지막 유효 거래일 종가 "
+                f"({obs.currency}); 종가 시각 {obs.claimed_market_time}; "
+                f"공개시각 {assessment.public_available_time}; 달력 {assessment.calendar_id}. 실시간 시세가 아닙니다."
+            )
+            valuation_result = analyzed.valuation
+            analyzed = type(analyzed)(analyzed.fundamental, type(valuation_result)(
+                valuation_result.subject, valuation_result.analysis_type, valuation_result.status,
+                valuation_result.metrics, (*valuation_result.findings, detail), valuation_result.risks,
+                valuation_result.unknowns, valuation_result.metadata,
+            ))
         status = "COMPLETED"
         if current_price is None or not metrics or normalization_warnings:
             status = "PARTIAL"
@@ -471,9 +486,9 @@ class LiveDeepResearchRuntime:
         if not timestamp:
             return None, "price: missing observation time"
 
-        assessment = self.freshness.assess(observation, analysis_as_of=self.analysis_as_of)
-        if assessment.status != FreshnessStatus.FRESH:
-            return None, f"price: freshness assessment resulted in {assessment.status.name}, not FRESH"
+        assessment = assess_current_price_observation(observation, analysis_as_of=self.analysis_as_of, engine=self.freshness)
+        if assessment.status not in {FreshnessStatus.FRESH, FreshnessStatus.LAST_VALID_CLOSE}:
+            return None, f"price: freshness assessment resulted in {assessment.status.name}"
 
         parsed = _decimal(observation.value)
         if parsed is None:

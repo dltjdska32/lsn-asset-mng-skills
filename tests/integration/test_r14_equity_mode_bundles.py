@@ -130,7 +130,9 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
         self.assertTrue(matrix["complete"], matrix)
         self.assertFalse(result_data["ranking_emitted"])
         self.assertTrue(result_data["comparisons"])
-        self.assertIn("valuation.pe", {item["metric"] for item in result_data["comparisons"]})
+        # Bundle search pages do not carry verified venue quote receipts. The
+        # comparison can retain fundamentals while omitting price-derived multiples.
+        self.assertNotIn("valuation.pe", {item["metric"] for item in result_data["comparisons"]})
 
     def test_incompatible_periods_or_currency_return_partial_without_comparative_ranking(self) -> None:
         for suffix, specs, period in (

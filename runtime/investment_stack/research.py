@@ -79,5 +79,7 @@ class Phase4ResearchRuntime:
             if web_result is not None:
                 used_web = True
                 results.append(web_result)
-                selected = self.evidence.persist_and_select((web_result,), analysis_as_of=request.analysis_as_of)
+                web_selected = self.evidence.persist_and_select((web_result,), analysis_as_of=request.analysis_as_of)
+                if web_selected.observation is not None:
+                    selected = web_selected
         return ResearchOutcome(selected, tuple(results), used_web)

@@ -44,14 +44,14 @@ class WebResearchTests(unittest.TestCase):
         result = WebResearchAdapter(backend).fetch_current("TEST", analysis_as_of=self.cutoff)
         self.assertEqual(result.status, ProviderStatus.UNAVAILABLE)
 
-    def test_timestamped_structured_page_can_supply_latest_as_of(self) -> None:
+    def test_timestamped_page_without_verified_quote_receipt_is_rejected(self) -> None:
         def backend(intent, query, cutoff):
             return WebResearchResponse(intent, (
                 WebResearchHit("Exchange", "https://exchange.test/q", "quote", value="101", claimed_market_time="2026-08-14T09:59:00+00:00", source_kind="official_exchange", source_tier=1),
             ))
         result = WebResearchAdapter(backend).fetch_current("TEST", analysis_as_of=self.cutoff)
-        self.assertEqual(result.status, ProviderStatus.AVAILABLE)
-        self.assertEqual(result.observations[0].value, "101")
+        self.assertEqual(result.status, ProviderStatus.UNAVAILABLE)
+        self.assertEqual(result.observations, ())
 
     def test_news_deduplicates_event_cluster_and_cutoff(self) -> None:
         def backend(intent, query, cutoff):

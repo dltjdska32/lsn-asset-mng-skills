@@ -121,11 +121,20 @@ class MarketQuoteProviderAdapter:
         exchange = {"NMS": "NASDAQ", "NASDAQGS": "NASDAQ", "KS": "KRX"}.get(prefix, prefix)
         calendar = self.calendars.get(exchange)
         evaluator = calendar_aware_freshness_evaluator(calendar, engine=self.engine, policy=self.policy)
-        return self.quote_provider.fetch_current(
+        result = self.quote_provider.fetch_current(
             request.instrument_id, analysis_as_of=analysis_as_of,
             prefer_extended_hours=bool(request.parameters.get("prefer_extended_hours", False)),
             eligibility_evaluator=evaluator,
         )
+        # Normalize the contract adapter's legacy MARKET_QUOTE/price vocabulary to
+        # Phase 4's established market/current_price evidence lineage.
+        from dataclasses import replace
+        observations = tuple(
+            replace(item, evidence_type="market", metric="current_price")
+            for item in result.observations
+        )
+        safe_metadata = {key: value for key, value in result.metadata.items() if key != "contract_quote"}
+        return replace(result, observations=observations, metadata=safe_metadata)
 
 
 class MarketQuoteError(Exception):

@@ -8,6 +8,44 @@ from investment_stack.providers.adapters import ProviderAdapter
 from investment_stack.providers.models import ProviderRequest, ProviderResult, ProviderStatus
 
 
+def assess_current_price_observation(observation, *, analysis_as_of: str, engine=None):
+    """Apply the shared pinned-calendar rule for equity closes and age rule for crypto."""
+    from investment_stack.freshness import FreshnessEngine
+    from investment_stack.freshness.calendar import get_pinned_calendar
+    from investment_stack.freshness.models import FreshnessStatus
+
+    engine = engine or FreshnessEngine()
+    iid = (observation.instrument_id or "").upper()
+    prefix = iid.partition(":")[0]
+    aliases = {"KS": "KRX", "NMS": "NASDAQ", "NASDAQGS": "NASDAQ"}
+    exchange = aliases.get(prefix, prefix)
+    if prefix == "CRYPTO":
+        calendar = None
+    elif exchange in {"NASDAQ", "KRX", "NYSE"}:
+        calendar = get_pinned_calendar(exchange)
+        if calendar is None:
+            from investment_stack.freshness import FreshnessAssessment
+            return FreshnessAssessment(FreshnessStatus.UNAVAILABLE, None, None, "pinned exchange calendar required")
+    elif observation.market_session_date or observation.metadata.get("quote_kind"):
+        # A dated equity close without a recognized exchange calendar is never inferred.
+        from investment_stack.freshness import FreshnessAssessment
+        return FreshnessAssessment(FreshnessStatus.UNAVAILABLE, None, None, "pinned exchange calendar required")
+    else:
+        return engine.assess(observation, analysis_as_of=analysis_as_of)
+
+    if calendar is not None:
+        expected = {"NASDAQ": "USD", "KRX": "KRW", "NYSE": "USD"}[exchange]
+        if (observation.currency or "").upper() != expected:
+            from investment_stack.freshness import FreshnessAssessment
+            return FreshnessAssessment(FreshnessStatus.UNAVAILABLE, None, None, "quote currency does not match exchange")
+        declared = str(observation.metadata.get("exchange", "")).upper()
+        declared = {"NMS": "NASDAQ", "NASDAQGS": "NASDAQ", "KS": "KRX"}.get(declared, declared)
+        if declared != exchange:
+            from investment_stack.freshness import FreshnessAssessment
+            return FreshnessAssessment(FreshnessStatus.UNAVAILABLE, None, None, "quote exchange does not match instrument")
+    return engine.assess(observation, analysis_as_of=analysis_as_of, calendar=calendar)
+
+
 @dataclass(frozen=True, slots=True)
 class FallbackResult:
     results: tuple[ProviderResult, ...]
@@ -19,8 +57,9 @@ class FallbackResult:
 
 
 class ProviderFallbackExecutor:
-    def __init__(self, adapters: list[ProviderAdapter] | tuple[ProviderAdapter, ...]) -> None:
+    def __init__(self, adapters: list[ProviderAdapter] | tuple[ProviderAdapter, ...], *, freshness_engine=None) -> None:
         self._adapters = tuple(adapters)
+        self.freshness_engine = freshness_engine
 
     def _is_eligible_for_purpose(self, request: ProviderRequest, result: ProviderResult) -> bool:
         if not result.usable:
@@ -29,18 +68,16 @@ class ProviderFallbackExecutor:
         from investment_stack.providers.registry import ProviderCapability
         
         if request.capability == ProviderCapability.CURRENT_PRICE:
-            from investment_stack.freshness.engine import FreshnessEngine
             from investment_stack.freshness.models import FreshnessStatus
             from decimal import Decimal, InvalidOperation
 
-            engine = FreshnessEngine()
             has_eligible = False
             for obs in result.observations:
                 try:
-                    assessment = engine.assess(obs, analysis_as_of=request.analysis_as_of)
+                    assessment = assess_current_price_observation(obs, analysis_as_of=request.analysis_as_of, engine=self.freshness_engine)
                 except ValueError:
                     return False
-                if assessment.status != FreshnessStatus.FRESH:
+                if assessment.status not in {FreshnessStatus.FRESH, FreshnessStatus.LAST_VALID_CLOSE}:
                     return False
                 if request.instrument_id and obs.instrument_id != request.instrument_id:
                     return False

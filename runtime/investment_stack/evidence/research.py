@@ -11,6 +11,7 @@ from typing import Iterable
 from investment_stack.evidence.manager import RunDatabaseManager
 from investment_stack.freshness import FreshnessAssessment, FreshnessEngine, FreshnessStatus, observation_time
 from investment_stack.providers.models import ProviderObservation, ProviderResult
+from investment_stack.providers.execution import assess_current_price_observation
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,7 +88,11 @@ class EvidenceResearchStore:
         for result in results:
             self.record_provider_result(result)
             for observation in result.observations:
-                assessment = self.freshness.assess(observation, analysis_as_of=analysis_as_of)
+                is_current_price = observation.metric == "current_price" or observation.evidence_type == "market" and observation.metadata.get("quote_kind")
+                assessment = (
+                    assess_current_price_observation(observation, analysis_as_of=analysis_as_of, engine=self.freshness)
+                    if is_current_price else self.freshness.assess(observation, analysis_as_of=analysis_as_of)
+                )
                 evidence_id = _id("evidence")
                 self.run_db.add_phase4_evidence(
                     evidence_id=evidence_id,
@@ -122,6 +127,10 @@ class EvidenceResearchStore:
                         "effective_time": assessment.effective_time,
                         "age_seconds": assessment.age_seconds,
                         "reason": assessment.reason,
+                        "market_session_date": assessment.market_session_date,
+                        "quote_kind": assessment.quote_kind,
+                        "calendar_id": assessment.calendar_id,
+                        "public_available_time": assessment.public_available_time,
                     },
                 )
                 observation_id: str | None = None
@@ -188,6 +197,7 @@ class EvidenceResearchStore:
                     approved
                     and val_ok
                     and assessment.status is not FreshnessStatus.UNAVAILABLE
+                    and (not is_current_price or assessment.status in {FreshnessStatus.FRESH, FreshnessStatus.LAST_VALID_CLOSE})
                     and observation_time(observation) is not None
                 ):
                     candidates.append((observation, assessment, evidence_id, observation_id))
@@ -227,8 +237,8 @@ class EvidenceResearchStore:
             reverse=True,
         )
         selected = winners[0]
-        is_partial = selected[1].status is FreshnessStatus.STALE
-        reason = "selected stale latest-as-of observation" if is_partial else "selected latest usable observation as of cutoff"
+        is_partial = selected[1].status in {FreshnessStatus.STALE, FreshnessStatus.DELAYED, FreshnessStatus.UNKNOWN}
+        reason = "selected latest usable observation as of cutoff"
         return SelectedEvidence(
             selected[0], selected[1], selected[2], selected[3], is_partial, reason,
             tuple(item[0] for item in winners),

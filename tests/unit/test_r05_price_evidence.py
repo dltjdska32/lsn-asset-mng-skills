@@ -45,7 +45,7 @@ class PriceEvidenceTests(unittest.TestCase):
             ) for val in invalid_vals
         ]
         
-        # 2. Valid stale value (should be selected as PARTIAL over the rejected fresh ones)
+        # 2. Valid stale value (retained as evidence, never selected as price input)
         obs_stale = ProviderObservation(
             evidence_type="market",
             source_name="test",
@@ -62,9 +62,8 @@ class PriceEvidenceTests(unittest.TestCase):
         
         selected = self.store.persist_and_select([result], analysis_as_of=analysis_as_of)
         
-        # Should select the stale valid value, not the fresh invalid ones
-        self.assertIsNotNone(selected.observation)
-        self.assertEqual(selected.observation.value, 150.0)
+        # No current-price observation is selected when only stale data exists.
+        self.assertIsNone(selected.observation)
         self.assertTrue(selected.partial)
         
         # Verify invalid values are still recorded in DB (not totally dropped from storage)

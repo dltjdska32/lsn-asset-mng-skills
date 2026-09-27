@@ -137,17 +137,18 @@ class LiveDeepResearchIntegrationTests(unittest.TestCase):
             ]
         }
 
-    def test_selected_equity_runs_web_fallback_financials_and_valuation_with_lineage(self) -> None:
+    def test_selected_equity_rejects_web_price_but_keeps_financial_fallback_lineage(self) -> None:
         run, runtime = self.make_runtime(self.bundle())
         result = runtime.analyze_equity(self.spec())
 
-        self.assertEqual(Decimal("6000"), result.analysis.valuation.metrics[0].value * Decimal("12"))
+        self.assertIsNone(result.market.selected.observation)
+        self.assertIsNone(result.analysis.valuation.metrics[0].value)
         self.assertEqual(Decimal("10000"), result.normalized_metrics["revenue"])
         self.assertEqual(Decimal("12"), result.normalized_metrics["eps"])
-        self.assertGreaterEqual(len(result.evidence_ids), 2)
+        self.assertGreaterEqual(len(result.evidence_ids), 1)
 
         context = run.fetch_phase6_context()
-        self.assertEqual(1, len(context["market_observations"]))
+        self.assertEqual(0, len(context["market_observations"]))
         self.assertGreaterEqual(len(context["financial_observations"]), 9)
         selected_financial = [
             row for row in context["evidence"]
@@ -161,7 +162,7 @@ class LiveDeepResearchIntegrationTests(unittest.TestCase):
         self.assertIn(("opendart", "MISSING_CREDENTIAL"), provider_statuses)
         self.assertIn(("web_research", "AVAILABLE"), provider_statuses)
 
-    def test_scaled_financial_units_are_normalized_before_valuation_multiples(self) -> None:
+    def test_scaled_financial_units_are_normalized_without_unverified_web_price_multiples(self) -> None:
         bundle = self.bundle()
         fundamentals_query = LiveDeepResearchRuntime._fundamentals_query(self.spec())
         response = next(
@@ -190,17 +191,17 @@ class LiveDeepResearchIntegrationTests(unittest.TestCase):
 
         self.assertEqual(Decimal("120000000000"), result.normalized_metrics["revenue"])
         self.assertEqual(Decimal("100000000"), result.normalized_metrics["shares_outstanding"])
-        self.assertEqual(Decimal("5"), metrics["price_to_sales"])
-        self.assertEqual(Decimal("28"), metrics["ev_to_ebitda"])
-        self.assertEqual(Decimal("7.5"), metrics["pb"])
-        self.assertEqual(Decimal("50"), metrics["pe"])
+        self.assertIsNone(metrics["price_to_sales"])
+        self.assertIsNone(metrics["ev_to_ebitda"])
+        self.assertIsNone(metrics["pb"])
+        self.assertIsNone(metrics["pe"])
 
         task = [
             row for row in run.fetch_phase6_context()["task_states"]
             if row["task_name"] == "deep_research:FANUC"
         ][-1]
-        self.assertEqual("COMPLETED", task["task_status"])
-        self.assertEqual([], json.loads(task["metadata_json"])["normalization_warnings"])
+        self.assertEqual("PARTIAL", task["task_status"])
+        self.assertTrue(any("No valid price observation" in warning for warning in json.loads(task["metadata_json"])["normalization_warnings"]))
 
     def test_web_financial_metric_without_explicit_unit_is_not_used_in_valuation(self) -> None:
         bundle = self.bundle()

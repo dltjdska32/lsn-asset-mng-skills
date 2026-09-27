@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from investment_stack.freshness import FreshnessEngine, FreshnessStatus
 from investment_stack.providers.models import ProviderObservation, ProviderResult, ProviderStatus
 from investment_stack.providers.registry import ProviderCapability
+from investment_stack.providers.execution import assess_current_price_observation
 from investment_stack.web_research.models import WebResearchHit, WebResearchIntent, WebResearchResponse
 
 SearchBackend = Callable[[WebResearchIntent, str, str], WebResearchResponse]
@@ -24,25 +25,13 @@ class WebResearchAdapter:
         self._freshness = freshness or FreshnessEngine()
 
     def fetch_current(self, query: str, *, analysis_as_of: str, instrument_id: str | None = None, metric: str = "current_price") -> ProviderResult:
-        response = self._backend(WebResearchIntent.LATEST_CURRENT_DATA, query, analysis_as_of)
-        observations: list[ProviderObservation] = []
-        retrieved = datetime.now(timezone.utc).isoformat()
-        for hit in response.hits:
-            if hit.source_kind in _CURRENT_FORBIDDEN_KINDS:
-                continue
-            if hit.observed_at is None and hit.claimed_market_time is None:
-                continue
-            observation = self._to_observation(hit, retrieved=retrieved, evidence_type="market", instrument_id=instrument_id, metric=metric)
-            assessment = self._freshness.assess(observation, analysis_as_of=analysis_as_of)
-            if assessment.status is FreshnessStatus.UNAVAILABLE:
-                continue
-            observations.append(observation)
-        selected = self._freshness.latest_as_of(observations, analysis_as_of=analysis_as_of)
-        if selected is None:
-            return ProviderResult(self.name, ProviderCapability.CURRENT_PRICE, ProviderStatus.UNAVAILABLE, reason="no timestamped current-data web observation")
-        # Keep all valid timestamped hits. EvidenceResearchStore performs latest-as-of
-        # selection and records source conflicts without averaging values.
-        return ProviderResult(self.name, ProviderCapability.CURRENT_PRICE, ProviderStatus.AVAILABLE, tuple(observations))
+        # Search hits cannot prove listing identity, venue, bar completeness, or
+        # public availability. Metadata claims are supplied by the page itself, so
+        # current-price inputs must come through the verified MarketQuoteProvider.
+        return ProviderResult(
+            self.name, ProviderCapability.CURRENT_PRICE, ProviderStatus.UNAVAILABLE,
+            reason="web search cannot provide a verified market quote; use the market quote provider",
+        )
 
     def fetch_latest_data(
         self,
@@ -123,6 +112,7 @@ class WebResearchAdapter:
             observed_at=hit.observed_at,
             published_at=hit.published_at,
             claimed_market_time=hit.claimed_market_time,
+            market_session_date=hit.metadata.get("market_session_date"),
             updated_at=hit.updated_at,
             event_time=hit.event_time,
             headline=hit.title,

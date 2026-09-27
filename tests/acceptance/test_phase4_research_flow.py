@@ -55,15 +55,15 @@ class Phase4ResearchAcceptanceTests(unittest.TestCase):
         self.assertEqual(outcome.selected.observation.value, "120")
         self.assertEqual(manager.fetch_evidence_rows()[0]["provider_id"], "structured")
 
-    def test_b_missing_credential_falls_back_to_timestamped_web_and_persists(self) -> None:
+    def test_b_missing_credential_rejects_unverified_web_price_claim(self) -> None:
         missing = unavailable("credentialed", ProviderCapability.CURRENT_PRICE, ProviderStatus.MISSING_CREDENTIAL)
         def backend(intent, query, cutoff):
             return WebResearchResponse(intent, (WebResearchHit("Official Exchange", "https://exchange.test/q", "quote", value="123", currency="USD", claimed_market_time="2026-08-14T09:59:00+00:00", source_tier=1, source_kind="official_exchange"),))
         manager, runtime = self.make_runtime([FakeAdapter("credentialed", missing)], backend)
         outcome = runtime.collect(self.request(), web_query="TEST current price")
         self.assertTrue(outcome.used_web_fallback)
-        self.assertEqual(outcome.selected.observation.value, "123")
-        self.assertEqual(manager.fetch_evidence_rows()[0]["provider_id"], "web_research")
+        self.assertIsNone(outcome.selected.observation)
+        self.assertEqual(manager.fetch_evidence_rows(), ())
 
     def test_c_provider_error_falls_through_to_next_provider(self) -> None:
         error = unavailable("bad", ProviderCapability.CURRENT_PRICE, ProviderStatus.ERROR)
@@ -82,7 +82,12 @@ class Phase4ResearchAcceptanceTests(unittest.TestCase):
         manager, runtime = self.make_runtime([FakeAdapter("old", self.market_result("old", "90", "2026-08-10T09:00:00+00:00"))])
         outcome = runtime.collect(self.request())
         self.assertTrue(outcome.selected.partial)
-        self.assertEqual(outcome.selected.freshness.status.value, "STALE")
+        self.assertIsNone(outcome.selected.observation)
+        rows = manager.fetch_evidence_rows()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["value_text"], '"90"')
+        self.assertEqual(rows[0]["freshness_status"], "STALE")
+        self.assertNotEqual(rows[0]["selection_state"], "SELECTED")
 
     def test_e_conflicting_sources_are_recorded_not_averaged(self) -> None:
         manager, _ = self.make_runtime([])

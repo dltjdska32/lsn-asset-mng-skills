@@ -49,10 +49,8 @@ class LastValidCloseProviderE2ETests(unittest.TestCase):
         self.assertEqual(assessment.market_session_date, "2026-09-25")
         self.assertIn("휴장 중 마지막 유효 거래일 종가", assessment.reason)
 
-        # Existing A-owned purpose executor still only accepts FRESH; expose this
-        # integration boundary rather than claiming end-to-end report approval.
         request = ProviderRequest(ProviderCapability.CURRENT_PRICE, cutoff.isoformat(), "America/New_York", "NASDAQ:AAPL")
-        self.assertFalse(ProviderFallbackExecutor(())._is_eligible_for_purpose(request, result))
+        self.assertTrue(ProviderFallbackExecutor(())._is_eligible_for_purpose(request, result))
 
     def test_provider_adapter_contract_connects_selected_result_to_executor(self) -> None:
         calendar = get_pinned_calendar("NASDAQ")
@@ -72,7 +70,7 @@ class LastValidCloseProviderE2ETests(unittest.TestCase):
         self.assertEqual(result.status.value, "AVAILABLE")
         assessment = FreshnessEngine().assess(result.observations[0], analysis_as_of=cutoff.isoformat(), calendar=calendar)
         self.assertEqual(assessment.status, FreshnessStatus.LAST_VALID_CLOSE)
-        self.assertFalse(ProviderFallbackExecutor((adapter,))._is_eligible_for_purpose(request, result))
+        self.assertTrue(ProviderFallbackExecutor((adapter,))._is_eligible_for_purpose(request, result))
 
     def test_naver_close_publication_time_gates_provider_result(self) -> None:
         cutoff = datetime(2026, 9, 27, 12, 0, tzinfo=KST)
