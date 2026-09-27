@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 from decimal import Decimal
 from datetime import datetime
 import hashlib
@@ -520,13 +520,39 @@ def equity_analysis_services(
             title=str(request.payload.get("title") or _default_title(request)),
             sections=tuple(sections), review=review, briefing=briefing,
         )
+        briefing_section_id = None
+        if report.briefing:
+            briefing_payload = {
+                "title": "최종 판단 브리핑",
+                "analysis_as_of": report.as_of.analysis_as_of,
+                "rendered_markdown": report.briefing,
+                "typed_briefing": asdict(briefing),
+            }
+            canonical_briefing = json.dumps(
+                briefing_payload, sort_keys=True, ensure_ascii=False, default=str, separators=(",", ":"),
+            )
+            briefing_digest = hashlib.sha256(canonical_briefing.encode("utf-8")).hexdigest()
+            briefing_section_id = f"section:final_briefing:{run_db.run_id}:{briefing_digest}"
+            run_db.upsert_report_section(
+                section_id=briefing_section_id,
+                section_name="final_briefing",
+                section_status=briefing.status.value,
+                content_reference=f"inline-sha256:{briefing_digest}",
+                metadata=briefing_payload,
+            )
         expected_names = {section.name for section in report.sections}
+        stored_sections = run_db.fetch_phase6_context()["report_sections"]
         persisted_sections = [
-            row for row in run_db.fetch_phase6_context()["report_sections"]
+            row for row in stored_sections
             if row["section_name"] in expected_names
         ]
         if {row["section_name"] for row in persisted_sections} != expected_names:
             return StepResult(Availability.FAILED, output={"report_persisted": False})
+        if briefing_section_id is not None:
+            stored_briefing = next((row for row in stored_sections if row["section_id"] == briefing_section_id), None)
+            if stored_briefing is None:
+                return StepResult(Availability.FAILED, output={"briefing_persisted": False})
+            persisted_sections.append(stored_briefing)
         manifest = {
             "title": report.title,
             "availability": report.availability.value,

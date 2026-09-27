@@ -175,6 +175,13 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
         self.assertIn("대기", report.briefing)
         self.assertIn("정책 누락", report.briefing)
         self.assertNotIn("6,000 JPY/주", report.briefing)
+        manifest = json.loads(report_manifest["metadata_json"])
+        briefing_ref = next(item["content_reference"] for item in manifest["section_refs"]
+                            if item["section_name"] == "final_briefing")
+        stored_briefing = next(row for row in context["report_sections"]
+                               if row["section_name"] == "final_briefing"
+                               and row["content_reference"] == briefing_ref)
+        self.assertEqual(report.briefing, json.loads(stored_briefing["metadata_json"])["rendered_markdown"])
         self.assertGreaterEqual(len(context["calculations"]), 2)
         self.assertTrue({"FANUC_fundamental", "FANUC_valuation", "data_quality"}.issubset(
             {section["section_name"] for section in context["report_sections"]}))

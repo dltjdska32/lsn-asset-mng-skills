@@ -1,5 +1,47 @@
 # REVIEW-CODE-01 — 독립 통합 코드 검토
 
+## 최신 재검토 — 2b01ab3
+
+**판정: 수정 필요, 최종 통과 보류.** RC10-R2는 수정 확인했다. 총괄의 추가 요청에 따라 새 WAIT 브리핑의 저장/참조/갱신 연결을 점검했고 RC12 P2를 재현했다. 아래 dcd262a/a1a41b0 기록은 각 당시의 실패 이력으로 유지한다.
+
+- 직접 checkout/실행한 SHA: `2b01ab3047cb1f22d1087099cda768c2aba2e316`.
+- 새 독립 worktree: `C:/Users/lsn/.codex/worktrees/89b8/lsn-asset-mng-skills/workspace/review-2b01ab3`.
+- dcd262a→2b01ab3 runtime diff는 ReportSnapshot 미확인 기본값과 외부 replay의 저장 manifest 검증 두 파일이다. 실제 구현과 보고서 상태 전파를 확인했다. 같은 Python 3.14.6/interpreter, 새 cwd/PYTHONPATH=runtime. 구현·기존 테스트·개인 DB·commit/push 변경 없음.
+
+### RC10-R2 수정 확인
+
+- 기존 7필드 snapshot은 이제 UNAVAILABLE이며 내부 상태·누락을 알았다고 가정하지 않는다.
+- 모든 fixed runner 결과는 실제 새 run.db의 report_ref로 manifest를 조회한다. mode/target/assumptions/clock/section fingerprint가 다르면 성공 갱신으로 승인하지 않는다.
+- snapshot과 저장 manifest 중 보수적인 availability 및 양쪽 missing_inputs 합집합을 유지한다. 외부 AVAILABLE이 저장 PARTIAL을 덮어쓰던 두 독립 반례 모두 PASS.
+- 독립 추가 검사 10가지: 정상적으로 완전한 자료는 COMPLETE; 없는 ref, 다른 run/mode/target/assumptions/clock/sections는 PARTIAL; 외부 UNAVAILABLE은 PARTIAL; 외부에만 있는 누락도 최종 missing에 유지. 모든 경우 임시 ledger state 불변/게시 영수증 없음.
+- 검사 코드/출력: `review_code_01_refresh_binding_checks.py`, `review_code_01_refresh_binding_checks_output.txt`.
+
+### RC12 [P2] 5항목 브리핑이 저장 보고서 identity와 갱신 fingerprint에서 빠짐
+
+- R14/R17. 소유 A equity render 및 공통 `reporting/builder.py` 저장 경계. 총괄에게 즉시 회송했고 수정 착수 통보를 받았다.
+- 위치: `InvestmentReportBuilder._persist` (`reporting/builder.py:285`)는 report.sections만 저장하고 report.briefing은 저장하지 않는다. `execution/analysis_modes.py`의 manifest도 그 section_refs만 사용한다.
+- 합성 재현: actual configured SINGLE_ASSET_ANALYSIS를 실행한다. 계산/근거/시각/기존 섹션을 유지한 채 정상 render handler를 다시 호출하며, 두 번째에는 같은 run의 typed selection과 실제 pinned state ref/version을 명시한다. 구현 함수나 DB row를 patch하지 않는다.
+- 실제 사용자 briefing의 개인비중 항목이 `계산 불가: 스냅샷 누락`에서 `대기`로 바뀌고 상세 누락 이유도 달라진다. 그러나 두 결과의 report_ref와 manifest.section_refs가 완전히 동일하다. 저장된 section은 FANUC_fundamental/FANUC_valuation/review_findings/data_quality뿐이며 briefing 본문/typed payload는 없다.
+- 영향: 저장 ref로 사용자에게 보여준 다섯 항목과 판단 변경/누락 조건을 재구성할 수 없다. refresh가 비교하는 fingerprint에도 해당 변경이 반영되지 않는다. 둘 다 WAIT이고 자동 거래/수량 변경이 없어 P1 매매 오류라고 주장하지 않지만, 최종 판단 결과의 감사·재현·갱신 요구를 깨는 material P2다.
+- 기대: rendered 5항목 또는 lossless typed briefing과 재현 가능한 근거를 저장하고 해당 보고서의 identity/fingerprint에 결속한다. 변경 시 다른 ref를 반환하며 이전 ref가 가리킨 브리핑도 보존한다. 현재 head의 브리핑 하나를 덮어쓰는 저장만으로는 충분하지 않다.
+- 독립 probe: `review_code_01_briefing_persistence_probe.py`, **1 FAIL**, 1.213초. 출력 `review_code_01_briefing_persistence_output.txt`에 변경 전후 개인비중 문구, briefing 차이, 동일 report_ref/section_refs, 실제 저장 section 이름을 보존했다.
+
+### 현 SHA 직접 검증
+
+| 검증 | 결과 |
+|---|---|
+| 현 wheel/sdist 재빌드 | 성공 |
+| 전체 unittest | **600 tests OK, skipped=1**, 85.529초 |
+| 기존 first-pass/interim/b1 반례 | **13/13 PASS** |
+| a1 configured 7모드/RC10-R1/RC11 | **3/3 PASS**, 7.913초 |
+| dcd WAIT/RC10-R2 두 반례 | **3/3 PASS**, 5.568초 |
+| 추가 manifest boundary | **10/10 하위검사 PASS** (1 test, 9.505초) |
+| 새 RC12 briefing persistence | **1 FAIL**, 1.213초 |
+
+현재까지 이전 19개 독립 검사는 모두 통과했다. 기본 CLI/주입 host, bounded calendar, R08/13 정책과 자동 수치 결속의 잔여 범위는 앞선 절과 동일하다. 미변경 HTTP/live 및 설치 레이아웃은 다시 실증했다고 표시하지 않는다. RC12 수정 후 새 SHA에서 해당 반례와 변경 경계를 다시 검토해야 하며, 이 기록은 별도 최종 VERIFY나 전체 프로젝트 완료가 아니다.
+
+---
+
 ## 최신 재검토 — dcd262a
 
 **판정: 수정 필요, 최종 통과 보류.** 이전 a1a41b0의 RC10-R1 내부 replay 및 RC11은 수정 확인했다. 외부 runner 경로에서 RC10-R2 P1을 추가 재현했다. 아래 a1a41b0 실패 기록은 역사로 그대로 보존하며 그 당시 판정을 소급 변경하지 않는다.

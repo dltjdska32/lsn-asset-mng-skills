@@ -1,4 +1,14 @@
-# REVIEW-CODE-01 인계 — dcd262a 수정 필요
+# REVIEW-CODE-01 인계 — 2b01ab3 수정 필요
+
+## 최신 재검토 — 2b01ab3
+
+- 기준 SHA: `2b01ab3047cb1f22d1087099cda768c2aba2e316`, 새 worktree `C:/Users/lsn/.codex/worktrees/89b8/lsn-asset-mng-skills/workspace/review-2b01ab3`.
+- RC10-R2 원 반례 2개 및 정상/불일치/보수 상태 추가10하위검사 PASS. 외부 runner와 실제 저장 manifest 결속을 직접 확인했다.
+- 총괄 추가 요청의 RC12 P2 재현: 서로 다른 사용자 WAIT briefing에 같은 report_ref/section_refs, briefing 미저장. A render/공통 builder 경계로 회송했고 총괄 수정 예정.
+- 전체600 OK/skip1, 기존 독립19/19 PASS, 추가10하위검사 PASS, RC12 1 FAIL. 현 wheel/sdist 재빌드 성공.
+- 새 산출물: `reviews/review_code_01_refresh_binding_checks.py`, 동명 `_output.txt`; `reviews/review_code_01_briefing_persistence_probe.py`, `reviews/review_code_01_briefing_persistence_output.txt`. REVIEW-CODE-01 보고서와 본 인계에 최신 절 추가.
+- RC12 수정 SHA 재검토 전까지 최종 통과 보류. a1/dcd의 실패 이력은 아래와 보고서에 보존했다.
+- 구현/기존 테스트/실제 개인 DB/commit/push 변경 없음. 미변경 live/clean install은 이번 단계 재실행 주장 없음.
 
 ## 최신 재검토
 
