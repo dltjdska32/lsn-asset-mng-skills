@@ -38,3 +38,9 @@
 - A의 옛 source branch `pyproject.toml`에는 truststore 선언이 없으나 root 최신 `pyproject.toml` 15행에 `truststore>=0.9.1`이 이미 있다. 따라서 추가 의존성 변경 없이, scoped transport의 root 합성을 다음 검증 대상으로 둔다.
 - A task에 새 branch `codex/luna-a-r14`를 통합 `83dfb27`에서 시작해 `assignments/LUNA-A-R14-01.md`대로 7모드 실제 dispatch/R16 합성 E2E를 요청했다. B task에 R07–08 verified BarSet→technical 계산/근거 수직 슬라이스, C task에 통합 `83dfb27` 기반 새 branch에서 R10–11/17 typed numeric binding/WAIT·DB 불변을 요청했다. 모두 기존 각각의 격리 worktree 사용, 소유 파일 분리.
 - R14 dispatcher, 승인 정책에 따른 수량 판단, R13 backtest와 전체 독립 REVIEW-CODE-01/VERIFY-01은 아직 미검증/미완.
+
+## 12:17 UTC B 적격 BarSet→기술 계산 통합
+
+- B 격리 `codex/luna-b-r07-r08-tls` 기준 `83dfb27`, source `d2c5158`·인계 `b6e7a68`을 root `1fa4372`·`a7cac1d`에 통합. 총괄은 담당 **37/37 PASS**, root 전체 **501 OK, skip1** 직접 실행.
+- Yahoo adjclose 단독으로 raw OHLC 조정 여부를 승인하지 않으며, verified 기술 계산은 조정·캘린더 receipt, source/as-of, 예상/실제 세션 일치, 누락·장중·미래 봉 배제 후에만 points/trend를 낸다. 합성 손계산 SMA(2)=107 및 bar/evidence/source fingerprint lineage 포함. Receipt는 외부 진위 미검증, 신호 임계값 미확정이므로 signal UNAVAILABLE. `LUNA-B-R07-R08-PROVENANCE.md` 참조.
+- README·IMPLEMENTATION_STATUS의 TLS 상태는 root A transport 통합 사실로 수정. B에 다음 R06 시장별 후보/전환·identity/시각·지연 적격성 검증을 요청. A R14 및 C typed 브리핑은 병렬 진행. 새 독립 REVIEW-CODE-01/VERIFY-01은 아직 미시작.
