@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from investment_stack.contracts.calculation import GateDecision, GateState
@@ -40,6 +40,21 @@ def compute_institutional_features(
 
     target_cusip = target_cusip.upper().strip()
     mgr_comparisons = [c for c in comparisons if c.manager_cik == manager_cik and c.is_comparable]
+    def available_at_cutoff(comp: InstitutionalPortfolioComparison) -> bool:
+        try:
+            # A report period is an observation date, and must itself precede the run cutoff.
+            if date.fromisoformat(comp.current_period) > as_of.date():
+                return False
+        except ValueError:
+            return False
+        return (
+            comp.prior_public_availability is not None
+            and comp.current_public_availability is not None
+            and comp.prior_public_availability.is_point_in_time_available(as_of)
+            and comp.current_public_availability.is_point_in_time_available(as_of)
+        )
+
+    mgr_comparisons = [c for c in mgr_comparisons if available_at_cutoff(c)]
     mgr_comparisons.sort(key=lambda c: c.current_period)
 
     if not mgr_comparisons:
@@ -55,8 +70,8 @@ def compute_institutional_features(
             consecutive_quarters_held=0,
             information_lag_days=None,
             coverage_quality_score=None,
-            is_point_in_time=True,
-            score_status="UNVALIDATED",
+            is_point_in_time=False,
+            score_status="UNAVAILABLE",
         )
 
     latest_comp = mgr_comparisons[-1]

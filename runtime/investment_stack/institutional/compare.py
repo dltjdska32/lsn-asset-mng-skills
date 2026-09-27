@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from decimal import Decimal
 
 from investment_stack.contracts.codec import parse_finite_decimal
+from investment_stack.contracts.context import PublicAvailability
 from investment_stack.contracts.errors import (
     ContractValidationError,
     DecimalValidationError,
@@ -33,6 +34,8 @@ def compare_portfolios(
     split_factors: Mapping[str, Decimal] | None = None,
     is_confidential_omission: bool = False,
     coverage_uncertain: bool = False,
+    prior_public_availability: PublicAvailability | None = None,
+    current_public_availability: PublicAvailability | None = None,
 ) -> InstitutionalPortfolioComparison:
     """Compare holdings of a manager between prior and current observation periods.
 
@@ -99,6 +102,8 @@ def compare_portfolios(
             is_value_comparable=False,
             coverage_status="INCOMPARABLE",
             comparison_warnings=("No position deltas or portfolio weights were calculated because the filing sets are not comparable.",),
+            prior_public_availability=prior_public_availability,
+            current_public_availability=current_public_availability,
         )
 
     factors = split_factors or {}
@@ -351,6 +356,8 @@ def compare_portfolios(
         is_value_comparable=is_val_comparable,
         coverage_status=overall_coverage_status,
         comparison_warnings=tuple(comparison_warnings),
+        prior_public_availability=prior_public_availability,
+        current_public_availability=current_public_availability,
     )
 
 

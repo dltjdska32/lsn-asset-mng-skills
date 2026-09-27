@@ -25,6 +25,7 @@ from investment_stack.contracts.institutional import (
     PutCall,
     QuantityType,
 )
+from investment_stack.contracts.context import PublicAvailability
 
 
 class HoldingChangeStatus(StrEnum):
@@ -84,6 +85,8 @@ class InstitutionalPortfolioComparison:
     is_value_comparable: bool = True
     coverage_status: str = "COMPLETE"
     comparison_warnings: tuple[str, ...] = ()
+    prior_public_availability: PublicAvailability | None = None
+    current_public_availability: PublicAvailability | None = None
 
     def __post_init__(self) -> None:
         if not self.manager_cik:
@@ -212,7 +215,7 @@ class InstitutionalFeatureSet:
             raise TimezoneValidationError("as_of must be timezone-aware")
         if not self.manager_cik or not self.target_cusip:
             raise ContractValidationError("manager_cik and target_cusip must be non-empty")
-        if self.score_status != "UNVALIDATED" and not self.is_point_in_time:
+        if self.score_status not in {"UNVALIDATED", "UNAVAILABLE"} and not self.is_point_in_time:
             raise ContractValidationError("Cannot validate non-point-in-time features")
 
 
