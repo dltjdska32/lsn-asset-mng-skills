@@ -123,7 +123,12 @@ class EvidenceResearchStore:
                     },
                 )
                 observation_id: str | None = None
-                value = observation.value if isinstance(observation.value, (str, int, float)) else None
+                from decimal import Decimal, InvalidOperation
+                if isinstance(observation.value, Decimal):
+                    value = str(observation.value)
+                else:
+                    value = observation.value if isinstance(observation.value, (str, int, float)) else None
+                    
                 if observation.evidence_type == "market":
                     observation_id = _id("market")
                     self.run_db.add_market_observation(
@@ -151,8 +156,30 @@ class EvidenceResearchStore:
                         provider_id=observation.provider_id, metadata=observation.metadata,
                     )
                 approved = observation.metadata.get("calculation_input_approved", True) is not False
+                
+                val_ok = True
+                if isinstance(observation.value, bool):
+                    val_ok = False
+                elif isinstance(observation.value, (int, float, Decimal)):
+                    try:
+                        dec_val = Decimal(str(observation.value))
+                        if not dec_val.is_finite():
+                            val_ok = False
+                        elif observation.metric == "current_price" and dec_val <= 0:
+                            val_ok = False
+                    except (ValueError, TypeError, InvalidOperation):
+                        val_ok = False
+                elif observation.metric == "current_price":
+                    try:
+                        dec_val = Decimal(str(observation.value))
+                        if not dec_val.is_finite() or dec_val <= 0:
+                            val_ok = False
+                    except Exception:
+                        val_ok = False
+
                 if (
                     approved
+                    and val_ok
                     and assessment.status is not FreshnessStatus.UNAVAILABLE
                     and observation_time(observation) is not None
                 ):
