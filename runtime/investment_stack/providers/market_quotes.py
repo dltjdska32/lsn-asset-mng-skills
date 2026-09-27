@@ -80,6 +80,8 @@ def calendar_aware_freshness_evaluator(calendar: Any = None, *, engine: Any = No
     allowed = {FreshnessStatus.FRESH, FreshnessStatus.LAST_VALID_CLOSE}
 
     def evaluate(quote: MarketQuote, analysis_as_of: datetime) -> tuple[bool, str | None]:
+        if quote.delay_minutes is not None and quote.delay_minutes > 0:
+            return False, "DELAYED_QUOTE_NOT_ALLOWED_FOR_CURRENT_PRICE"
         observation = quote_to_observation(quote)
         if calendar is not None and not getattr(calendar, "is_pinned", False):
             return False, "UNTRUSTED_CALENDAR_SCHEDULE"
