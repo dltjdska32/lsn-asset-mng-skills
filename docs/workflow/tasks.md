@@ -1,5 +1,7 @@
 # 작업 상태표
 
+**통합 회귀 체크포인트 — root `231bd6f`:** C source `2d08790`→root `35fd3b4`로 RC06(반환 report_ref 저장), RC07(thesis request/run DB/clock/mode 결속), RC09(refresh 전용 pin handler), RC10(부분 결과/누락의 한국어 보고서), C→A `refresh_context` 전달 및 네 모드 본문 가독성을 통합했다. A source `8ab6c80`→root `231bd6f`로 명시 주입된 ledger·equity·portfolio/thesis 번들의 같은 run.db 일곱 고정 모드 조립을 통합했다. 총괄 직접 세 번들 집중 **22/22 PASS**, wheel/sdist 재빌드 후 전체 **595 OK(skip1)**, 독립 reviewer 고정 5+3+5 = **13/13 PASS**. CLI 기본 `RuntimeServices()`는 configured host 없이 UNSUPPORTED이고 실제 개인 DB/외부 provider 자동 연결은 하지 않는다. 이 결과는 총괄 회귀로서 새 독립 최종 SHA 코드 검토와 별도 Codex 최종 검증을 대체하지 않는다.
+
 **R15 sdist 자체검증 보정 — root `22e6087`:** B 별도 `codex/r15-sdist-rc08` source `f69b13a`를 통합. `ARCHITECTURE.md`를 명시적 sdist allowlist에 포함하고, 풀린 sdist에서 배포된 버전 테스트를 별도 프로세스로 실제 실행한다. 총괄이 wheel/sdist 재빌드 후 R15 집중 11 OK(skip1), 독립 번들 5반례 중 RC08 PASS·C 소유 RC06/07/09/10 네 건 FAIL을 재확인. 외부 설치/배포 없음. C 후속 통합 뒤 전체 회귀 필요.
 
 **독립 번들 중간 검토 산출물 인수 — 기준 `b1f4514`:** REVIEW-CODE-01의 보고서 `reviews/REVIEW-CODE-01-INTERIM-b1f4514.md`, 재현 `review_code_01_b1f4514_probes.py` 및 인계를 공유 메모리에 반영했다. reviewer와 총괄 모두 RC06–10 5/5 FAIL을 직접 재현했다. P1은 refresh 반환 ref 미저장, 다른 run의 논지 자료/DB 허용, 실행 PARTIAL인데 사용자 보고서 완료·높은 신뢰도로 표시; P2는 sdist 자체 테스트의 ARCHITECTURE.md 누락, refresh pin handler 미등록이다. B/C에 소유 파일별 수정 회송. reviewer의 clean wheel venv R15 10/10과 전체 576 OK(skip1)는 이 독립 반례를 대체하지 않는다. R17 한국어·내부 ID 본문 분리도 C 후속 확인 대상으로 배정했다.
