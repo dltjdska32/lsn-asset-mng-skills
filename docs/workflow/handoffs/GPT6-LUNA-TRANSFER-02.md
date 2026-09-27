@@ -54,3 +54,9 @@
 ## 12:23 UTC root 기본 TLS transport 공개 연결 재확인
 
 - Root `0d78c64` 계열(이후 workflow 메모리만 추가) `.venv/Scripts/python.exe`에서 실제 `providers.http.fetch_json`의 기본 transport로 공개 Naver 삼성 basic API, Yahoo AAPL chart API, Coinbase BTC-USD ticker API를 각각 호출했고 모두 JSON `dict`를 반환, 프로세스 종료 0. 별도 주입 transport가 아닌 A 통합 기본 경로를 총괄이 직접 검사했다. 이 probe는 연결/JSON 파싱만 입증하며 9/27 현재가 적격성, 종목·거래소 동일성, 조정 OHLCV, 실행 판단을 입증하지 않는다. 인증정보·개인 데이터 사용 없음.
+
+## 12:29 UTC B R06 적격성 통합
+
+- B source `8135b19` (`codex/luna-b-r06-qualification`, 기준 `a7cac1d`)를 root `145a479`에 반영. 총괄 직접 focused **31/31 PASS**, root 전체 **511 OK, skip1**. 상세 `LUNA-B-R06-QUALIFICATION.md`.
+- 종목·거래소·통화·미래시각 검증과 freshness evaluator의 필수화를 통해 불일치/낡은 후보는 실패 사유와 함께 다음 후보로 이동. evaluator 부재/오류가 파싱 성공을 현재가 승인으로 바꾸지 않는다.
+- B 실제 Yahoo/Naver 기본 TLS 공개 응답은 각각 9/25·9/23 가격시각으로 9/27 기준 현재가 아님. JP·금속·일부 공식 경로 live는 미실행. A dispatcher focused 테스트는 담당 branch 진행 중이며 7개 mock StepHandler 통과를 실제 7모드 결과물로 혼동하지 않도록 총괄이 지적했다. 전체 독립 REVIEW-CODE-01/VERIFY-01 미실행.

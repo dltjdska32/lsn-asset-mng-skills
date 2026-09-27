@@ -1,5 +1,7 @@
 # 작업 상태표
 
+**최신 상태 — 2026-09-27 12:29 UTC, B R06 적격성 통합:** B `codex/luna-b-r06-qualification`(별도 72d3 worktree, 기준 `a7cac1d`) source `8135b19`를 root `145a479`로 통합. 총괄 직접 B 집중 **31/31 PASS**, root 전체 **511 OK, skip1**. 종목·거래소·통화 불일치, 미래/낡은 시각, evaluator 오류를 기록하고 후속 후보로 전환하며 freshness evaluator 부재 시 selected/AVAILABLE을 만들지 않는다. B 실제 Yahoo AAPL/Naver 삼성 공개 응답은 HTTP200/파싱됐으나 9/27보다 오래된 9/25·9/23 시세로 현재가 승인하지 않았다. JP·금속 및 일부 공식 대체 live 미검증. A는 7모드 dispatcher focused 검증 후 인계/commit 중; mock handler 일곱 모드 호출과 실제 제품 일곱 모드 완료는 구분하도록 총괄 피드백 전달. 전체 독립 검토·다른 최종 검증 미실행.
+
 **최신 상태 — 2026-09-27 12:21 UTC, C typed 브리핑 통합:** C `codex/luna-c-brief-binding`(별도 a3b7 worktree, 기준 `83dfb27`) source `1010432`를 root `0d78c64`로 통합. 총괄 직접 C 집중 **15/15 PASS**, root 전체 **505 OK, skip1**. 현재가/가치평가는 목적·typed output·선택 슬롯/적격성·공개시각·계산 lineage가 모두 결속된 단일 값만 표시; 일반 계산 숫자와 시나리오 이름 미확정 값은 거부한다. 정책 provenance가 없으므로 판단 WAIT, 가격 구간·금액·수량 미산출. 개인 DB/주문 호출 없음은 합성 테스트 범위. A 7모드 dispatcher 및 B R06 후보 전환은 진행 중이며, 새 독립 전체 검토/다른 최종 검증 미실행.
 
 **최신 상태 — 2026-09-27 12:17 UTC, B 적격 기술 계산 통합:** B 새 branch `codex/luna-b-r07-r08-tls`(별도 72d3 worktree, 기준 `83dfb27`) source `d2c5158`·인계 `b6e7a68`을 root `1fa4372`·`a7cac1d`로 반영했다. 총괄이 R06–08 집중 **37/37 PASS**, root 전체 **501 OK, skip1** 직접 실행. Yahoo adjclose만으로 원 OHLC를 조정 완료로 오인하지 않게 했고, 기술 분석은 조정·캘린더 영수증과 예상/실제 세션, 시각·완전성 검증 뒤에만 수행한다. 영수증의 외부 진위는 미확인, 거래 신호 정책은 UNAVAILABLE 유지. B에 R06 시장별 대체/identity·시각·지연 실제 적격성 후속 배정; A R14, C typed 브리핑은 각각 격리 branch에서 진행 중. 독립 전체 검토·다른 최종 검증 아직 미실행.
