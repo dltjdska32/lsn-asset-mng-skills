@@ -60,3 +60,9 @@
 - B source `8135b19` (`codex/luna-b-r06-qualification`, 기준 `a7cac1d`)를 root `145a479`에 반영. 총괄 직접 focused **31/31 PASS**, root 전체 **511 OK, skip1**. 상세 `LUNA-B-R06-QUALIFICATION.md`.
 - 종목·거래소·통화·미래시각 검증과 freshness evaluator의 필수화를 통해 불일치/낡은 후보는 실패 사유와 함께 다음 후보로 이동. evaluator 부재/오류가 파싱 성공을 현재가 승인으로 바꾸지 않는다.
 - B 실제 Yahoo/Naver 기본 TLS 공개 응답은 각각 9/25·9/23 가격시각으로 9/27 기준 현재가 아님. JP·금속·일부 공식 경로 live는 미실행. A dispatcher focused 테스트는 담당 branch 진행 중이며 7개 mock StepHandler 통과를 실제 7모드 결과물로 혼동하지 않도록 총괄이 지적했다. 전체 독립 REVIEW-CODE-01/VERIFY-01 미실행.
+
+## 12:35 UTC A R14 dispatcher 통합 및 사용자 종가 보정
+
+- A source `0eba86d`·`272790d`·`9c4a40d`를 root `a0a1760`·`2e151ff`·`771c3cb`에 통합. 총괄 A 라우터/dispatcher 집중 **18/18 PASS**, root 전체 **522 OK, skip1**. 담당 전체 508개 중 1 FAIL은 worktree에 배포용 `dist/`가 없던 패키징 테스트의 사전조건으로, root에는 같은 코드 통합 후 전체 통과. `LUNA-A-R14-01.md` 참조.
+- 거래 질문/부정/주문과 완료 거래 사실을 분리. 실제 원장 합성 DB에서 ASSET_UPDATE 게시/멱등/미확정 경계 확인. 원장 게시 이후 상태 기록 실패는 FAILED+영수증 보존, 복합 분석 중지. 나머지 6모드는 mock handler 구조 검증만이며 concrete 번들이 없어 기본 실행은 UNSUPPORTED; R14/16 완수로 보고하지 않는다.
+- 최신 사용자는 9/27 일요일·추석 휴장에는 마지막 유효 거래일 종가를 확인해 계산하라고 수정했다. 요구사항 R01과 `WEEKEND-CLOSE-01.md`에 공식 거래소/행정안전부 근거·검증 조건을 고정하고 B에 freshness/calendar 단일 소유 배정. A R14는 해당 파일을 수정하지 않았다. 이 보정은 root 통합 전.
