@@ -16,6 +16,7 @@
 ## 2026-09-27 통합 후 직접 확인
 
 - A의 Yahoo 공개 요청 헤더 수정 source `fc189a0`을 root `8640632`에 반영했다. 총괄의 **실제 기본** `build_default_provider_executor()` 실행에서 Yahoo AAPL HTTP 200/`341.07 USD`/9월25일 16:00:01 ET, Naver 삼성 HTTP 200/`286500 KRW`/9월23일 정규장 파생 15:30 KST를 각각 선택했다. 선택 observation을 공통 `assess_current_price_observation`으로 다시 검사한 결과 둘 다 `LAST_VALID_CLOSE`(Nasdaq 마지막 완료 세션 9/25, KRX 추석 전 마지막 완료 세션 9/23)였다. 담당 집중 8/8 PASS. 이 공개 조회는 특정 시점의 가용성 증거이며 다른 주말이나 공급자 지속 가용성을 보증하지 않는다.
+- 총괄은 같은 실제 공개 응답을 기본 executor→Phase4→합성 임시 run.db 근거 저장→Phase5의 `valuation.current_price` 입력까지 추가로 직접 실행했다. `NASDAQ:AAPL`은 `341.07`/9월25일, `KRX:005930`은 `286500`/9월23일로 각각 `LAST_VALID_CLOSE`였고 Phase5에 전달된 가격과 run.db 시장 observation 1건씩을 확인했다. 다른 재무자료가 없는 이 probe는 DCF/매매 판단 완료나 실시간 시세 승인 증거가 아니다. 실제 개인 DB는 사용하지 않았다.
 
 - A R01 후속 source `2c3a1d8`·`1c4c6fe`·`e65f6f6`을 root `c6e63d9`까지 통합하고, 총괄은 합성 Yahoo/Naver의 Phase4→run.db→Phase5→한국어 보고서 29/29 및 전체 564 OK(skip1)를 직접 확인했다. Yahoo의 명시적인 `exchangeDataDelayedBy>0`은 종가 판정에서 차단한다. 아직 별도 독립 검토의 최종 재검토와 다른 최종 검증은 남아 있다.
 - 헤더 수정 전 실제 기본 provider 실행에서 KRX 005930은 Naver `LAST_VALID_CLOSE`로 선택되었으나 NASDAQ:AAPL은 Yahoo HTTP 429로 `CANDIDATES_EXHAUSTED`였다. scoped truststore 직접 진단에서 헤더 없는 Yahoo 요청은 HTTP 429, `User-Agent: Mozilla/5.0` 요청은 HTTP 200(3546 bytes)이었다. 이는 종가 시각 적격성 오류가 아니라 전송 헤더 결손으로, 위 `8640632` 재조회에서 해결을 확인했다.
