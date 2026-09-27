@@ -13,4 +13,10 @@
 - 발견한 현재 결함: `FreshnessEngine.assess`는 `market_session`이 CLOSED/HOLIDAY이고 관측에 임의 `market_session_date`만 있으면 날짜가 지난주여도 `LAST_VALID_CLOSE`를 반환한다. 반대로 현재 기본 20분/1일 정책을 그대로 쓰면 휴장 중 마지막 완료 세션 종가를 stale로 분류할 수 있다. B R06은 freshness evaluator 없을 때 안전하게 UNAVAILABLE이나, 거래소 일정 기반 evaluator의 생산 연결은 미완이다.
 - 완료 조건: 출처 있는 거래소별 일정·시간대와 session close를 as-of 기준으로 판정; 9/27의 NASDAQ 9/25와 KRX 9/23 유효 종가 허용; 중간 거래일 누락, 월요일 개장/완료 후 과거 종가, 몇 주 전 가격, 잘못된 시장, 24/7 코인, 미래/미완성 봉, 달력 근거 부재 차단; 계산 수치에는 종가 시각과 '마지막 유효 거래일 종가' 라벨. 합성 반례, 공개 응답 재검증, root 직접 회귀 및 이후 별도 독립 검토/최종 검증.
 
-현재 상태: 구현·직접 검증 **진행 중**. 과거 handoff의 '9/27보다 오래되어 현재가 아님'은 실시간 여부만을 뜻하며, 마지막 유효 거래일 종가의 계산 불가 결론으로 사용하지 않는다.
+## 2026-09-27 통합 후 직접 확인
+
+- B source `86161c3`·`d1052d1`을 root `6b36c4b`·`02a5710`으로 통합했고, 총괄이 focused 44/44 및 전체 543 OK(skip1)를 실행했다. B 인계는 `LUNA-B-SESSION-FRESHNESS.md`.
+- root의 scoped TLS 공개 조회로 Yahoo AAPL `341.07`(9/25 16:00:01 ET), Naver 삼성 `286,500`(9/23 정규장 파생 종가 15:30 KST, 공개가능 16:30)을 재조회한 뒤 parser→pinned calendar→freshness evaluator에 직접 넣었다. 두 응답 모두 `LAST_VALID_CLOSE`, eligible=True였다. 이는 현재가 실시간 판정이 아니다.
+- 아직 기본 provider factory와 목적별 선택, Phase5 계산·보고 연결은 A 소유 R01 후속 작업이다. 현재 root 코드에서 일곱 모드 전체로 해당 가격이 전달된다고 주장하지 않는다. pinned 일정은 해당 2026년 9월 구간으로 제한되어 다른 주말은 새 공식 일정 근거 전에는 fail closed다. 독립 전체 검토와 다른 최종 검증은 이후 시행한다.
+
+과거 handoff의 '9/27보다 오래되어 현재가 아님'은 실시간 여부만을 뜻하며, 마지막 유효 거래일 종가의 계산 불가 결론으로 사용하지 않는다.
