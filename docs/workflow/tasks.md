@@ -1,5 +1,7 @@
 # 작업 상태표
 
+**최신 상태 — A 저장 계약 추가 반례 발견 (2026-09-27):** A `codex/impl-a-luna` HEAD `16a22e0a789b3ce526934474ad3f271fee0cda33`에서 총괄 계약99/99, storage29/29, gate12/12를 재실행했으나, 새 `scripts/workflow/contract-request-descriptor-probe.py`는 FAIL: 등록되지 않은 임의 유효 64-hex request_hash를 snapshot이 수용. 기존 audit의 비 SHA 문자열 거부 1 PASS는 실제 descriptor 결속을 증명하지 않는다. `assignments/CONTRACT-FIX-07.md`로 A에 회송. B/C 담당 수정은 각 branch에서 검증됐지만 root 런타임 통합은 대기.
+
 **최신 상태 — B/C 담당 수정 직접 재검증:** B `codex/luna-b` HEAD `9252038100cf748e77f35996fde1cd1ae4d53cfd`에서 담당 unittest 19 PASS와 공개응답 사본 fallback probe 6 PASS를 총괄 재실행. C `codex/luna-c` HEAD `e2b185f847a02aeb3cab313cef102981f4cf1967`에서 담당 unittest 26 PASS 재실행. 각 결과·미실행 live/전체 suite는 `handoffs/CODEX-B-FIX-01.md`, `CODEX-C-FIX-01.md` 및 `CODEX-TRANSFER-01.md` 참조. A 공통계약 `codex/impl-a-luna`는 AUDIT-03 저장 잔여 수정 중이므로 B/C를 root runtime에 통합하지 않았다. 전체 7모드·스킬셋 패키지·새 전체 독립 검토·다른 새 최종 검증도 미완료.
 
 **최신 상태 — 중복 세션 정리 및 C 첫 수정 확인:** 관리형 준비 ID도 뒤늦게 실제 세션으로 활성화됐음을 확인. 후속 주 담당은 관리형 A `01a0cd99-1059-7d73-b623-be991696c65d` (`codex/impl-a-luna`), 복구 B `01a0cd9c-aff9-7122-b0cc-bd638dbf7f81` (`codex/luna-b`), 복구 C `01a0cd9c-e908-7f30-9991-75cbd9d2004f` (`codex/luna-c`). 중복 복구 A는 중단 후 archive, 관리형 B/C는 종료 후 archive. 상세 매핑은 `handoffs/CODEX-TRANSFER-01.md`. C commit `e2b185f`의 26 담당 unittest를 총괄도 26 PASS 재실행; root 통합은 미완료. B 진행 중, A 공통계약 감사 잔여 수정 중. B 초안 두 갈래 모두 root 독립 오프라인 probe 6/6 PASS이나 전체 인수 전. 새로운 전체 독립 검토/다른 새 최종 검증은 아직 시작하지 않았다.

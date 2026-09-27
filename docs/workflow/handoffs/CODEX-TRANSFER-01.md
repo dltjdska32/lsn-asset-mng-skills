@@ -30,7 +30,8 @@
 
 복구 C `01a0cd9c-e908-7f30-9991-75cbd9d2004f`는 `codex/luna-c`에 구현 `c6a4431`, 인계 `e2b185f847a02aeb3cab313cef102981f4cf1967`을 commit하고 clean 상태로 종료했다. 담당 13F 테스트 26개 통과를 총괄이 같은 worktree와 root venv에서 독립 재실행했다. 변경은 `institutional/compare.py`와 C 전용 두 테스트, 인계뿐이며 자세한 내용은 `handoffs/CODEX-C-FIX-01.md`. C branch는 아직 root에 통합하지 않았고 실제 SEC archive XML 및 전체 repository suite 검증은 남았다.
 
-복구 B `01a0cd9c-aff9-7122-b0cc-bd638dbf7f81`는 `codex/luna-b`에 구현 `b23ec247e9ffbcf9b7d6bc49b8c5db3a2fe96762`, 인계 `9252038100cf748e77f35996fde1cd1ae4d53cfd`를 commit하고 clean 상태로 종료했다. 총괄은 최종 commit에서 B 담당 unittest 19/19와 공개 Coinbase/Kraken 사본을 사용하는 fallback probe 6/6을 독립 재실행했다. BTC/EUR→USD 오승인, Kraken 응답 쌍, helper 조회시각, 실제 provider eligibility fallback을 보완했다. `handoffs/CODEX-B-FIX-01.md`가 인계 사본이다. 관리형 B의 별도 미커밋 수정을 자동 합치지 않는다. B branch도 아직 root에 통합하지 않았고 live API E2E/전체 suite는 미실행이다.
+
+세 주 구현 task A/B/C의 로컬 session `turn_context.model`을 각 session JSONL에서 확인한 값은 모두 `gpt-6-luna`였다. 단순 create_thread 인자 수락보다 강한 모델 실행 기록 확인이다. 모델 정보 외 개인 내용은 공유 메모리에 복사하지 않았다.
 
 배정 기준은 root `docs/workflow/assignments/CONTRACT-FIX-06.md`, `IMPL-B-FIX-03.md`, `IMPL-C-FIX-03.md`로 유지한다. 문서 안의 Gemini 담당과 21:40 KST 한도 문구는 이 전환에 한해 Codex GPT-6 Luna 담당/즉시 진행으로 대체된다. 파일 소유권·요구사항·검증 조건은 그대로다. A 공통계약 인수 전 B/C는 독립 소유 파일만 수정한다. 이후 IMPL-A, BRIEF, INTEGRATE, PACKAGE도 담당 Codex GPT-6 Luna 작업에서 진행하고, 전체 독립 검토와 최종 검증은 구현 작업과 서로 다른 새 Codex 작업으로 유지한다.
 
