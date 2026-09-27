@@ -33,8 +33,8 @@ def section_from_analysis_result(
     }[result.status]
     lines: list[str] = []
     lines.extend(result.findings)
-    lines.extend(f"Risk: {risk}" for risk in result.risks)
-    lines.extend(f"Unknown: {unknown}" for unknown in result.unknowns)
+    lines.extend(f"위험: {risk}" for risk in result.risks)
+    lines.extend(f"확인 불가: {unknown}" for unknown in result.unknowns)
     for metric in result.metrics:
         if metric.value is None:
             lines.append(f"{metric.name}: UNKNOWN" + (f" ({metric.reason})" if metric.reason else ""))

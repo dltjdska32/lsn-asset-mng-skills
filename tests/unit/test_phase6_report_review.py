@@ -8,7 +8,7 @@ from investment_stack.reporting.builder import InvestmentReportBuilder
 from investment_stack.reporting.models import Availability, Confidence, ReportSectionInput
 from investment_stack.reporting.runtime import section_from_analysis_result
 from investment_stack.review.engine import ConditionalReviewEngine
-from investment_stack.review.models import FindingSeverity, ReviewContext, ReviewFinding, ReviewTrigger
+from investment_stack.review.models import FindingSeverity, ReviewContext, ReviewFinding, ReviewResult, ReviewTrigger
 from tests.phase6_support import Phase6RunFixture, add_market
 
 
@@ -25,7 +25,8 @@ class Phase6UnitTests(unittest.TestCase, Phase6RunFixture):
         )
         section = section_from_analysis_result(result)
         self.assertEqual(section.status, Availability.PARTIAL)
-        self.assertIn("Unknown: latest guidance unavailable", section.lines)
+        self.assertIn("확인 불가: latest guidance unavailable", section.lines)
+        self.assertFalse(any(line.startswith("Unknown:") or line.startswith("Risk:") for line in section.lines))
         self.assertIn("roe: UNKNOWN", "\n".join(section.lines))
 
     def test_current_value_requires_selected_timestamped_nonstale_market_evidence(self):
@@ -110,19 +111,49 @@ class Phase6UnitTests(unittest.TestCase, Phase6RunFixture):
         self.assertEqual(Availability.PARTIAL, report.availability)
         self.assertIn("자료 제공처 간 값이 다른 항목 1건", report.markdown)
         self.assertIn("하나의 값으로 합치지 않았습니다", report.markdown)
-        self.assertNotIn("SOURCE_CONFLICT", report.markdown)
+        body, details = report.markdown.split("## 상세 근거", maxsplit=1)
+        self.assertNotIn("SOURCE_CONFLICT", body)
+        self.assertIn("SOURCE_CONFLICT", details)
         self.assertNotIn("conflict-private", report.markdown)
         self.assertIn("분석 기준시각:", report.markdown)
 
-    def test_report_builder_leaves_manifest_and_final_briefing_identity_to_mode_runtime(self):
+    def test_material_review_codes_are_distinguished_and_unknown_details_are_retained(self):
+        review = ConditionalReviewEngine(self.manager).evaluate()
+        findings = (
+            ReviewFinding(FindingSeverity.HIGH, "UNSUPPORTED_MODEL", "model not supported"),
+            ReviewFinding(FindingSeverity.HIGH, "MISSING_CRITICAL_EVIDENCE", "evidence:private-42 missing"),
+            ReviewFinding(FindingSeverity.HIGH, "CALCULATION_LINEAGE", "lineage could not be verified"),
+            ReviewFinding(FindingSeverity.CRITICAL, "FUTURE_REVIEW_CODE", "source:private-17 needs investigation"),
+        )
+        review = ReviewResult(True, review.triggers, findings, Confidence.LOW)
+        report = InvestmentReportBuilder(self.manager).build(title="TEST", sections=(), review=review)
+        body, details = report.markdown.split("## 상세 근거", maxsplit=1)
+        self.assertIn("요청한 분석 또는 가치평가 방법은 지원되지 않아", body)
+        self.assertIn("판단에 필요한 핵심 근거가 연결되지 않아", body)
+        self.assertIn("계산과 원자료의 연결을 확인할 수 없어", body)
+        self.assertNotIn("FUTURE_REVIEW_CODE", body)
+        self.assertNotIn("private-17", body)
+        self.assertIn("FUTURE_REVIEW_CODE", details)
+        self.assertIn("source:private-17 needs investigation", details)
+        self.assertIn("MISSING_CRITICAL_EVIDENCE", details)
+        self.assertIn("evidence:private-42 missing", details)
+
+    def test_report_builder_returns_content_addressed_refs_without_owning_manifest(self):
         review = ConditionalReviewEngine(self.manager).evaluate()
         builder = InvestmentReportBuilder(self.manager)
-        builder.build(title="TEST", sections=(ReportSectionInput("summary", "요약", ("처음 내용",)),), review=review)
-        builder.build(title="TEST", sections=(ReportSectionInput("summary", "요약", ("다음 내용",)),), review=review)
+        original = builder.build(title="TEST", sections=(ReportSectionInput("summary", "요약", ("처음 내용",)),), review=review)
+        replay = builder.build(title="TEST", sections=(ReportSectionInput("summary", "요약", ("처음 내용",)),), review=review)
+        revised = builder.build(title="TEST", sections=(ReportSectionInput("summary", "요약", ("다음 내용",)),), review=review)
+        self.assertEqual(original.persisted_section_refs, replay.persisted_section_refs)
+        self.assertNotEqual(original.persisted_section_refs[0][1], revised.persisted_section_refs[0][1])
+        self.assertEqual("summary", original.persisted_section_refs[0][0])
         rows = self.manager.fetch_phase6_context()["report_sections"]
         report_rows = [row for row in rows if row["section_name"] == "summary"]
-        self.assertEqual(1, len(report_rows))
-        self.assertEqual("section:summary", report_rows[0]["section_id"])
+        self.assertEqual(2, len(report_rows))
+        rows_by_id = {row["section_id"]: row for row in report_rows}
+        for section_name, section_id, content_reference in revised.persisted_section_refs:
+            if section_name == "summary":
+                self.assertEqual(content_reference, rows_by_id[section_id]["content_reference"])
         self.assertFalse(any(row["section_name"] in {"final_briefing", "investment_briefing"} for row in rows))
 
     def test_materiality_pass_in_run_db_triggers_review(self):

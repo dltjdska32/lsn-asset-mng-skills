@@ -116,7 +116,11 @@ class InvestmentReportBuilder:
                     finding_status,
                     (),
                     (),
-                    {},
+                    {"finding_details": tuple({
+                        "severity": finding.severity.value,
+                        "code": finding.code,
+                        "text": self.redactor.text(finding.text),
+                    } for finding in review.findings)},
                 )
             )
 
@@ -170,19 +174,41 @@ class InvestmentReportBuilder:
         )
         markdown = self._render(replace(report, markdown=""), evidence_by_id)
         report = replace(report, markdown=markdown)
-        self._persist(report)
+        report = replace(report, persisted_section_refs=self._persist(report))
         return report
 
     @staticmethod
     def _finding_summary(finding: object) -> str:
-        code = getattr(finding, "code", "")
-        if code == "SOURCE_CONFLICT":
-            return "자료 제공처 간 값이 달라 추가 확인이 필요합니다."
-        if code == "STALE_OR_UNKNOWN_INPUT":
-            return "자료의 기준시점 또는 최신 여부를 확인해야 합니다."
-        if code == "HIGH_MATERIALITY":
-            return "판단에 미치는 영향이 커 추가 검토가 필요합니다."
-        return "추가 검토가 필요한 항목이 있습니다."
+        code = str(getattr(finding, "code", "UNKNOWN"))
+        severity = str(getattr(getattr(finding, "severity", None), "value", "MEDIUM"))
+        summaries = {
+            "SOURCE_CONFLICT": "자료 제공처 간 값이 달라 하나의 값으로 확정할 수 없습니다.",
+            "STALE_OR_UNKNOWN_INPUT": "자료의 기준시점 또는 최신 여부를 확인해야 합니다.",
+            "CRITICAL_DATA_FRESHNESS": "판단에 필요한 핵심 자료가 오래되었거나 최신 여부를 확인할 수 없습니다.",
+            "UNSUPPORTED_MODEL": "요청한 분석 또는 가치평가 방법은 지원되지 않아 판단에 반영할 수 없습니다.",
+            "MISSING_CRITICAL_EVIDENCE": "판단에 필요한 핵심 근거가 연결되지 않아 결론을 확인할 수 없습니다.",
+            "CALCULATION_LINEAGE": "계산과 원자료의 연결을 확인할 수 없어 해당 수치를 신뢰 판단에 반영할 수 없습니다.",
+            "MATERIAL_NEWS_CONFIRMATION": "중요 소식의 공식 확인이 끝나지 않았습니다.",
+            "HIGH_MATERIALITY": "판단에 미치는 영향이 커 추가 검토가 필요합니다.",
+            "OPTIONAL_REVIEWER_FAILED": "독립 검토를 완료하지 못해 추가 확인이 필요합니다.",
+            "UNSUPPORTED_IN_KIND_TRANSFER": "지원하지 않는 자산 대체 방식이 포함되어 상태 확인이 필요합니다.",
+        }
+        if code in summaries:
+            reason = summaries[code]
+        else:
+            reason = {
+                "CRITICAL": "매우 높은 위험의 검토 사항이 있습니다.",
+                "HIGH": "중요한 검토 사항이 있습니다.",
+                "MEDIUM": "추가 확인이 필요한 사항이 있습니다.",
+                "LOW": "참고할 검토 사항이 있습니다.",
+            }.get(severity, "추가 확인이 필요한 사항이 있습니다.")
+        severity_label = {
+            "CRITICAL": "매우 심각",
+            "HIGH": "중요",
+            "MEDIUM": "주의",
+            "LOW": "참고",
+        }.get(severity, "확인 필요")
+        return f"{severity_label}: {reason}"
 
     @staticmethod
     def _validate_current_value_claim(section: ReportSectionInput, cited: list[dict[str, object]]) -> None:
@@ -294,9 +320,12 @@ class InvestmentReportBuilder:
                 lines.append("- 확인 불가")
         details = []
         for section in report.sections:
-            if not section.evidence_ids and not section.calculation_ids:
+            finding_details = section.metadata.get("finding_details", ())
+            if not section.evidence_ids and not section.calculation_ids and not finding_details:
                 continue
             details.append(f"### {section.title}")
+            for finding in finding_details:
+                details.append(f"- {finding.get('severity', 'UNKNOWN')} / {finding.get('code', 'UNKNOWN')}: {finding.get('text', '')}")
             for evidence_id in section.evidence_ids:
                 row = evidence_by_id[evidence_id]
                 data_time = row.get("observed_at") or row.get("published_at") or row.get("event_time") or "확인 불가"
@@ -309,7 +338,8 @@ class InvestmentReportBuilder:
             lines.extend(("", "## 상세 근거", *details))
         return "\n".join(lines) + "\n"
 
-    def _persist(self, report: InvestmentReport) -> None:
+    def _persist(self, report: InvestmentReport) -> tuple[tuple[str, str, str], ...]:
+        refs = []
         for section in report.sections:
             payload = {
                 "title": section.title,
@@ -323,10 +353,14 @@ class InvestmentReportBuilder:
             }
             canonical = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
             digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+            section_id = f"section:{section.name}:{digest}"
+            content_reference = f"inline-sha256:{digest}"
             self.run_db.upsert_report_section(
-                section_id=f"section:{section.name}",
+                section_id=section_id,
                 section_name=section.name,
                 section_status=section.status.value,
-                content_reference=f"inline-sha256:{digest}",
+                content_reference=content_reference,
                 metadata=payload,
             )
+            refs.append((section.name, section_id, content_reference))
+        return tuple(refs)

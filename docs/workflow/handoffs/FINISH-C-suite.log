@@ -26,7 +26,7 @@ test_direct_user_selected_asset_auto_passes_materiality (acceptance.test_phase5_
 test_fanuc_routes_to_fundamental_and_valuation (acceptance.test_phase5_asset_analysis.Phase5AcceptanceTests.test_fanuc_routes_to_fundamental_and_valuation) ... ok
 test_fund_holdings_without_asof_never_claim_complete_lookthrough (acceptance.test_phase5_asset_analysis.Phase5AcceptanceTests.test_fund_holdings_without_asof_never_claim_complete_lookthrough) ... ok
 test_gold_etf_is_fund_plus_alternative_context (acceptance.test_phase5_asset_analysis.Phase5AcceptanceTests.test_gold_etf_is_fund_plus_alternative_context) ... ok
-test_material_stale_data_triggers_conditional_review (acceptance.test_phase6_report_review.Phase6AcceptanceTests.test_material_stale_data_triggers_conditional_review) ... FAIL
+test_material_stale_data_triggers_conditional_review (acceptance.test_phase6_report_review.Phase6AcceptanceTests.test_material_stale_data_triggers_conditional_review) ... ok
 test_partial_unknown_report_is_emitted_instead_of_fabricated_value (acceptance.test_phase6_report_review.Phase6AcceptanceTests.test_partial_unknown_report_is_emitted_instead_of_fabricated_value) ... ok
 test_strategy_is_reported_as_analysis_not_execution (acceptance.test_phase6_report_review.Phase6AcceptanceTests.test_strategy_is_reported_as_analysis_not_execution) ... ok
 test_unavailable_report_triggers_low_confidence_review (acceptance.test_phase6_report_review.Phase6AcceptanceTests.test_unavailable_report_triggers_low_confidence_review) ... ok
@@ -176,12 +176,12 @@ test_equity_results_persist_as_calculation_lineage (integration.test_phase5_asse
 test_portfolio_materiality_happens_before_deep_callbacks (integration.test_phase5_asset_runtime.Phase5AssetRuntimeIntegrationTests.test_portfolio_materiality_happens_before_deep_callbacks) ... ok
 test_calculation_lineage_failure_triggers_review_but_report_continues (integration.test_phase6_report_runtime.Phase6IntegrationTests.test_calculation_lineage_failure_triggers_review_but_report_continues) ... ok
 test_full_asof_headers_and_persistence (integration.test_phase6_report_runtime.Phase6IntegrationTests.test_full_asof_headers_and_persistence) ... ok
-test_provider_unavailable_keeps_partial_report_available (integration.test_phase6_report_runtime.Phase6IntegrationTests.test_provider_unavailable_keeps_partial_report_available) ... FAIL
+test_provider_unavailable_keeps_partial_report_available (integration.test_phase6_report_runtime.Phase6IntegrationTests.test_provider_unavailable_keeps_partial_report_available) ... ok
 test_review_findings_are_persisted_to_run_db_only (integration.test_phase6_report_runtime.Phase6IntegrationTests.test_review_findings_are_persisted_to_run_db_only) ... ok
 test_singular_evidence_id_lineage_is_checked (integration.test_phase6_report_runtime.Phase6IntegrationTests.test_singular_evidence_id_lineage_is_checked) ... ok
 test_corrupt_restore_candidate_is_rejected_without_losing_active_state (integration.test_phase7_backup_restore_drill.Phase7BackupRestoreDrillTests.test_corrupt_restore_candidate_is_rejected_without_losing_active_state) ... ok
 test_validated_backup_restore_drill_recovers_ledger_and_projection (integration.test_phase7_backup_restore_drill.Phase7BackupRestoreDrillTests.test_validated_backup_restore_drill_recovers_ledger_and_projection) ... ok
-test_provider_to_evidence_to_analysis_to_report_preserves_personal_source_of_truth (integration.test_phase8_full_stack.Phase8FullStackIntegrationTests.test_provider_to_evidence_to_analysis_to_report_preserves_personal_source_of_truth) ... FAIL
+test_provider_to_evidence_to_analysis_to_report_preserves_personal_source_of_truth (integration.test_phase8_full_stack.Phase8FullStackIntegrationTests.test_provider_to_evidence_to_analysis_to_report_preserves_personal_source_of_truth) ... ok
 test_krx_close_flows_through_phase4_and_publication_gate (integration.test_r01_weekend_price_e2e.WeekendPriceEndToEndTests.test_krx_close_flows_through_phase4_and_publication_gate) ... ok
 test_missing_calendar_and_wrong_currency_fail_closed_even_when_recent (integration.test_r01_weekend_price_e2e.WeekendPriceEndToEndTests.test_missing_calendar_and_wrong_currency_fail_closed_even_when_recent) ... ok
 test_nasdaq_close_flows_through_phase4_calculation_and_report (integration.test_r01_weekend_price_e2e.WeekendPriceEndToEndTests.test_nasdaq_close_flows_through_phase4_calculation_and_report) ... ok
@@ -444,11 +444,12 @@ test_user_specified_asset_auto_passes (unit.test_phase5_materiality_allocation_r
 test_conflict_causes_low_confidence_review (unit.test_phase6_report_review.Phase6UnitTests.test_conflict_causes_low_confidence_review) ... ok
 test_current_value_requires_selected_timestamped_nonstale_market_evidence (unit.test_phase6_report_review.Phase6UnitTests.test_current_value_requires_selected_timestamped_nonstale_market_evidence) ... ok
 test_empty_substantive_report_is_unavailable (unit.test_phase6_report_review.Phase6UnitTests.test_empty_substantive_report_is_unavailable) ... ok
+test_material_review_codes_are_distinguished_and_unknown_details_are_retained (unit.test_phase6_report_review.Phase6UnitTests.test_material_review_codes_are_distinguished_and_unknown_details_are_retained) ... ok
 test_materiality_pass_in_run_db_triggers_review (unit.test_phase6_report_review.Phase6UnitTests.test_materiality_pass_in_run_db_triggers_review) ... ok
 test_news_reported_base_case_is_partial_and_triggers_review (unit.test_phase6_report_review.Phase6UnitTests.test_news_reported_base_case_is_partial_and_triggers_review) ... ok
 test_optional_reviewer_runs_only_when_triggered (unit.test_phase6_report_review.Phase6UnitTests.test_optional_reviewer_runs_only_when_triggered) ... ok
 test_partial_conflict_report_is_korean_and_keeps_ids_in_details (unit.test_phase6_report_review.Phase6UnitTests.test_partial_conflict_report_is_korean_and_keeps_ids_in_details) ... ok
-test_report_builder_leaves_manifest_and_final_briefing_identity_to_mode_runtime (unit.test_phase6_report_review.Phase6UnitTests.test_report_builder_leaves_manifest_and_final_briefing_identity_to_mode_runtime) ... ok
+test_report_builder_returns_content_addressed_refs_without_owning_manifest (unit.test_phase6_report_review.Phase6UnitTests.test_report_builder_returns_content_addressed_refs_without_owning_manifest) ... ok
 test_report_redacts_secret_shaped_text (unit.test_phase6_report_review.Phase6UnitTests.test_report_redacts_secret_shaped_text) ... ok
 test_retrieved_at_is_not_a_substitute_for_observed_at (unit.test_phase6_report_review.Phase6UnitTests.test_retrieved_at_is_not_a_substitute_for_observed_at) ... ok
 test_rumor_cannot_change_base_case (unit.test_phase6_report_review.Phase6UnitTests.test_rumor_cannot_change_base_case) ... ok
@@ -669,33 +670,6 @@ test_transaction_type_closed_set_has_no_correction (unit.test_transaction_intent
 test_user_facing_statuses_are_korean (unit.test_v131_korean_display.V131KoreanDisplayTests.test_user_facing_statuses_are_korean) ... ok
 
 ======================================================================
-FAIL: test_material_stale_data_triggers_conditional_review (acceptance.test_phase6_report_review.Phase6AcceptanceTests.test_material_stale_data_triggers_conditional_review)
-----------------------------------------------------------------------
-Traceback (most recent call last):
-  File "C:\Users\lsn\lsn-asset-mng-skills\workspace\cache\finish-c\tests\acceptance\test_phase6_report_review.py", line 41, in test_material_stale_data_triggers_conditional_review
-    self.assertIn("STALE", result.report.markdown)
-    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AssertionError: 'STALE' not found in '# Stale Evidence\n\n- ������ ����: **�Ϻ� ���� Ȯ�� �Ұ�**\n- ���� �ŷڵ�: **����**\n- �м� ���ؽð�: 2026-08-14T10:00:00+00:00 (Asia/Seoul)\n- ���� �ü� ���ؽð�: 2026-08-14T09:59:00+00:00\n- �繫���� ���ؽð�: Ȯ�� �Ұ�\n- �Žð��� ���ؽð�: Ȯ�� �Ұ�\n- ��Ʈ������ ���ؽð�: 2026-08-14T08:00:00+00:00\n- �߰� ����: �ʿ�\n- �ü� ����: ������ �ü�\n- ���䰡 �ʿ��� ����: �Ǵ� ������ ŭ, �߰� Ȯ�� �ʿ�\n\n## Analysis\n����: **�Ϻ� ���� Ȯ�� �Ұ�**\n- Latest usable quote is stale.\n\n## �߰� ���� �׸�\n����: **�Ϻ� ���� Ȯ�� �Ұ�**\n- �߰� ���䰡 �ʿ��� �׸��� �ֽ��ϴ�.\n\n## �ڷ� ���¿� Ȯ���� �ʿ��� ��\n����: **�Ϻ� ���� Ȯ�� �Ұ�**\n- ���õ� �ڷ� �� ���ؽ����� �����Ǿ��ų� �ֽ� ���θ� Ȯ���� �� ���� �׸��� �ֽ��ϴ�.\n\n## �� �ٰ�\n### Analysis\n- �ٰ� `e-market` \u2014 Official Market; �ڷ� �ð�: 2026-08-14T09:59:00+00:00; �ü� ����: ������ �ü�\n'
-
-======================================================================
-FAIL: test_provider_unavailable_keeps_partial_report_available (integration.test_phase6_report_runtime.Phase6IntegrationTests.test_provider_unavailable_keeps_partial_report_available)
-----------------------------------------------------------------------
-Traceback (most recent call last):
-  File "C:\Users\lsn\lsn-asset-mng-skills\workspace\cache\finish-c\tests\integration\test_phase6_report_runtime.py", line 91, in test_provider_unavailable_keeps_partial_report_available
-    self.assertIn("MISSING_CREDENTIAL", result.report.markdown)
-    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AssertionError: 'MISSING_CREDENTIAL' not found in '# Partial Provider\n\n- ������ ����: **�Ϻ� ���� Ȯ�� �Ұ�**\n- ���� �ŷڵ�: **����**\n- �м� ���ؽð�: 2026-08-14T10:00:00+00:00 (Asia/Seoul)\n- ���� �ü� ���ؽð�: Ȯ�� �Ұ�\n- �繫���� ���ؽð�: Ȯ�� �Ұ�\n- �Žð��� ���ؽð�: Ȯ�� �Ұ�\n- ��Ʈ������ ���ؽð�: 2026-08-14T08:00:00+00:00\n- �߰� ����: ���ʿ�\n\n## Fundamentals\n����: **�Ϻ� ���� Ȯ�� �Ұ�**\n- Official filing unavailable; fallback analysis retained.\n\n## �ڷ� ���¿� Ȯ���� �ʿ��� ��\n����: **�Ϻ� ���� Ȯ�� �Ұ�**\n- �Ϻ� �ڷ�: ���� ������ ���� �ڷḦ �������� ���߽��ϴ�.\n'
-
-======================================================================
-FAIL: test_provider_to_evidence_to_analysis_to_report_preserves_personal_source_of_truth (integration.test_phase8_full_stack.Phase8FullStackIntegrationTests.test_provider_to_evidence_to_analysis_to_report_preserves_personal_source_of_truth)
-----------------------------------------------------------------------
-Traceback (most recent call last):
-  File "C:\Users\lsn\lsn-asset-mng-skills\workspace\cache\finish-c\tests\integration\test_phase8_full_stack.py", line 122, in test_provider_to_evidence_to_analysis_to_report_preserves_personal_source_of_truth
-    self.assertIn("��� �ٰ�:", result.report.markdown)
-    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AssertionError: '��� �ٰ�:' not found in '# EQ Final Integration\n\n- ������ ����: **�Ϻ� ���� Ȯ�� �Ұ�**\n- ���� �ŷڵ�: **����**\n- �м� ���ؽð�: 2026-08-14T10:00:00+00:00 (UTC)\n- ���� �ü� ���ؽð�: 2026-08-14T09:59:00+00:00\n- �繫���� ���ؽð�: Ȯ�� �Ұ�\n- �Žð��� ���ؽð�: Ȯ�� �Ұ�\n- ��Ʈ������ ���ؽð�: 2026-08-14T09:00:00+00:00\n- �߰� ����: ���ʿ�\n\n## Valuation\n����: **�Ϻ� ���� Ȯ�� �Ұ�**\n- selected model: DCF_MULTIPLES\n- Unknown: dcf_value_per_share\n- Unknown: ev_to_ebitda\n- Unknown: pb\n- Unknown: price_to_sales\n- pe: 10 multiple\n- pb: UNKNOWN (required input unavailable)\n- ev_to_ebitda: UNKNOWN (required input unavailable)\n- price_to_sales: UNKNOWN (required input unavailable)\n- dcf_value_per_share: UNKNOWN (required input unavailable)\n\n## �ڷ� ���¿� Ȯ���� �ʿ��� ��\n����: **Ȯ�� �Ϸ�**\n- ���� Ȯ�� �������� �����Ǿ��ų� �浹�ϴ� �߿� �ڷ�� �߰ߵ��� �ʾҽ��ϴ�.\n\n## �� �ٰ�\n### Valuation\n- �ٰ� `evidence:40c2429fd4cd44aca1cfd9f18a0cea10` \u2014 Official Market; �ڷ� �ð�: 2026-08-14T09:59:00+00:00; �ü� ����: �ǽð� �ü�\n### �� ��� �ٰ�\n- ��� ID: `calc:ffa6e80c7ba54590b780fa7a44661ba0`\n'
-
-======================================================================
 FAIL: test_built_artifacts_match_exact_allowlists (test_packaging.TestPackaging.test_built_artifacts_match_exact_allowlists)
 ----------------------------------------------------------------------
 Traceback (most recent call last):
@@ -714,6 +688,6 @@ Traceback (most recent call last):
 AssertionError: [] is not true : Build an sdist before testing its packaged version check.
 
 ----------------------------------------------------------------------
-Ran 604 tests in 135.774s
+Ran 605 tests in 129.584s
 
-FAILED (failures=5, skipped=1)
+FAILED (failures=2, skipped=1)
