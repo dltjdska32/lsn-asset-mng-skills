@@ -18,3 +18,13 @@ Antigravity `agy models`가 `gemini-3.1-pro-high`를 `Gemini 3.1 Pro (High)`로 
 - B-01은 동일 B conversation에서 `status=SUCCESS, denied=0`이며 `pyproject.toml`, `MANIFEST.in`, skill sync script, B 전용 테스트와 인계를 실제 작성했다. 총괄 provider 8/8 및 패키징 정적 3/3 PASS, 새 technical 4 ERROR (`PublicAvailability.unknown` 잘못된 fixture). 임의 `caller_approved=True`와 문자열 정책 ID만으로 거래 신호 AVAILABLE이 되는 위험도 발견해 B-02로 회송. 실제 wheel/sdist 설치 확인은 아직 안 했다.
 - C-01 최초는 headless 거부, C-01-R1은 `status=SUCCESS, denied=0`이며 `decisions/**`, `reporting/**`, 전용 테스트와 인계를 실제 작성. 총괄 전용 4/4 PASS지만 설계의 다섯 **출력 섹션**을 다섯 **투자 등급**으로 잘못 구현하고, 입력 부족에도 HOLD/AVAILABLE을 반환한다. C-02로 회송.
 - B-01과 C-01-R1 실행 시간은 겹쳤고 각 코드 변경이 확인됐다. 세 세션 **모두**의 동시 코드 작성이나 병렬 구현 완료는 아직 확인되지 않았다. A/B/C-02 교정 호출은 각각 별도 worktree·branch·conversation에서 겹쳐 실행 중이며 결과 대기.
+
+## 10:25 UTC 현재 체크포인트 (위 09:55 기록 이후)
+
+| 담당 | 구현 체크포인트 | 총괄 독립 검증 | 모델 실행 상태·남은 제한 |
+|---|---|---|---|
+| A | `d6ef79bc90bb08f0bd170b37653c65a927b029b3` | 등록 요청 정상 저장/reopen probe PASS, 미등록 유효 SHA 거부 probe PASS, 계약 unit `106/106` PASS | 앞선 A-01-R2 API ERROR/A-02 중단/A-03 도구 거부 후 새 짧은 A4·A-05·A-06 SUCCESS/denied0. 원천 계약 체크포인트, R01–05/R09 도메인은 아직 없음. |
+| B | `0edbea6f40dbc4bff18ba6fc9f554852b684494b` | 담당 `16/16`, skill mirror byte `--check` PASS, 실제 wheel/sdist build PASS, 격리 target wheel install PASS; wheel·sdist 각각 8개 skills 원본/미러 및 UI metadata, 민감 패턴 0 확인 | B-03 첫 재빌드 `runtime\\skills` 오류를 B-04로 수정. wheel 설치 target에는 파일이 있으나 Codex가 일반 venv 설치 경로에서 repo-local skill을 자동 발견하는지 미검증. sdist 전체 허용목록은 추가 확인 필요. |
+| C | `f7d74653b093ef2b13980658bedd72b66bc1696e` | 담당 `6/6`, 기존 보고서 회귀 `25/25` PASS | C-03 처음 503, C-03-R1 파일 변경·handoff 후 최종 provider `ERROR`; 직접 실행으로 통과 확인. 5섹션 구조·결속 선행 단계. A 도메인/승인 정책 없는 최종 BUY·규모 계산은 보류. |
+
+세 별도 worktree/branch/conversation의 A-05(10:19:17–10:22:43), B-04(10:21:49–10:23:25), C-03-R1(10:20:39–10:22:08) 모델 호출은 10:21:49–10:22:08 UTC 동시에 실행 중이었고 각각 담당 코드 파일을 실제 변경했다. 따라서 연결과 세 세션 병렬 **실행**은 확인했다. 구현 전체 완료나 독립 전체 검토·최종 검증을 뜻하지 않는다. root 통합은 위 정확한 SHA를 기준으로 진행한다.
