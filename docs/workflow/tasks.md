@@ -2,6 +2,8 @@
 
 **최신 통합 — 독립 검토 RC01·RC05 수정, root `c5ed40c`:** C 별도 `codex/luna-c-fx-risk-fix-01` source `01a8ddb`·인계 `ec80048`, `codex/luna-c-rc05-pit-fix-01` source/인계 `f8070d9`를 root `a7ab0c4`·`fbf5670`·`c5ed40c`으로 통합. 총괄이 전체 **568 OK(skip1)** 직접 실행했다. RC01은 위험 비중을 평가통화 환산 금액으로 계산하고 FX 부족 시 UNKNOWN; RC05는 양쪽 13F 보고기간·공개시각이 cutoff 내인지 확인 안 되면 점수 UNAVAILABLE/PIT=false. 독립 검토자의 고정 반례 재실행과 최종 SHA 재검토는 아직 남아 있다. B는 R15 스킬·패키지 작업을 새 별도 branch에서 진행하도록 배정했다.
 
+**독립 첫 패스 회귀 재실행 — root `b47d17e`:** 검토자가 실제로 작성한 `reviews/REVIEW-CODE-01-FIRST-PASS.md`·`review_code_01_first_pass_probes.py`·인계를 공유 메모리에 가져와 같은 고정 5반례를 총괄이 직접 실행했다. RC01·RC02·RC05는 PASS, RC03·RC04는 아직 FAIL(게시 영수증 반환 예외, 기간/회계기준 불일치 비교). A에 이미 RC03/04 회송했고 고친 SHA에서 5/5 및 전체 회귀를 재실행한다. 첫 패스 3/5는 최종 독립 검토 완료가 아니다.
+
 **최신 통합 — A R01 주말 종가 제품 경로, root `c6e63d9`:** A 별도 `codex/luna-a-weekend-price-01` source `2c3a1d8`·`1c4c6fe`·`e65f6f6`을 root `20dcd23`·`f169350`·`c6e63d9`로 통합했다. 기본 가격 선택·근거 저장·deep research/보고서 연결을 합성 Yahoo/Naver 응답으로 확인했고 총괄 직접 관련 29/29, 전체 **564 OK(skip1)**. 독립 검토 RC02의 Yahoo 명시 지연 시세 승인 반례는 이 변경에서 수정됐다. 그러나 2026-09-27 실제 기본 실행기에서는 Naver 005930이 `LAST_VALID_CLOSE`로 선택된 반면 Yahoo AAPL은 HTTP 429로 미선택이었다. 같은 URL을 Windows truststore로 직접 시험하니 요청 헤더 없음=429, `User-Agent: Mozilla/5.0`=200(3546 bytes). A에 제한된 공개 Yahoo 헤더 수정과 실조회 재검증을 회송했다. 독립 검토 RC03(게시 후 상태 기록 실패 영수증 보존)·RC04(회계기간/기준 불일치 비교 차단)도 A 후속 수정 배정. 현재 실제 Yahoo 기본 실행기·독립 재검토·최종 검증은 미완료다.
 
 **독립 검토 추가 RC05:** 같은 별도 검토 세션은 R12/13의 13F 보유기간이 2026-09-30로 cutoff 9/27 이후이거나 공개시점이 확인되지 않은 경우에도 point-in-time 점수가 생성되는 P1 반례를 직접 재현했다. C의 FX 위험 계산 수정 뒤 같은 담당에게 RC05를 회송했다. C는 현재 별도 branch에서 수정·합성 회귀 진행 중이며 통합 전이다.
