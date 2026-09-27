@@ -349,6 +349,7 @@ class PortfolioThesisModeBundleIntegrationTests(unittest.TestCase):
                 }), refresh_services,
             )
         self.assertEqual(Availability.PARTIAL, refresh_result.availability)
+        self.assertIn("approved_materiality_selector", refresh_result.missing_inputs)
         self.assertNotIn("typed_portfolio_request", refresh_result.missing_inputs)
         self.assertEqual(1, len(received_refresh_contexts))
         refresh_context = received_refresh_contexts[0]
@@ -361,6 +362,11 @@ class PortfolioThesisModeBundleIntegrationTests(unittest.TestCase):
         self.assertTrue(refresh_result.report_refs)
         refresh_manifest = self.report_manifest(refresh_manager, refresh_result.report_refs[-1])
         self.assertEqual("REPORT_REFRESH", refresh_manifest["mode"])
+        self.assertEqual("PARTIAL", refresh_manifest["availability"])
+        self.assertIn("approved_materiality_selector", refresh_manifest["missing_inputs"])
+        refreshed_markdown = refresh_result.step_states[-1].result.output["report"].markdown
+        self.assertIn("분석 일부가 완료되지 않았습니다", refreshed_markdown)
+        self.assertNotIn("No material stale", refreshed_markdown)
         self.assertTrue(any(row["section_name"] == "report_refresh_delta"
                             for row in refresh_manager.fetch_phase6_context()["report_sections"]))
         self.assertFalse((self.root / "personal.db").exists())

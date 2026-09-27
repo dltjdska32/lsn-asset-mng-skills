@@ -1,5 +1,7 @@
 # 작업 상태표
 
+**C RC10-R1·RC11 수정 회귀 — 통합 커밋 대기:** C 격리 `codex/luna-c-rc10-r1-refresh-status`(기준 `a1a41b0`) 작업 폴더에서 C 소유 3개 runtime 파일과 대응 테스트 변경을 총괄이 인수했다. C 작업 세션은 사용 한도 오류로 커밋/인계 전에 중단되었으므로 총괄이 읽고 통합 작업 폴더에 복사해 검증했다. 독립 새 probe 3/3(두 회귀+7모드), 기존 독립 13/13, wheel/sdist 재빌드 후 전체 **600 OK(skip1)**. RC10-R1의 하위 PARTIAL·누락 두 ID가 갱신 보고서에 전달되고, RC11 두 기관 같은 인접 분기 증액 방향=1이며 기간 불일치는 차단된다. 상세 `handoffs/LUNA-C-RC10-R1-RC11-01.md`. **독립 reviewer 새 SHA 재검토와 다른 최종 Codex 검증은 미실행**이다.
+
 **독립 REVIEW-CODE-01 고정 SHA `a1a41b0` 보고서 인수:** 별도 task `01a0e30c-b115-7db0-9a6c-b05a962b2d8c`가 직접 595 OK(skip1), 기존 13/13 반례 PASS, configured 7모드 E2E PASS, 공개 Yahoo/Naver 종가→Phase5 전달, clean wheel 11/11·sdist 11 OK(skip1)을 검증했다. 새 RC10-R1 P1·RC11 P2 두 반례는 reviewer와 총괄 모두 재현하여 C 수정 중이다. `reviews/REVIEW-CODE-01.md`와 `handoffs/REVIEW-CODE-01.md`의 이 판정은 **수정 필요/최종 통과 보류**이며, R10–11/17 WAIT 브리핑 연결·R08/13 판단 결속도 남는다. A가 안전한 브리핑 연결, B가 문서 경계를 별도 worktree에서 수정 중이다. 최종 코드 SHA의 reviewer 재검토와 다른 Codex 최종 검증은 아직 미실행이다.
 
 **2026-09-28 문서 정확도 통합 — root `2a99cd8`:** B 별도 `codex/r15-r16-doc-accuracy` source `bf30c15`의 README·IMPLEMENTATION_STATUS·ARCHITECTURE·인계를 통합했다. 기본 CLI UNSUPPORTED, host 주입 7모드, 제한된 NASDAQ/KRX 종가 일정, 9/27 실제 공개 조회·합성 DB 경로, 패키지/UI 검색 한계를 설명한다. reviewer 추가 판정상 R10/11/17 5단계 브리핑 결속은 미완이므로 B 문서 후속, A 소유 안전 WAIT 연결을 별도 배정했다. 문서 링크·`git diff --check`는 B에서 통과; 문서 변경 뒤 소스 회귀는 아직 재실행 전이다.

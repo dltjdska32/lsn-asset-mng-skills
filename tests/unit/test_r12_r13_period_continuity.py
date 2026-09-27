@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -98,6 +99,27 @@ class InstitutionalPeriodContinuityTests(unittest.TestCase):
                 self.assertEqual("UNAVAILABLE", result.score_status)
                 self.assertEqual(0, result.consecutive_quarters_held)
                 self.assertIsNone(result.institutional_consensus_direction)
+                self.assertIsNone(calculate_consensus_direction(self.cusip, rows))
+
+    def test_consensus_accepts_matching_periods_across_managers_but_blocks_mismatches(self):
+        first = self.comparison("2024-03-31", "2024-06-30")
+        second = replace(
+            first, manager_cik="0000000002", prior_filing_id="manager2-prior",
+            current_filing_id="manager2-current",
+            changes=tuple(replace(change, manager_cik="0000000002") for change in first.changes),
+        )
+        self.assertEqual(1, calculate_consensus_direction(self.cusip, (first, second)))
+
+        different_period = self.comparison("2024-06-30", "2024-09-30")
+        different_period_manager = replace(
+            different_period, manager_cik="0000000002", prior_filing_id="manager2-q2",
+            current_filing_id="manager2-q3",
+            changes=tuple(replace(change, manager_cik="0000000002")
+                          for change in different_period.changes),
+        )
+        self.assertIsNone(calculate_consensus_direction(
+            self.cusip, (first, different_period_manager),
+        ))
 
     def test_contiguous_unique_public_quarters_score_and_trade_gate_stays_disabled(self):
         comparisons = (

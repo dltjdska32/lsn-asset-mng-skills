@@ -146,7 +146,18 @@ def calculate_consensus_direction(
     """
     target_cusip = target_cusip.upper().strip()
     comparable = [comp for comp in manager_comparisons if comp.is_comparable]
-    if not _valid_comparison_chain(comparable):
+    by_manager: dict[str, list[InstitutionalPortfolioComparison]] = {}
+    for comp in comparable:
+        by_manager.setdefault(comp.manager_cik, []).append(comp)
+    if any(not _valid_comparison_chain(rows) for rows in by_manager.values()):
+        return None
+    manager_periods = {
+        tuple(sorted((comp.prior_period, comp.current_period) for comp in rows))
+        for rows in by_manager.values()
+    }
+    # A consensus comparison is meaningful only when every included manager
+    # contributes the same adjacent-quarter edges.
+    if len(manager_periods) > 1:
         return None
     net_score = 0
     observed = False

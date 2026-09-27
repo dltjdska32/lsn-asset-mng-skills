@@ -289,6 +289,8 @@ class ReportSnapshot:
     assumptions: tuple[str, ...]
     analysis_as_of: str
     section_fingerprints: Mapping[str, str | None]
+    availability: Availability = Availability.AVAILABLE
+    missing_inputs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -406,14 +408,28 @@ def refresh_report(request: ReportRefreshRequest | None, services: ReportRefresh
             status = DeltaStatus.CHANGED
         deltas.append(ReportDelta(section, status, before, after))
     lines = tuple(f"{delta.status.value}: {delta.section}" for delta in deltas) or ("No comparable report sections were returned.",)
+    comparison_incomplete = not deltas or any(delta.status is DeltaStatus.UNKNOWN for delta in deltas)
+    replay_incomplete = current.availability is not Availability.AVAILABLE or bool(current.missing_inputs)
+    lines = tuple(f"{delta.status.value}: {delta.section}" for delta in deltas)
+    if replay_incomplete:
+        lines = ("WAIT: 새 기준으로 다시 수행한 분석이 일부만 완료되었습니다. 누락 자료를 확인하세요.", *lines)
+    if not lines:
+        lines = ("No comparable report sections were returned.",)
     section = ReportSectionInput(
         name="report_refresh_delta", title="Report Refresh Changes",
-        status=Availability.PARTIAL if not deltas or any(delta.status is DeltaStatus.UNKNOWN for delta in deltas) else Availability.AVAILABLE,
+        status=Availability.PARTIAL if replay_incomplete or comparison_incomplete else Availability.AVAILABLE,
         lines=lines,
         metadata={"prior_run_id": prior.run_id, "prior_report_ref": prior.report_ref,
-                  "current_run_id": current.run_id, "current_report_ref": current.report_ref},
+                  "current_run_id": current.run_id, "current_report_ref": current.report_ref,
+                  "replay_availability": current.availability.value,
+                  "missing_input_ids": list(current.missing_inputs)},
     )
-    return ReportRefreshResult(RefreshStatus.COMPLETED, prior, current, tuple(deltas), section)
+    missing_inputs = list(current.missing_inputs)
+    if comparison_incomplete:
+        missing_inputs.append("report_refresh_comparison_incomplete")
+    status = RefreshStatus.WAIT if replay_incomplete or comparison_incomplete else RefreshStatus.COMPLETED
+    return ReportRefreshResult(status, prior, current, tuple(deltas), section,
+                               tuple(dict.fromkeys(missing_inputs)))
 
 
 __all__ = [

@@ -135,6 +135,8 @@ def portfolio_thesis_services(
             source_run_id, report_ref, RequestMode.parse(str(match.get("mode"))),
             str(match.get("target") or ""), tuple(match.get("assumptions") or ()),
             str(match.get("analysis_as_of") or ""), fingerprints,
+            ReportAvailability(str(match.get("availability") or ReportAvailability.UNAVAILABLE.value)),
+            tuple(str(item) for item in match.get("missing_inputs", ()) if str(item).strip()),
         )
 
     def start_existing_pinned_run(_prior: ReportSnapshot, _request: ReportRefreshRequest,
@@ -158,7 +160,14 @@ def portfolio_thesis_services(
         result = execute_mode(request, service_holder["services"])
         if result.availability not in {Availability.COMPLETE, Availability.PARTIAL} or not result.report_refs:
             raise ValueError("fixed mode replay did not produce a report")
-        return read_report_snapshot(replay.context.run_id, result.report_refs[-1])
+        snapshot = read_report_snapshot(replay.context.run_id, result.report_refs[-1])
+        effective_availability = snapshot.availability
+        if result.availability is Availability.PARTIAL and effective_availability is ReportAvailability.AVAILABLE:
+            effective_availability = ReportAvailability.PARTIAL
+        return replace(
+            snapshot, availability=effective_availability,
+            missing_inputs=tuple(dict.fromkeys((*snapshot.missing_inputs, *result.missing_inputs))),
+        )
 
     def load_portfolio(request: ModeRequest) -> PortfolioAnalysisRequest | None:
         value = portfolio_loader(request) if portfolio_loader is not None else request.payload.get("portfolio_request")
@@ -512,12 +521,15 @@ def portfolio_thesis_services(
         if result.current is None or result.current.run_id != run_db.run_id:
             return StepResult(Availability.UNSUPPORTED,
                               unsupported_reasons=("refresh runner did not return a report from the new request run",))
+        refresh_missing = result.missing_inputs or (
+            ("report_refresh_incomplete",) if result.status is RefreshStatus.WAIT else ()
+        )
         return StepResult(Availability.PARTIAL if result.status is RefreshStatus.WAIT else Availability.COMPLETE,
                           output={"refresh_result": result, "section": result.section,
                                   "refresh_context": result.current},
                           evidence_refs=tuple(result.section.evidence_ids),
                           calculation_refs=tuple(result.section.calculation_ids),
-                          missing_inputs=result.missing_inputs)
+                          missing_inputs=refresh_missing)
 
     def pin_refresh_state(_request: ModeRequest, context: StepContext) -> StepResult:
         first = context[PipelineStep.START_NEW_RUN_CLOCK.value]
@@ -615,6 +627,7 @@ def portfolio_thesis_services(
         manifest = {
             "mode": request.mode.value, "title": report.title,
             "availability": report.availability.value, "analysis_as_of": report.as_of.analysis_as_of,
+            "missing_inputs": list(missing_ids),
             "target": target, "assumptions": list(assumptions),
             "section_refs": [{"section_name": row["section_name"],
                               "content_reference": row["content_reference"]}

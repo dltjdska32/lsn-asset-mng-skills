@@ -22,6 +22,7 @@ from investment_stack.reporting.thesis_refresh import (
     refresh_report,
     review_thesis,
 )
+from investment_stack.reporting.models import Availability
 from investment_stack.routing import RequestMode
 from investment_stack.evidence import RunDatabaseManager
 
@@ -188,12 +189,44 @@ class ThesisRefreshTests(unittest.TestCase):
         result = refresh_report(
             ReportRefreshRequest("prior-run", "report:prior", mode, target, assumptions), services,
         )
-        self.assertEqual(result.status, RefreshStatus.COMPLETED)
+        self.assertEqual(result.status, RefreshStatus.WAIT)
         self.assertEqual([delta.status for delta in result.deltas], [DeltaStatus.UNKNOWN, DeltaStatus.UNCHANGED, DeltaStatus.CHANGED])
         self.assertEqual(result.section.name, "report_refresh_delta")
         self.assertEqual(result.section.status.value, "PARTIAL")
+        self.assertIn("report_refresh_comparison_incomplete", result.missing_inputs)
         self.assertIn("CHANGED: summary", result.section.lines)
         self.assertFalse((Path(temp.name) / "personal.db").exists())
+
+    def test_partial_fixed_mode_replay_keeps_status_and_missing_inputs(self):
+        mode = RequestMode.PERSONAL_PORTFOLIO_ANALYSIS
+        prior = ReportSnapshot(
+            "prior", "report:prior", mode, "portfolio", ("scope=pinned",),
+            "2026-09-26T12:00:00+00:00", {"summary": "same"},
+        )
+        replayed = ReportSnapshot(
+            "new", "report:new", mode, "portfolio", ("scope=pinned",),
+            "2026-09-27T12:00:00+00:00", {"summary": "same"},
+            Availability.PARTIAL, ("approved_materiality_selector", "selected_asset_research_handler"),
+        )
+        services = ReportRefreshServices(
+            load_prior_report=lambda *_: prior,
+            start_pinned_run=lambda *_: PinnedRefreshContext(
+                "new", "2026-09-27T12:00:00+00:00", "UTC", 2, "snapshot:new",
+            ),
+            verify_pinned_run=lambda _context: True,
+            allowed_mode_runners={mode: lambda _replay: replayed},
+        )
+        result = refresh_report(
+            ReportRefreshRequest("prior", "report:prior", mode, "portfolio", ("scope=pinned",)),
+            services,
+        )
+        self.assertEqual(RefreshStatus.WAIT, result.status)
+        self.assertEqual(Availability.PARTIAL, result.current.availability)
+        self.assertEqual(("approved_materiality_selector", "selected_asset_research_handler"),
+                         result.missing_inputs)
+        self.assertEqual(Availability.PARTIAL, result.section.status)
+        self.assertIn("replay_availability", result.section.metadata)
+        self.assertEqual("PARTIAL", result.section.metadata["replay_availability"])
 
     def test_refresh_rejects_recursive_update_missing_runner_and_stale_clock(self):
         empty_services = ReportRefreshServices(lambda *_: None, lambda *_: None, lambda _: True, {})
