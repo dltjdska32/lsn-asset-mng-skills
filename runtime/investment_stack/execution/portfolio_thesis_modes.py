@@ -10,9 +10,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, localcontext
 import hashlib
 import json
+import re
 from typing import Callable, Mapping
 from uuid import uuid4
 
@@ -152,6 +153,7 @@ def portfolio_thesis_services(
         if refresh_payload_resolver is None:
             raise ValueError("refresh input resolver is not configured")
         payload = dict(refresh_payload_resolver(replay))
+        payload["refresh_context"] = replay.context
         request = ModeRequest(replay.context.run_id, replay.mode, payload, refresh_replay=True)
         result = execute_mode(request, service_holder["services"])
         if result.availability not in {Availability.COMPLETE, Availability.PARTIAL} or not result.report_refs:
@@ -207,6 +209,11 @@ def portfolio_thesis_services(
                                                              "analysis_as_of": portfolio.pinned_state.analysis_as_of,
                                                              "portfolio_data_as_of": portfolio.pinned_state.portfolio_data_as_of,
                                                          }})
+
+    def pin_state(request: ModeRequest, context: StepContext) -> StepResult:
+        if request.mode is RequestMode.REPORT_REFRESH:
+            return pin_refresh_state(request, context)
+        return pin_portfolio(request, context)
 
     def lightweight(request: ModeRequest, context: StepContext) -> StepResult:
         portfolio = context[PipelineStep.PIN_PERSONAL_STATE.value].output.get("portfolio_request")
@@ -374,6 +381,9 @@ def portfolio_thesis_services(
                           missing_inputs=tuple(dict.fromkeys(missing)))
 
     def load_thesis(request: ModeRequest, _context: StepContext) -> StepResult:
+        run_mismatch = _thesis_run_mismatch(run_db, request)
+        if run_mismatch is not None:
+            return StepResult(Availability.UNSUPPORTED, unsupported_reasons=(run_mismatch,))
         thesis = request.payload.get("thesis_request")
         if thesis is None:
             return StepResult(Availability.PARTIAL, output={"thesis_request": None},
@@ -551,6 +561,20 @@ def portfolio_thesis_services(
             for child in step_result.output.get("sections", ()):
                 if isinstance(child, ReportSectionInput):
                     sections.append(child)
+        incomplete_steps = tuple(sorted(
+            name for name, item in context.items() if item.availability is Availability.PARTIAL
+        ))
+        missing_ids = tuple(dict.fromkeys(
+            value for item in context.values() for value in item.missing_inputs
+        ))
+        if incomplete_steps or missing_ids:
+            sections.append(ReportSectionInput(
+                "analysis_completeness", "분석 범위와 누락 자료",
+                ("분석 일부가 완료되지 않았습니다. 결과를 확정 판단에 사용하기 전에 누락된 자료나 단계를 확인해 주세요.",),
+                status=ReportAvailability.PARTIAL,
+                metadata={"missing_input_ids": list(missing_ids),
+                          "partial_step_ids": list(incomplete_steps)},
+            ))
         # Stage outputs can intentionally share a section; the last typed version
         # carries the final calculation reference, while duplicate names are invalid.
         by_name: dict[str, ReportSectionInput] = {}
@@ -575,7 +599,11 @@ def portfolio_thesis_services(
                 if _run_has_evidence(run_db, eid)
             )),
         )
-        report = phase6_result.report
+        report = _localize_portfolio_thesis_report(
+            phase6_result.report, phase6.report._render,
+            {row["evidence_id"]: row for row in run_db.fetch_phase6_context()["evidence"]},
+            incomplete=bool(incomplete_steps or missing_ids),
+        )
         run_context = run_db.fetch_phase6_context()
         expected = {section.name for section in report.sections}
         persisted = [row for row in run_context["report_sections"] if row["section_name"] in expected]
@@ -613,7 +641,7 @@ def portfolio_thesis_services(
                           missing_inputs=missing)
 
     handlers = {
-        PipelineStep.PIN_PERSONAL_STATE: pin_portfolio,
+        PipelineStep.PIN_PERSONAL_STATE: pin_state,
         PipelineStep.LIGHTWEIGHT_ALL_ASSETS: lightweight,
         PipelineStep.APPLY_MATERIALITY_GATE: materiality,
         PipelineStep.DEEP_RESEARCH_SELECTED_ASSETS: research_selected,
@@ -802,10 +830,102 @@ def _attach_refresh_identity(run_db: RunDatabaseManager, request: ModeRequest,
         run_db.record_task_state(
             task_name=f"report-refresh-identity:{digest}",
             task_status=str(manifest.get("availability") or result.availability.value),
-            metadata={"report_ref": enriched_ref, **manifest},
+            metadata={**manifest, "report_ref": enriched_ref},
         )
         refreshed_refs.append(enriched_ref)
     return replace(result, report_refs=tuple(refreshed_refs))
+
+
+def _thesis_run_mismatch(run_db: RunDatabaseManager, request: ModeRequest) -> str | None:
+    """Fail closed before thesis evidence or calculations can reach another run.db."""
+    if request.run_id != run_db.run_id:
+        return "thesis request run_id does not match the bound run database"
+    metadata = run_db.fetch_phase6_context()["run_metadata"]
+    if metadata.get("request_mode") != RequestMode.THESIS_REVIEW.value:
+        return "bound run database is not initialized for THESIS_REVIEW"
+    clock = metadata.get("analysis_as_of")
+    if not isinstance(clock, str) or not clock:
+        return "thesis run database has no pinned analysis clock"
+    try:
+        parsed_clock = datetime.fromisoformat(clock.replace("Z", "+00:00"))
+    except ValueError:
+        return "thesis run database has an invalid pinned analysis clock"
+    if parsed_clock.tzinfo is None or parsed_clock.utcoffset() is None:
+        return "thesis run database analysis clock must include a timezone"
+    return None
+
+
+def _localize_portfolio_thesis_report(report, renderer, evidence_by_id, *, incomplete: bool):
+    """Keep the user-facing fixed-mode report readable; run.db retains raw refs."""
+    titles = {
+        "portfolio_snapshot": "보유 자산 현황",
+        "portfolio_analysis": "자산 배분과 위험",
+        "allocation_and_risk": "자산 배분과 위험",
+        "portfolio_allocation": "자산 배분",
+        "portfolio_risk": "포트폴리오 위험",
+        "selected_asset_research": "선택 자산 조사",
+        "thesis_review": "투자 논지 검토",
+        "portfolio_scenario": "포트폴리오 가정 분석",
+        "report_refresh_delta": "이전 보고서와 달라진 점",
+        "data_quality": "자료 확인 상태",
+        "review_findings": "추가 검토 결과",
+        "analysis_completeness": "분석 범위와 누락 자료",
+    }
+    verdicts = {
+        "SUPPORTED": "지지됨", "REFUTED": "반증됨", "UNCONFIRMED": "판단 보류",
+        "COMPLETE": "완료", "PARTIAL": "일부 완료", "UNAVAILABLE": "확인 불가",
+    }
+    sections = []
+    for section in report.sections:
+        title = titles.get(section.name, section.title)
+        lines = list(section.lines)
+        if section.name == "portfolio_snapshot":
+            lines = ["고정된 보유 현황 스냅샷을 기준으로 분석했습니다."]
+        elif section.name == "portfolio_analysis":
+            lines = ["고정된 보유 현황과 분석 기준시각을 바탕으로 자산 배분과 위험을 계산했습니다."
+                     if "state_version=" in line or "snapshot=" in line else line for line in lines]
+        elif section.name == "portfolio_scenario":
+            lines = ["시나리오 결과는 사용자가 입력한 가정을 적용한 모의 분석입니다."
+                     if "가정 refs:" in line else line for line in lines]
+        elif section.name == "thesis_review":
+            cleaned = []
+            for line in lines:
+                match = re.match(r"^[^—]+ — ([A-Z_]+): (.*)$", line)
+                if match:
+                    cleaned.append(f"{verdicts.get(match.group(1), '검토')}: {match.group(2)}")
+                else:
+                    cleaned.append(line)
+            lines = cleaned
+        elif section.name == "data_quality" and incomplete:
+            lines = ["일부 분석 단계가 완료되지 않아 자료 품질을 전체적으로 확인할 수 없습니다."]
+            section = replace(section, status=ReportAvailability.PARTIAL)
+        elif section.name == "data_quality":
+            lines = ["저장된 자료에서 오래되거나 서로 충돌하는 값, 제공자 누락을 확인하지 못했습니다."]
+        sections.append(replace(section, title=title,
+                                lines=tuple(_format_user_numbers(line) for line in lines)))
+    localized = replace(report, sections=tuple(sections), markdown="")
+    markdown = renderer(localized, evidence_by_id)
+    markdown = markdown.replace("- 계산 근거:", "- 상세 계산 근거:")
+    markdown = markdown.replace("- 근거 `", "- 상세 근거 `")
+    return replace(localized, markdown=markdown)
+
+
+def _format_user_numbers(line: str) -> str:
+    def format_match(match: re.Match[str]) -> str:
+        raw = match.group(0)
+        try:
+            number = Decimal(raw)
+            places = 2 if number.adjusted() >= 8 or number.adjusted() <= -5 else 4
+            with localcontext() as context:
+                context.prec = max(context.prec, len(number.as_tuple().digits) + places + 2)
+                rounded = number.quantize(Decimal(1).scaleb(-places))
+        except Exception:
+            return raw
+        text = f"{rounded:,.{places}f}"
+        return text.rstrip("0").rstrip(".") if "." in text else text
+
+    return re.sub(r"(?<![\w.])[-+]?\d+\.\d{7,}(?![\w])|(?<![\w.])[-+]?\d{16,}(?![\w])",
+                  format_match, line)
 
 
 def _s(value: Decimal | None) -> str | None:
