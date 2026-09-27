@@ -13,7 +13,7 @@
 - NASDAQ snapshot covers Sep 24, 25, and 28, 2026, with a 1-second close timestamp tolerance to accept the verified Yahoo `regularMarketTime` at 16:00:01 ET. KRX snapshot covers Sep 22, 23, and 28, with zero tolerance at 15:30 KST. KRX Sep 24–27 are omitted as closed dates based on official KRX/MOIS/TRN notices.
 - A schedule must be structurally identical to the immutable pinned registry entry. Merely supplying an official hostname does not make an incomplete or modified schedule trusted.
 - Added `MarketQuoteProviderAdapter.fetch(ProviderRequest) -> ProviderResult` bridge for `CURRENT_PRICE`. It accepts explicit calendar mapping; without a calendar it cannot certify `LAST_VALID_CLOSE`. Its evaluator admits `FRESH` and calendar-verified `LAST_VALID_CLOSE`, and rejects `DELAYED` absent a separate approved policy.
-- Naver `localTradedAt` is retained as evidence but not treated as the session close. For last-close responses the close time is derived from `stockExchangeType.endTime`; `closePriceSendTime` supplies the separate public-availability time. An as-of cutoff before that time fails closed.
+- Naver `localTradedAt` is retained as evidence but not treated as the session close. For last-close responses the close time is derived from `stockExchangeType.endTime`; `stockExchangeType.closePriceSendTime` supplies the separate public-availability time. An as-of cutoff before that time fails closed.
 - Yahoo `regularMarketTime` is recorded as the timestamp and public-availability evidence; absent delay metadata remains unknown and is not inferred from quote age.
 - Freshness assessments distinguish a pre-open prior close from a weekend/holiday close.
 

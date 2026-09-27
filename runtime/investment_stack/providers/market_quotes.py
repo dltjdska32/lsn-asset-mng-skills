@@ -83,6 +83,8 @@ def calendar_aware_freshness_evaluator(calendar: Any = None, *, engine: Any = No
         observation = quote_to_observation(quote)
         if calendar is not None and not getattr(calendar, "is_pinned", False):
             return False, "UNTRUSTED_CALENDAR_SCHEDULE"
+        if calendar is None and not quote.instrument_id.upper().startswith("CRYPTO:"):
+            return False, "TRUSTED_EQUITY_SESSION_CALENDAR_REQUIRED"
         assessment = freshness_engine.assess(
             observation, analysis_as_of=analysis_as_of.isoformat(), policy=policy, calendar=calendar,
         )
@@ -357,7 +359,9 @@ def parse_naver_basic_quote(
     close_price_send_time: datetime | None = None
     close_price_send_time_source: str | None = None
     if quote_kind == QuoteKind.LAST_VALID_CLOSE:
-        raw_send_time = str(data.get("closePriceSendTime", "")).strip()
+        exchange_info = data.get("stockExchangeType")
+        exchange_info = exchange_info if isinstance(exchange_info, Mapping) else {}
+        raw_send_time = str(exchange_info.get("closePriceSendTime", data.get("closePriceSendTime", ""))).strip()
         if len(raw_send_time) == 4 and raw_send_time.isdigit() and claimed_market_time is not None:
             try:
                 close_price_send_time = claimed_market_time.replace(
@@ -365,7 +369,10 @@ def parse_naver_basic_quote(
                 )
                 if close_price_send_time < claimed_market_time:
                     raise ValueError("close price publication precedes market close")
-                close_price_send_time_source = "closePriceSendTime"
+                close_price_send_time_source = (
+                    "stockExchangeType.closePriceSendTime"
+                    if "closePriceSendTime" in exchange_info else "closePriceSendTime"
+                )
             except ValueError:
                 close_price_send_time = None
                 close_price_send_time_source = None

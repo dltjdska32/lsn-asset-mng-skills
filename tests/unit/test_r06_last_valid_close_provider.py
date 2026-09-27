@@ -79,8 +79,8 @@ class LastValidCloseProviderE2ETests(unittest.TestCase):
         payload = {
             "itemCode": "005930", "closePrice": "286,500",
             "localTradedAt": "2026-09-23T20:20:21+09:00",
-            "marketSessionType": "afterMarket", "closePriceSendTime": "1630",
-            "stockExchangeType": {"code": "KS", "delayTime": 0, "endTime": "1530"},
+            "marketSessionType": "afterMarket",
+            "stockExchangeType": {"code": "KS", "delayTime": 0, "endTime": "1530", "closePriceSendTime": "1630"},
         }
         parsed = parse_naver_basic_quote(payload, instrument_id="KRX:005930", retrieved_at=cutoff)
         self.assertTrue(parsed.is_usable)
@@ -88,10 +88,17 @@ class LastValidCloseProviderE2ETests(unittest.TestCase):
         self.assertEqual(quote.claimed_market_time.isoformat(), "2026-09-23T15:30:00+09:00")
         self.assertEqual(quote.public_availability.public_available_at.isoformat(), "2026-09-23T16:30:00+09:00")
         self.assertEqual(parsed.observation.metadata["market_time_provenance"], "DERIVED_FROM_SESSION_END_TIME")
-        self.assertEqual(parsed.observation.metadata["public_available_time_source"], "closePriceSendTime")
+        self.assertEqual(parsed.observation.metadata["public_available_time_source"], "stockExchangeType.closePriceSendTime")
 
         calendar = get_pinned_calendar("KRX")
         evaluator = calendar_aware_freshness_evaluator(calendar)
+        # A recent-looking last close must not fall through the generic 20-minute
+        # FRESH window when no trusted exchange calendar was supplied.
+        no_calendar_allowed, no_calendar_reason = calendar_aware_freshness_evaluator()(  # type: ignore[call-arg]
+            quote, datetime(2026, 9, 23, 15, 35, tzinfo=KST)
+        )
+        self.assertFalse(no_calendar_allowed)
+        self.assertEqual(no_calendar_reason, "TRUSTED_EQUITY_SESSION_CALENDAR_REQUIRED")
         allowed, reason = evaluator(quote, datetime(2026, 9, 23, 16, 0, tzinfo=KST))
         self.assertFalse(allowed)
         self.assertIn("not yet published", reason)
