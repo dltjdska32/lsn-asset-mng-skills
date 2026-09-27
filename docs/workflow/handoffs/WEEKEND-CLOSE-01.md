@@ -5,6 +5,7 @@
 - 사용자 지시: 2026-09-27 일요일에는 조회일과 응답 가격 날짜가 다르다는 이유만으로 종가를 버리지 말고, 각 거래소의 마지막 유효 거래일 종가인지 확인해 계산에 사용한다. 이 지시가 이전의 단순 경과 시간에 따른 stale 표현보다 우선한다.
 - 공개 소스: AAPL 거래소인 [Nasdaq Trader 2026 거래 캘린더](https://nasdaqtrader.com/Trader.aspx?id=Calendar)와 [Nasdaq 2026-09-25 거래일 공지](https://www.nasdaqtrader.com/TraderNews.aspx?id=ECA2026-685), [NYSE 2026 휴장·거래시간](https://www.nyse.com/trade/hours-calendars), [행정안전부 2026 추석 연휴 9/24~27](https://www.mois.go.kr/frt/bbs/type010/commonSelectBoardArticle.do?bbsId=BBSMSTR_000000000008&nttId=129490), [KRX 공휴일·주말 휴장 규칙](https://global.krx.co.kr/contents/GLB/06/0602/0602010201/GLB0602010201T1.jsp).
 - 위 자료에서 9/27 기준 NASDAQ의 마지막 완료 정규 세션은 9/25, KRX의 마지막 완료 정규 세션은 9/23으로 추론한다. 이 추론만으로 개별 Yahoo/Naver 응답의 종목·통화·가격 종류·종가 시각·조정 여부가 입증되지는 않는다. `LAST_VALID_CLOSE` 계산 허용은 런타임 검증 후에만 확정한다.
+- 2026-09-27 공개 API 직접 재조회: Yahoo chart AAPL은 `NMS`/USD, `regularMarketTime=1790366401`(9/25 16:00:01 ET), `regularMarketPrice=341.07`, 지연 필드는 없음. Naver basic 005930은 `KS`, `closePrice=286,500`, `localTradedAt=9/23 20:20:21 KST`, `marketSessionType=afterMarket`, `endTime=1530`, `closePriceSendTime=1630`, `delayTime=0`이었다. Naver의 15:30 종가 시각은 원문 체결시각이 아니라 `closePrice`와 거래소 정규장 종료시각에서 파생한 값이다. 조회·파싱 성공은 계산 적격 판정이 아니다.
 
 ## 배정과 결함
 
