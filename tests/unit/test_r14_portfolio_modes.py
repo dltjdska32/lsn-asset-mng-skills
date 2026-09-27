@@ -155,7 +155,7 @@ class PortfolioModesTests(unittest.TestCase):
         self.assertEqual(request.positions, original_positions)
         self.assertEqual(request.price_series, original_prices)
 
-    def test_scenario_fx_assumption_is_explicit_and_applied_only_in_simulation(self):
+    def test_scenario_fx_assumption_cannot_fill_missing_baseline(self):
         request = PortfolioAnalysisRequest(
             self.state, "USD", (PortfolioPosition("JP", D("10000"), "JPY", "EQUITY"),),
             (MoneyBalance("cash", D("100"), "USD"),), (),
@@ -168,11 +168,30 @@ class PortfolioModesTests(unittest.TestCase):
             fx_assumptions=(ScenarioFxAssumption("JPY", "USD", D("0.01"), "assumption:fx"),),
         )
         result = simulate_portfolio_scenario(request, scenario, gate_verifier=lambda gate: gate.enabled)
-        self.assertEqual(result.status, ScenarioStatus.PARTIAL)
-        self.assertEqual(result.before.gross_assets, D("200"))
-        self.assertEqual(result.after.gross_assets, D("250"))
-        self.assertEqual(result.gross_assets_delta, D("50"))
+        self.assertEqual(result.status, ScenarioStatus.WAIT)
+        self.assertIsNone(result.before.gross_assets)
+        self.assertIsNone(result.after)
+        self.assertIsNone(result.gross_assets_delta)
         self.assertIsNone(analyze_portfolio(request).gross_assets)
+
+    def test_scenario_fx_delta_compares_real_baseline_with_hypothetical_fx(self):
+        baseline_fx = FxEvidence(
+            "JPY", "USD", D("0.02"), "fx-baseline", "2026-09-26T10:00:00+00:00",
+            "2026-09-26T10:01:00+00:00", "ELIGIBLE", "FRESH", True,
+        )
+        request = PortfolioAnalysisRequest(
+            self.state, "USD", (PortfolioPosition("JP", D("10000"), "JPY", "EQUITY"),),
+            (MoneyBalance("cash", D("100"), "USD"),), (), fx_evidence=(baseline_fx,),
+        )
+        scenario = PortfolioScenario(
+            "fx-shock", "hypothetical weaker JPY", ScenarioApproval("gate", "policy", "approval", "validation", True),
+            (), fx_assumptions=(ScenarioFxAssumption("JPY", "USD", D("0.01"), "assumption:fx-shock"),),
+        )
+        result = simulate_portfolio_scenario(request, scenario, gate_verifier=lambda gate: gate.enabled)
+        self.assertEqual(result.status, ScenarioStatus.PARTIAL)
+        self.assertEqual(result.before.gross_assets, D("300"))
+        self.assertEqual(result.after.gross_assets, D("200"))
+        self.assertEqual(result.gross_assets_delta, D("-100"))
 
     def test_unapproved_or_missing_risk_policy_does_not_create_risk_limits(self):
         request = replace(self.complete_request(), risk_policy=PortfolioRiskPolicy("risk", False, None, D("0.1"), D("0.2")))

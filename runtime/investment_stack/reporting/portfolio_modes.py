@@ -639,7 +639,9 @@ def simulate_portfolio_scenario(
                                      metadata={"scenario_id": scenario.scenario_id})
         return PortfolioScenarioResult(ScenarioStatus.WAIT, scenario.scenario_id, None, None, None, None, None, None, tuple(missing), section)
 
-    before = _analyze(request, fx_override)
+    # A scenario assumption can change only the hypothetical after-state. The
+    # baseline must be supported by actual eligible portfolio/FX evidence.
+    before = _analyze(request)
     if before.gross_assets is None or before.total_liabilities is None or before.net_worth is None:
         missing.append("완전한 valued asset/cash/liability baseline이 없어 전체 차이를 계산할 수 없습니다.")
     position_map = {item.instrument_id: item for item in request.positions}
