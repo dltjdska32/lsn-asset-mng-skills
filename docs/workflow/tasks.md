@@ -1,5 +1,7 @@
 # 작업 상태표
 
+**최신 상태 — 2026-09-27 12:21 UTC, C typed 브리핑 통합:** C `codex/luna-c-brief-binding`(별도 a3b7 worktree, 기준 `83dfb27`) source `1010432`를 root `0d78c64`로 통합. 총괄 직접 C 집중 **15/15 PASS**, root 전체 **505 OK, skip1**. 현재가/가치평가는 목적·typed output·선택 슬롯/적격성·공개시각·계산 lineage가 모두 결속된 단일 값만 표시; 일반 계산 숫자와 시나리오 이름 미확정 값은 거부한다. 정책 provenance가 없으므로 판단 WAIT, 가격 구간·금액·수량 미산출. 개인 DB/주문 호출 없음은 합성 테스트 범위. A 7모드 dispatcher 및 B R06 후보 전환은 진행 중이며, 새 독립 전체 검토/다른 최종 검증 미실행.
+
 **최신 상태 — 2026-09-27 12:17 UTC, B 적격 기술 계산 통합:** B 새 branch `codex/luna-b-r07-r08-tls`(별도 72d3 worktree, 기준 `83dfb27`) source `d2c5158`·인계 `b6e7a68`을 root `1fa4372`·`a7cac1d`로 반영했다. 총괄이 R06–08 집중 **37/37 PASS**, root 전체 **501 OK, skip1** 직접 실행. Yahoo adjclose만으로 원 OHLC를 조정 완료로 오인하지 않게 했고, 기술 분석은 조정·캘린더 영수증과 예상/실제 세션, 시각·완전성 검증 뒤에만 수행한다. 영수증의 외부 진위는 미확인, 거래 신호 정책은 UNAVAILABLE 유지. B에 R06 시장별 대체/identity·시각·지연 실제 적격성 후속 배정; A R14, C typed 브리핑은 각각 격리 branch에서 진행 중. 독립 전체 검토·다른 최종 검증 아직 미실행.
 
 **최신 상태 — 2026-09-27 12:08 UTC, Luna A 도메인 통합·후속 3개 재배정:** A source `c2a480d`(선택 재무 evidence 소비·DCF·scoped TLS/Decimal), `6b9689b`(DCF 입력·시나리오), `3d38323`·`649abf0`(인계/live 확인)를 root `f28219f`·`dc76b9c`·`20999be`·`83dfb27`로 통합. 총괄 직접 A 관련 **39/39 PASS**, root 통합 전체 **500 OK, skip1**. Root `pyproject.toml`에는 `truststore>=0.9.1`이 이미 선언되어 있어 A의 오래된 source branch에만 누락됐던 차이임을 확인. A/B/C는 각 별도 작업 폴더에서 다음 수직 슬라이스 진행: A는 최신 통합 `83dfb27` 기반 새 branch로 R14/16 일곱 모드 실제 dispatcher; B는 R07–08 적격 BarSet→기술 계산; C는 최신 통합 기반 R10–11/17 타입·근거가 결속된 브리핑 수치. 독립 전체 코드 검토/다른 최종 검증은 세 후속 변경 통합 뒤 실행; 아직 완료 아님.

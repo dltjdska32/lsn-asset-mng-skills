@@ -44,3 +44,9 @@
 - B 격리 `codex/luna-b-r07-r08-tls` 기준 `83dfb27`, source `d2c5158`·인계 `b6e7a68`을 root `1fa4372`·`a7cac1d`에 통합. 총괄은 담당 **37/37 PASS**, root 전체 **501 OK, skip1** 직접 실행.
 - Yahoo adjclose 단독으로 raw OHLC 조정 여부를 승인하지 않으며, verified 기술 계산은 조정·캘린더 receipt, source/as-of, 예상/실제 세션 일치, 누락·장중·미래 봉 배제 후에만 points/trend를 낸다. 합성 손계산 SMA(2)=107 및 bar/evidence/source fingerprint lineage 포함. Receipt는 외부 진위 미검증, 신호 임계값 미확정이므로 signal UNAVAILABLE. `LUNA-B-R07-R08-PROVENANCE.md` 참조.
 - README·IMPLEMENTATION_STATUS의 TLS 상태는 root A transport 통합 사실로 수정. B에 다음 R06 시장별 후보/전환·identity/시각·지연 적격성 검증을 요청. A R14 및 C typed 브리핑은 병렬 진행. 새 독립 REVIEW-CODE-01/VERIFY-01은 아직 미시작.
+
+## 12:21 UTC C typed 브리핑 통합
+
+- C source `1010432` (`codex/luna-c-brief-binding`, 기준 `83dfb27`)를 root `0d78c64`에 반영. 총괄 직접 C 결정/브리핑 **15/15 PASS**, root 전체 **505 OK, skip1**. 상세 `LUNA-C-BRIEF-BINDING-01.md`.
+- `CURRENT_PRICE`/`VALUATION_MODEL` 목적 및 typed output kind, 선택 근거·적격성 ID·공개시각·계산 lineage·소비 gate가 완전히 일치하는 단일 양수/주 값만 브리핑 표에 표시. 일반 계산 숫자 및 이름 없는 시나리오 값은 표시하지 않는다. 숫자 표시가 행동 승인으로 전이되지 않도록 WAIT/no tranche 유지. 정책 미승인으로 진입/축소·금액/수량은 미산출.
+- A는 7모드 dispatcher·routing 및 영속 보고 계약 확인/수직 테스트 작성 중. B는 R06 evaluator 없는 AVAILABLE 및 Yahoo/Naver identity·통화 강제 부족을 발견해 fail-closed 전환 작업 중. 독립 REVIEW-CODE-01과 별도 VERIFY-01은 미생성.
