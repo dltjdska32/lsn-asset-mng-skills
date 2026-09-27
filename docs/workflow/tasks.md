@@ -1,5 +1,7 @@
 # 작업 상태표
 
+**BRIEF-BIND-02 별도 최종 검증 통과 — exact source `75685609ccbb9a5c28580297d54d9e91af71cd42`:** 독립 코드 검토자와 다른 Codex 에이전트 `/root/verify_brief_bind_02`가 원본 작업 폴더의 고정 HEAD/깨끗한 상태와 diff를 직접 확인했다. 브리핑 단위 **8/8**, equity 통합 **9/9**, 전체 **602 OK(skip1)**, 고유 TEMP wheel/sdist 빌드 성공 및 변경 두 소스 파일과 빌드 산출물 SHA-256 일치를 확인했다. 원장 1.23 JPY와 ID만 같은 요청 999999 JPY, 값이 같아도 typed 본문 결속이 없는 요청 1.23 JPY 모두 최종 equity 브리핑에서 미표시를 직접 확인했다. 직접 `generate_briefing`의 조건부 수치 표시·행동 보류·미공개 자료 차단도 확인했다. 이는 BRIEF-BIND-02 수정 범위의 독립 최종 검증이지 R01–R17 전체 제품 완료가 아니다. 원장 typed 값 결속, 종가 거래일/지연 표시, 정책 기반 규모와 R08/13 통합은 남는다.
+
 **후속 작업 BRIEF-BIND-02 (2026-09-28, 기준 `9c934ed`):** R10·R17의 5항목 브리핑에서 승인 정책 또는 개인 스냅샷 부재 시에도 검증된 typed 수치와 계보를 표시하는 부분 결과를 총괄이 담당한다. 소유 파일은 `runtime/investment_stack/decisions/briefing.py`, `runtime/investment_stack/execution/analysis_modes.py`, 관련 `tests/decisions/`·`tests/integration/`, 이 작업 메모리와 인계다. 선행 조건은 `VERIFY-01/02`가 검증한 기준 코드. 독립 검토가 요청 context의 동일 원장 ID/다른 값 위조로 허위 현재가가 표시되는 P1을 재현해 범위를 보정했다. 직접 호출 브리핑에서 적격 수치만 표시하되, 분석 모드는 원장 본문·eligibility까지 값 결속하는 저장 계약이 없으므로 요청 supplied typed 수치를 사용자 보고서에 표시하지 않도록 차단한다. 변경 후 새 소스 검증을 수행하며 이전 REVIEW/VERIFY의 통과를 새 코드 검증으로 재사용하지 않는다.
 
 **BRIEF-BIND-02 통합 체크포인트:** 독립 코드 검토 `reviews/BRIEF-BIND-02.md`가 허위 가격 P1을 재현하고 수정 뒤 같은 ID·다른 값/같은 값 모두 사용자 브리핑에서 차단됨을 확인했다. 총괄의 결정+equity 집중 **17/17**, 변경 소스 wheel/sdist 재빌드, 전체 **602 OK(skip1)**. 새 source SHA 고정 및 다른 독립 Codex 최종 검증은 아직 대기. 기존 R08/13과 정책·원장 결속 수치 표시 제한은 유지한다.
