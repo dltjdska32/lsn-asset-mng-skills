@@ -139,6 +139,32 @@ def equity_analysis_services(
             }
             return tuple(sorted(found))
 
+        def reporting_context(outcome: EquityResearchOutcome) -> dict[str, list[str]]:
+            """Collect the period and accounting dimensions of selected financial facts."""
+            observations = tuple(
+                observation
+                for observation in outcome.fundamentals.selected.selected_observations
+                if observation.evidence_type == "financial"
+            )
+            aliases = {
+                "period_end": ("period_end", "end"),
+                "period_start": ("start",),
+                "reporting_frequency": ("reporting_frequency", "form"),
+                "reporting_period": ("reporting_period", "fp"),
+                "accounting_standard": ("accounting_standard", "basis"),
+                "consolidation": ("consolidation",),
+                "adjustment_basis": ("adjustment_basis",),
+                "restatement": ("restatement",),
+            }
+            collected: dict[str, set[str]] = {name: set() for name in aliases}
+            for observation in observations:
+                metadata = observation.metadata
+                for name, keys in aliases.items():
+                    value = next((metadata.get(key) for key in keys if metadata.get(key) not in (None, "")), None)
+                    if value is not None:
+                        collected[name].add(str(value).strip().upper())
+            return {name: sorted(values) for name, values in collected.items()}
+
         rows = []
         all_compatible = True
         all_analyses_complete = True
@@ -146,6 +172,10 @@ def equity_analysis_services(
             left_spec, right_spec = spec_by_id[left_id], spec_by_id[right_id]
             left_periods, right_periods = periods(by_id[left_id]), periods(by_id[right_id])
             period_compatible = len(left_periods) == len(right_periods) == 1 and left_periods == right_periods
+            left_context = reporting_context(by_id[left_id])
+            right_context = reporting_context(by_id[right_id])
+            context_well_formed = all(len(values) <= 1 for values in (*left_context.values(), *right_context.values()))
+            reporting_context_compatible = context_well_formed and left_context == right_context
             currency_compatible = left_spec.currency.upper() == right_spec.currency.upper()
             type_compatible = left_spec.business_type is right_spec.business_type
             missing_side = any(
@@ -156,19 +186,23 @@ def equity_analysis_services(
             reasons = []
             if not period_compatible:
                 reasons.append("financial periods are missing or differ")
+            if not reporting_context_compatible:
+                reasons.append("financial reporting frequency, period start, or accounting basis differs or is ambiguous")
             if not currency_compatible:
                 reasons.append("currencies differ")
             if not type_compatible:
                 reasons.append("business types differ")
             if missing_side:
                 reasons.append("one or both asset analyses are incomplete")
-            compatible = period_compatible and currency_compatible and type_compatible
+            compatible = period_compatible and reporting_context_compatible and currency_compatible and type_compatible
             all_compatible = all_compatible and compatible
             all_analyses_complete = all_analyses_complete and not missing_side
             rows.append({
                 "asset_a": left_id, "asset_b": right_id,
                 "periods_a": list(left_periods), "periods_b": list(right_periods),
                 "period_compatible": period_compatible,
+                "reporting_context_a": left_context, "reporting_context_b": right_context,
+                "reporting_context_compatible": reporting_context_compatible,
                 "currency_compatible": currency_compatible,
                 "type_compatible": type_compatible,
                 "compatible": compatible, "analysis_complete": not missing_side,
@@ -207,6 +241,7 @@ def equity_analysis_services(
                 "currency": spec.currency.upper(),
                 "business_type": spec.business_type.value,
                 "financial_periods": list(periods(by_id[spec.instrument_id])),
+                "financial_reporting_context": reporting_context(by_id[spec.instrument_id]),
             } for spec in specs],
             "pairwise_compatibility": rows,
             "complete": all_compatible,

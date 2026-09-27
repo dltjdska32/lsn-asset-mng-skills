@@ -31,10 +31,14 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
             EquityResearchSpec("KEYENCE", "KEYENCE", "JAPAN", second_currency, second_type, ticker="6861"),
         )
 
-    def bundle(self, specs: tuple[EquityResearchSpec, ...], *, second_period: str = "2026-06-30") -> dict[str, object]:
+    def bundle(
+        self, specs: tuple[EquityResearchSpec, ...], *, second_period: str = "2026-06-30",
+        first_context: dict[str, str] | None = None, second_context: dict[str, str] | None = None,
+    ) -> dict[str, object]:
         responses: list[dict[str, object]] = []
         for index, spec in enumerate(specs):
             period = second_period if index == 1 else "2026-06-30"
+            context = second_context if index == 1 else first_context
             responses.append({
                 "intent": "LATEST_CURRENT_DATA",
                 "query": LiveDeepResearchRuntime._market_query(spec),
@@ -60,12 +64,16 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
                     "title": f"{spec.display_name} synthetic {metric}", "value": value, "unit": unit,
                     "currency": spec.currency, "published_at": "2026-08-01T15:00:00+09:00",
                     "source_tier": 2, "source_kind": "official_ir", "official_confirmation_status": "OFFICIAL",
-                    "metadata": {"metric": metric, "canonical_metric": metric, "period_end": period},
+                    "metadata": {"metric": metric, "canonical_metric": metric, "period_end": period, **(context or {})},
                 } for metric, value, unit in metrics],
             })
         return {"responses": responses}
 
-    def make_services(self, run_id: str, specs: tuple[EquityResearchSpec, ...], *, second_period: str = "2026-06-30", mode: RequestMode = RequestMode.SINGLE_ASSET_ANALYSIS):
+    def make_services(
+        self, run_id: str, specs: tuple[EquityResearchSpec, ...], *, second_period: str = "2026-06-30",
+        first_context: dict[str, str] | None = None, second_context: dict[str, str] | None = None,
+        mode: RequestMode = RequestMode.SINGLE_ASSET_ANALYSIS,
+    ):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         run = RunDatabaseManager(Path(temporary.name) / "workspace", run_id)
@@ -78,7 +86,9 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
         research = Phase4ResearchRuntime(
             providers=build_default_provider_executor(credentials=EnvironmentCredentials({})),
             evidence=EvidenceResearchStore(run),
-            web_research=WebResearchAdapter(WebResearchBundleBackend(self.bundle(specs, second_period=second_period))),
+            web_research=WebResearchAdapter(WebResearchBundleBackend(self.bundle(
+                specs, second_period=second_period, first_context=first_context, second_context=second_context,
+            ))),
         )
         analysis = Phase5AssetAnalysisRuntime(
             run, materiality=MaterialityEngine(MaterialityConfig("R14-synthetic", Decimal("0.05"), Decimal("0.2"), Decimal("0.8"))),
@@ -152,6 +162,34 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
                 self.assertFalse(result_data["ranking_emitted"])
                 self.assertFalse(result_data["comparisons"])
                 self.assertFalse(inputs_data["compatibility_matrix"]["complete"])
+
+    def test_same_period_end_with_different_reporting_context_is_not_comparable(self) -> None:
+        cases = (
+            ("annual-quarterly", {"start": "2025-07-01", "reporting_frequency": "ANNUAL", "accounting_standard": "US-GAAP"},
+             {"start": "2026-04-01", "reporting_frequency": "QUARTERLY", "accounting_standard": "US-GAAP"}),
+            ("gaap-ifrs", {"start": "2026-04-01", "reporting_frequency": "QUARTERLY", "accounting_standard": "US-GAAP"},
+             {"start": "2026-04-01", "reporting_frequency": "QUARTERLY", "accounting_standard": "IFRS"}),
+        )
+        for suffix, first_context, second_context in cases:
+            with self.subTest(context=suffix):
+                specs = self.specs()
+                run, services = self.make_services(
+                    f"r14-context-{suffix}", specs, first_context=first_context,
+                    second_context=second_context, mode=RequestMode.ASSET_COMPARISON,
+                )
+                result = execute_mode(ModeRequest(f"r14-context-{suffix}", RequestMode.ASSET_COMPARISON,
+                    {"research_specs": specs}), services)
+                self.assertEqual(Availability.PARTIAL, result.availability)
+                calculation = next(row for row in run.fetch_phase6_context()["calculations"]
+                    if row["calculation_name"] == "asset_comparison")
+                inputs = json.loads(calculation["inputs_json"])
+                result_data = json.loads(calculation["result_json"])
+                pair = inputs["compatibility_matrix"]["pairwise_compatibility"][0]
+                self.assertTrue(pair["period_compatible"])
+                self.assertFalse(pair["reporting_context_compatible"])
+                self.assertFalse(pair["compatible"])
+                self.assertFalse(inputs["compatibility_matrix"]["complete"])
+                self.assertEqual([], result_data["comparisons"])
 
     def test_comparison_requires_two_resolved_assets(self) -> None:
         specs = self.specs()[:1]
