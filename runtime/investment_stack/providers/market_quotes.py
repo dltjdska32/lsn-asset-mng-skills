@@ -1223,7 +1223,11 @@ class MarketQuoteProvider:
             # Case B: Injected HTTP transport
             elif self._transport is not None:
                 try:
-                    status_code, body, _ = self._transport(url, None, 10.0)
+                    request_headers = (
+                        {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+                        if spec.source_id == "yahoo_finance" else None
+                    )
+                    status_code, body, _ = self._transport(url, request_headers, 10.0)
                     attempt_record["status_code"] = status_code
                     if status_code == 200:
                         parse_res = self._parse_source_payload(
