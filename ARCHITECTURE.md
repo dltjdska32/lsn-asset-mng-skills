@@ -5,7 +5,7 @@ R15 packaging note: `v1.3` is the frozen architecture label, not the Python dist
 문서 상태: ARCHITECTURE FROZEN
 Critical 미해결: 0
 High 미해결: 0
-구현 상태: 미착수
+구현 상태: 단계별 구현 진행 중. 실제 통합 상태와 검증 범위는 [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)의 최신 체크포인트를 참조한다.
 문서 성격: 구현의 유일한 Authoritative Architecture
 
 이 문서는 초기 Architecture, 모든 후속 수정, Grok Adversarial Review, Latest-as-of Web Research, Latest Relevant News Research 및 최종 Freeze Review를 통합한 최종 기준 문서다.
@@ -482,7 +482,7 @@ CLOSED
 HOLIDAY
 24_7
 
-휴장일의 마지막 완료 거래일 종가는 유효한 최신 가격일 수 있다. Bitcoin은 24_7 Venue-specific Quote를 사용한다.
+휴장일의 마지막 완료 거래일 종가는 거래소·종목 식별, 관측·공개 시각, 분석 기준시각과 신뢰 가능한 거래 일정이 일치할 때만 유효한 최신 가격 근거가 될 수 있다. 달력 근거가 없거나 적용 범위를 벗어난 일정은 fail closed한다. Bitcoin은 24_7 Venue-specific Quote를 사용한다. 현재 런타임의 제한된 일정 지원 범위는 [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)에 기록한다.
 
 Current Price 금지 Source
 과거 뉴스기사 속 가격
@@ -1496,7 +1496,7 @@ Historical Event와 Latest News 구분
 이전 Run Context의 무검증 재사용 금지
 46. Directory Structure
 
-구현 시 목표 구조이며 현재 단계에서는 생성하지 않는다.
+이 구조는 동결된 목표 구조를 설명한다. 실제 저장소에는 구현이 단계별로 반영되며, 현재 파일·서비스 범위는 [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)를 기준으로 한다.
 
 investment-stack/
 ├─ ARCHITECTURE.md
@@ -1629,7 +1629,7 @@ Outbox 부재
 Transaction Snapshot 부재
 48. Implementation Phases
 
-현재 단계에서는 Architecture Freeze까지만 완료한다.
+아래 단계는 동결된 구현 범위와 순서를 설명하며, 완료 상태를 표시하지 않는다. 실제 구현 상태와 검증 결과는 [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)에서 관리한다.
 
 Phase 0 — Architecture Freeze
 v1.3 확정

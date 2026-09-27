@@ -1,6 +1,6 @@
 # Investment Stack — Implementation Status
 
-Last updated: 2026-09-27
+Last updated: 2026-09-28
 
 ## R15 PACKAGE-01 — 2026-09-27 checkpoint
 
@@ -11,38 +11,32 @@ Last updated: 2026-09-27
 - The same target interpreter ran **10/10** R15 packaging/sync tests, `investment-stack check` (11 invariants), a `THESIS_REVIEW` plan smoke, a synthetic `REPORT_REFRESH` execute preflight smoke, config loads from `sys.prefix/config`, and `scripts/sync_agent_skills.py --check`. No full repository suite, live provider call, account credential, personal DB, or Codex UI auto-discovery from the venv prefix was tested.
 - The exact deployment path allowlist is `docs/workflow/deployment-allowlist.md`. The installed wheel's skill payload is verified under `sys.prefix/skills` and `sys.prefix/.agents/skills`; automatic Codex UI discovery from an arbitrary virtual-environment prefix is not established.
 
-## Current Status (Integration Checkpoints `a861b6b`, `5d094a5`)
+## Current Integrated Checkpoint (`a1a41b0`)
 
-As of **2026-09-27**, the system is undergoing a final multi-agent integration. The following milestones represent the current merged state:
+As of **2026-09-27**, the integration includes the A/C changes and B's R15 source-distribution repair. These figures and results are an integration checkpoint before the final independent review and any subsequent verification or fixes; they are not a release sign-off.
 
-- **Completed in this checkpoint (`a861b6b`):**
-  - Agent A: Price safety precursors and contracts.
-  - Agent B: R06–08 quote/bar parsing and deterministic technical-calculation components, fail-closed signal gates, and 8-skill package layout. See the dated B follow-up below for live verification limits.
-  - Agent C: 13F filing structure, 5-section briefing formats, and WAIT action arithmetic precursors.
-- **Current Test Baseline:** 
-  - Root unittest: 470 OK, 1 skip at `a861b6b`; 475 OK, 1 skip after SEC parser integration at `5d094a5` plus the corrected empty-tag test.
-  - Isolated venv wheel installation & package tests: 5 PASS (verified at prior commit `571101af`).
-- **Skill Discovery:** Repo-local 8 skills were successfully discovered in the current Codex Available skills list.
+- **Tests and review:** root unittest reported **595 OK, 1 skip**. The independent fixed review reported **13/13 PASS**. These totals do not replace final independent review or later checks.
+- **R02–05 / R09:** the SEC facts and period-aware evidence-consumption slices are integrated; they are no longer waiting on initial A integration. Provider coverage remains bounded by the registered adapters and their live verification.
+- **Seven request modes:** all seven fixed plans have configured service handlers through [`compose_seven_mode_services`](runtime/investment_stack/execution/service_composition.py), including the Phase 4 → Phase 5 selected-equity path and the portfolio/thesis bundles. See the [composition handoff](docs/workflow/handoffs/LUNA-R14-SEVEN-MODE-COMPOSITION-01.md). Composition requires a host to inject a valid pinned `run.db`, a `PersonalLedgerService`, equity and portfolio/thesis services, credentials/providers, and typed personal-state loaders/callbacks. It does not create or select those dependencies.
+- **CLI boundary:** [`investment-stack execute`](runtime/investment_stack/cli.py) has no configured runtime handlers by default. Without `runtime_services`, it executes against empty `RuntimeServices()` and returns `UNSUPPORTED`; the CLI does not bootstrap providers, credentials, databases, or personal loaders.
+- **Market close qualification:** the [default provider factory](runtime/investment_stack/providers/factory.py) wires pinned calendars for NASDAQ and KRX (see [calendar registry](runtime/investment_stack/freshness/calendar.py)) and can select a verified dated close as `LAST_VALID_CLOSE`. The bundled snapshots cover only their explicitly pinned September 2026 sessions. They do not provide general weekend or exchange-calendar coverage; unsupported exchanges/dates fail closed for stale-close qualification. A `LAST_VALID_CLOSE` remains a dated close, not an intraday/current live quote.
+- **Live evidence limits:** a 2026-09-27 public-source integration query carried Yahoo's 2026-09-25 close and Naver's 2026-09-23 close through Phase 4 evidence persistence into Phase 5 valuation, labeled `LAST_VALID_CLOSE` (see [R01 integration handoff](docs/workflow/handoffs/R01-WEEKEND-PRICE-01.md)). This verifies that path for those requests at that time, not ongoing vendor availability or broad provider coverage. Investing.com direct page requests returned HTTP 403 in the recorded probe. OpenDART credentialed access requires the host to supply `OPENDART_API_KEY` through the credential interface.
+- **Data and packaging boundaries:** the service host must inject the personal loader/ledger; integration checks used synthetic or temporary run data, not the user's personal DB. Wheel payload paths are verified, but Codex automatic skill UI discovery from an arbitrary venv prefix remains unconfirmed.
+- **Still pending:** final independent review, another final verification pass, any resulting fixes, and reassessment of counts at the resulting root commit. R17 number-combination logic also remains open.
 
-### Pending / Incomplete
+## Historical B Follow-up Verification — 2026-09-27
 
-- Agent A: R02–05 / R09 (SEC fact parser is integrated as a bounded slice; period-coherent consumption and provider fallback remain incomplete).
-- Agent C: Formal R10–11 integration.
-- Runtime Execution: Actual execution of the 7 request modes.
-- R17 Number Combination logic.
-- Full independent review and final verification session (to be scheduled after all agents merge).
-
-## B Follow-up Verification — 2026-09-27
+The B-only statements below describe the earlier provider-integration stage. Later R01 integration superseded the earlier conclusions that freshness evaluation was unwired and that Naver could not qualify for a current-price calculation. Current behavior and bounded calendar coverage are summarized in the integrated checkpoint above.
 
 This update belongs to `codex/luna-b-transfer-02`, based on `0ed93d8e100494a350f5ecde160c72ffafaf26a1`. It is a B-scope check, not root integration or full-stack verification.
 
 - The B quote, OHLCV, and technical fixture suite passes **45 tests** in a Windows venv containing the declared `truststore` and `tzdata` dependencies. These are synthetic fixture tests, not live-source evidence.
 - Root integration at `83dfb27` connected a scoped `truststore.SSLContext` to the default `providers/http.py` transport. Public probes through that default transport returned HTTP 200 for the Naver Samsung quote and daily-price APIs, the Naver stock page, Yahoo Finance AAPL chart API, and Coinbase BTC-USD ticker API. The B adapters parsed Naver, Yahoo, and Coinbase quote responses; Yahoo daily OHLCV produced 22 parsed bars. This confirms connectivity and parsing only, not data freshness, adjustment validity, or session completeness.
-- The Naver quote response parsed as `LAST_VALID_CLOSE` with an observation time of **2026-09-23 15:30 KST**, although retrieved on 2026-09-27. Its provider result was `AVAILABLE` because the R01 eligibility evaluator was not supplied. This is stale data and does not establish a current KRX price.
+- The earlier B-only probe observed the Naver close at **2026-09-23 15:30 KST** when retrieved on 2026-09-27. At that stage the provider result was only `AVAILABLE` because the R01 evaluator was not supplied. Later root integration wired the evaluator and pinned KRX schedule through the default factory; the same dated close can then be qualified as `LAST_VALID_CLOSE`, not as an intraday quote.
 - Naver's `/price` endpoint returned a top-level list with no ticker field and comma-grouped numeric strings. The parser now binds the payload to the matching canonical Naver request route, parses grouped numbers, preserves five raw bars in the live probe, and returns `UNAVAILABLE` without adjustment verification. Route binding is request provenance, not an identity echoed in the response.
 - Direct Investing.com US and Korea page requests returned HTTP 403. Those entries remain fixture-only and are not used as live quote sources.
 - Historical note: before the A integration at `83dfb27`, the default `providers/http.py` transport failed TLS verification in this Windows environment (`CERTIFICATE_VERIFY_FAILED`). That issue was resolved by the scoped TLS integration; this B follow-up does not edit the A-owned transport.
-- The adjustment receipt is still a caller-supplied marker rather than a validated corporate-action record. No split-adjusted Naver OHLCV result is claimed from the live probe. R01 freshness policy wiring, an accepted corporate-action receipt verifier, market-session coverage checks, and R08-to-briefing calculation binding remain integration work. R08's pure functions also accept `Sequence[Bar]`, which carries no source provenance; callers must not feed raw diagnostics into production calculations.
+- The adjustment receipt remains a caller-supplied marker rather than a validated corporate-action record. No split-adjusted Naver OHLCV result is claimed from the live probe. The later R01 work adds bounded pinned-schedule close qualification; it does not create general calendar coverage. R08's pure functions also accept `Sequence[Bar]`, which carries no source provenance; callers must not feed raw diagnostics into production calculations.
 - The wheel-installed Codex UI auto-discovery path was not proven by repo-local skill discovery. Current build/install checks must be read as package file-layout checks only.
 
 ---
@@ -173,15 +167,14 @@ This update belongs to `codex/luna-b-transfer-02`, based on `0ed93d8e100494a350f
 - `scripts/run_live_equity_research.py` provides a reproducible runtime entry point for structured external research.
 - Screenshot prices remain non-authoritative portfolio snapshot evidence.
 
-## Current Test Baseline
+## Earlier Phase-Specific Test Records
 
 - Phase 4 targeted tests: 26/26 PASS
 - Phase 5 targeted tests: 35/35 PASS
 - Phase 6 targeted tests: 25/25 PASS
 - Phase 7 focused acceptance/integration/adversarial tests: 16/16 PASS
 - Phase 8 focused final-integration/hardening tests: 10/10 PASS
-- Final full unittest: 272/272 PASS on this Linux validation host (2 platform-conditional skips)
-- Installed-wheel unittest: 272/272 PASS (same 2 platform-conditional skips)
+- These phase-specific totals and older 272-test full-suite runs are historical and are superseded by the `a1a41b0` root checkpoint above (595 OK, 1 skip).
 - Architecture invariant: 9/9 PASS
 - Phase 8 delta whitespace check: PASS; run `git diff --check` once more in the real user Git working tree
 
@@ -231,4 +224,4 @@ The wheel should also be built and installed into a clean virtual environment be
 
 ## Next
 
-Run the final Phase 8 release gate, then perform one independent pre-commit review on the real Git working tree. If Critical/High remain 0, commit/tag the v1.3 MVP. AWS/MCP/web/mobile connectivity remains post-v1.3.
+Complete the final independent review and other verification against the then-current integrated root, address any findings, and update this checkpoint's counts. The current checkpoint does not certify broad vendor live coverage or default CLI bootstrapping. AWS/MCP/web/mobile connectivity remains post-v1.3.
