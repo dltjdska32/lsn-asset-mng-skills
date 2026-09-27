@@ -1,5 +1,7 @@
 # 작업 상태표
 
+**C 네 모드 번들 통합 — root `9e87997`:** C 별도 `codex/luna-r14-r17-portfolio-thesis` source `84031d4`를 통합했다. `portfolio_thesis_services`가 PERSONAL_PORTFOLIO_ANALYSIS, PORTFOLIO_SCENARIO, THESIS_REVIEW, REPORT_REFRESH의 고정 step handler를 typed 서비스·합성 run.db/Phase6 보고서 참조에 연결한다. 총괄 직접 관련 42/42, wheel/sdist 재빌드 뒤 전체 **576 OK(skip1)**. 실제 개인 DB/외부 provider/자동주문 없음. materiality·selected asset 조사 등은 host callback과 적격 자료가 있어야 하고 없는 경우 부분/미지원 판정한다. refresh에서 단일/비교 자산 replay의 A 소유 run mode 경계와 fixed runner 결속은 인계에 명시된 후속 작업이다. 따라서 이 4모드 합성 실행을 7모드 완전 실사용으로 확대하지 않는다. C는 별도 branch에서 RC05 기간 순서/gap 수정 중.
+
 **R15 패키지 통합 — root `53f4a7a`:** B 별도 `codex/luna-r15-package-01` source `e903e54`를 통합했다. 정확한 8개 `skills/` 원본과 `.agents/skills/` 미러/UI 메타데이터, 이름별 5개 config 리소스, wheel/sdist 파일 allowlist 및 Windows 같은 인터프리터 설치 안내를 점검. B는 오프라인 clean wheel venv에서 focused 10/10·`pip check`·CLI check/plan/preflight smoke를 직접 확인했다. 총괄은 통합 소스로 wheel/sdist를 재빌드한 뒤 focused 10 OK(skip1), 미러 check, 전체 **575 OK(skip1)**를 직접 확인했다. Codex UI의 임의 venv 자동 스킬 검색, Python 3.11–3.13, 외부 연결·정책 자동 승인은 검증되지 않았다. 인계 `handoffs/PACKAGE-01.md`.
 
 **독립 중간 재검토 산출물:** REVIEW-CODE-01 세션의 고정 `979cc5e` 리뷰 `reviews/REVIEW-CODE-01-INTERIM-979cc5e.md`와 3개 새 probe를 공유 메모리에 인수했다. 검토자 자신과 총괄 모두 EPS 개별 context 누락·13F 역순·13F 분기 gap/중복 3/3 FAIL을 직접 재현했다. 검토자는 실제 Yahoo/Naver 기본 경로→Phase4/run.db→Phase5 및 비실시간 종가 표시도 독립 확인했다. A/C 수정 뒤 3/3 통과와 최종 통합 SHA 재검토가 필요하다.
