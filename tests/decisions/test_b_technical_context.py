@@ -90,6 +90,21 @@ class TestTechnicalBriefingContext(unittest.TestCase):
         self.assertEqual(context.status, "UNAVAILABLE")
         self.assertIn("TECHNICAL_VALUES_DO_NOT_MATCH_VERIFIED_INPUT", context.reasons)
 
+    def test_result_with_forged_descriptive_metadata_is_rejected(self):
+        parsed = _fixture()
+        result = calculate_verified_technical_analysis(parsed, PARAMS)
+        variants = (
+            replace(result, reasons=("FORGED_REASON",)),
+            replace(result, trend=None),
+            replace(result, formula_version="R08-future"),
+            replace(result, signal_status="BUY"),
+        )
+        for forged in variants:
+            with self.subTest(forged=forged):
+                context = build_technical_briefing_context(parsed, forged)
+                self.assertEqual(context.status, "UNAVAILABLE")
+                self.assertIn("TECHNICAL_METADATA_DOES_NOT_MATCH_VERIFIED_INPUT", context.reasons)
+
 
 if __name__ == "__main__":
     unittest.main()

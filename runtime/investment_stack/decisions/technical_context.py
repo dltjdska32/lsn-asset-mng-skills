@@ -108,8 +108,22 @@ def build_technical_briefing_context(
             receipt=receipt_id,
             fingerprint=fingerprint,
         )
+    if (
+        recalculated.reasons != analysis.reasons
+        or recalculated.trend != analysis.trend
+        or recalculated.formula_version != analysis.formula_version
+        or recalculated.signal_status != analysis.signal_status
+    ):
+        return _unavailable(
+            "TECHNICAL_METADATA_DOES_NOT_MATCH_VERIFIED_INPUT",
+            source=source,
+            receipt=receipt_id,
+            fingerprint=fingerprint,
+        )
 
-    latest = points[-1]
+    # Project only from the fresh calculation, never from caller-supplied result fields.
+    verified_points = recalculated.points
+    latest = verified_points[-1]
     macd = latest.macd
     indicators: tuple[tuple[str, Decimal | None], ...] = (
         ("sma", latest.sma),
@@ -123,8 +137,8 @@ def build_technical_briefing_context(
         ("atr", latest.atr),
     )
     incomplete = tuple(name for name, value in indicators if value is None)
-    reasons = tuple(analysis.reasons) + (("INSUFFICIENT_LOOKBACK_OR_VALUE_UNAVAILABLE",) if incomplete else ())
-    status = "PARTIAL" if analysis.status == "PARTIAL" or incomplete else "AVAILABLE"
+    reasons = tuple(recalculated.reasons) + (("INSUFFICIENT_LOOKBACK_OR_VALUE_UNAVAILABLE",) if incomplete else ())
+    status = "PARTIAL" if recalculated.status == "PARTIAL" or incomplete else "AVAILABLE"
     return TechnicalBriefingContext(
         status=status,
         reasons=tuple(dict.fromkeys(reasons)),
@@ -132,7 +146,7 @@ def build_technical_briefing_context(
         source_url=source,
         validation_receipt_id=receipt_id,
         input_fingerprint=fingerprint,
-        evidence_ids=tuple(point.evidence_id for point in points),
+        evidence_ids=tuple(point.evidence_id for point in verified_points),
         indicators=indicators,
         signal_status="UNAVAILABLE",
     )
