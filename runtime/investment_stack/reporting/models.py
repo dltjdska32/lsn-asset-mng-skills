@@ -65,3 +65,4 @@ class InvestmentReport:
     unknowns: tuple[str, ...]
     markdown: str
     briefing: str | None = None
+    report_ref: str = ""

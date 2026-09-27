@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 from dataclasses import replace
 from datetime import datetime
 
@@ -111,8 +112,8 @@ class InvestmentReportBuilder:
             built.append(
                 ReportSection(
                     "review_findings",
-                    "Review Findings",
-                    tuple(f"[{finding.severity.value}] {finding.code}: {finding.text}" for finding in review.findings),
+                    "추가 검토 항목",
+                    tuple(self._finding_summary(finding) for finding in review.findings),
                     finding_status,
                     (),
                     (),
@@ -123,8 +124,8 @@ class InvestmentReportBuilder:
         base_availability = self._availability(tuple(built))
         unknowns = self._unknowns(snapshot)
         quality_status = Availability.PARTIAL if unknowns else Availability.AVAILABLE
-        quality_lines = tuple(unknowns) if unknowns else ("No material stale, conflicting, missing-provider, or unavailable input was detected in the run evidence.",)
-        built.append(ReportSection("data_quality", "Data Quality / Unknowns", quality_lines, quality_status, (), (), {}))
+        quality_lines = tuple(unknowns) if unknowns else ("현재 확인 범위에서 오래되었거나 충돌하는 중요 자료는 발견되지 않았습니다.",)
+        built.append(ReportSection("data_quality", "자료 상태와 확인이 필요한 점", quality_lines, quality_status, (), (), {}))
 
         if base_availability is Availability.UNAVAILABLE:
             availability = Availability.UNAVAILABLE
@@ -167,11 +168,23 @@ class InvestmentReportBuilder:
             unknowns=tuple(unknowns),
             markdown="",
             briefing=briefing_md,
+            report_ref=f"report:{uuid.uuid4().hex}",
         )
         markdown = self._render(replace(report, markdown=""), evidence_by_id)
         report = replace(report, markdown=markdown)
         self._persist(report)
         return report
+
+    @staticmethod
+    def _finding_summary(finding: object) -> str:
+        code = getattr(finding, "code", "")
+        if code == "SOURCE_CONFLICT":
+            return "자료 제공처 간 값이 달라 추가 확인이 필요합니다."
+        if code == "STALE_OR_UNKNOWN_INPUT":
+            return "자료의 기준시점 또는 최신 여부를 확인해야 합니다."
+        if code == "HIGH_MATERIALITY":
+            return "판단에 미치는 영향이 커 추가 검토가 필요합니다."
+        return "추가 검토가 필요한 항목이 있습니다."
 
     @staticmethod
     def _validate_current_value_claim(section: ReportSectionInput, cited: list[dict[str, object]]) -> None:
@@ -196,16 +209,19 @@ class InvestmentReportBuilder:
         ]
         for row in provider_issues:
             capability = row.get("capability") or "general"
-            messages.append(f"Provider {row.get('provider_name')} for {capability}: {row.get('provider_status')}.")
+            status = row.get("provider_status")
+            label = {"MISSING_CREDENTIAL": "인증 정보가 없어 자료를 가져오지 못했습니다", "UNAVAILABLE": "자료 제공처에 연결할 수 없습니다", "ERROR": "자료 제공 중 오류가 발생했습니다", "PARTIAL": "일부 자료만 확인했습니다"}.get(status, "자료 상태를 확인할 수 없습니다")
+            area = {"MARKET": "시세", "FUNDAMENTALS": "재무", "NEWS": "뉴스"}.get(capability, "일부 자료")
+            messages.append(f"{area}: {label}.")
         selected_bad = [
             row for row in snapshot["evidence"]
             if row.get("selection_state") == "SELECTED" and row.get("freshness_status") in {"STALE", "UNKNOWN", "UNAVAILABLE"}
         ]
         for row in selected_bad:
-            messages.append(f"Selected evidence {row.get('evidence_id')} freshness is {row.get('freshness_status')}.")
+            messages.append("선택된 자료 중 기준시점이 오래되었거나 최신 여부를 확인할 수 없는 항목이 있습니다.")
         open_conflicts = [row for row in snapshot["conflicts"] if row.get("status") == "OPEN"]
         if open_conflicts:
-            messages.append(f"{len(open_conflicts)} unresolved source conflict(s) remain; values were not averaged.")
+            messages.append(f"자료 제공처 간 값이 다른 항목 {len(open_conflicts)}건이 남아 있어 하나의 값으로 합치지 않았습니다.")
         return messages
 
     @staticmethod
@@ -260,8 +276,16 @@ class InvestmentReportBuilder:
             f"- 포트폴리오 기준시각: {shown(report.as_of.portfolio_data_as_of)}",
             f"- 추가 검토: {'필요' if report.review_required else '불필요'}",
         ]
+        market_states = {
+            str(evidence_by_id[evidence_id].get("freshness_status"))
+            for section in report.sections for evidence_id in section.evidence_ids
+            if evidence_id in evidence_by_id and evidence_by_id[evidence_id].get("evidence_type") == "market"
+        }
+        if market_states and market_states != {"FRESH"}:
+            lines.append("- 시세 상태: " + ", ".join(ko_status(state) for state in sorted(market_states)))
         if report.review_triggers:
-            lines.append("- 내부 검토 사유: " + ", ".join(report.review_triggers))
+            labels = {"SOURCE_CONFLICT": "자료 간 값 차이", "HIGH_MATERIALITY": "판단 영향이 큼", "NEWS_REPORTED_OR_RUMOR_MATERIAL": "확인되지 않은 중요 소식", "STALE_OR_UNKNOWN_INPUT": "자료 기준시점 불확실"}
+            lines.append("- 검토가 필요한 이유: " + ", ".join(labels.get(reason, "추가 확인 필요") for reason in report.review_triggers))
         if report.briefing:
             lines.extend(report.briefing.split("\n"))
         for section in report.sections:
@@ -270,20 +294,30 @@ class InvestmentReportBuilder:
                 lines.extend(f"- {line}" for line in section.lines)
             else:
                 lines.append("- 확인 불가")
+        details = []
+        for section in report.sections:
+            if not section.evidence_ids and not section.calculation_ids:
+                continue
+            details.append(f"### {section.title}")
             for evidence_id in section.evidence_ids:
                 row = evidence_by_id[evidence_id]
                 data_time = row.get("observed_at") or row.get("published_at") or row.get("event_time") or "확인 불가"
                 source = row.get("source_name") or row.get("provider_id") or "출처 확인 불가"
-                lines.append(
-                    f"- 근거 `{evidence_id}` — {source}; 기준시각: {data_time}; "
-                    f"시세상태: {ko_status(row.get('freshness_status'))}"
-                )
+                details.append(f"- 근거 `{evidence_id}` — {source}; 자료 시각: {data_time}; 시세 상태: {ko_status(row.get('freshness_status'))}")
             if section.calculation_ids:
-                lines.append("- 계산 근거: " + ", ".join(f"`{cid}`" for cid in section.calculation_ids))
+                details.append("- 계산 ID: " + ", ".join(f"`{cid}`" for cid in section.calculation_ids))
+        if details:
+            lines.extend(("", "## 상세 근거", *details))
         return "\n".join(lines) + "\n"
 
     def _persist(self, report: InvestmentReport) -> None:
-        for section in report.sections:
+        sections = list(report.sections)
+        if report.briefing:
+            sections.append(ReportSection(
+                "investment_briefing", "투자 판단 브리핑", tuple(report.briefing.splitlines()),
+                report.availability, (), (), {"rendered_markdown": report.briefing},
+            ))
+        for section in sections:
             payload = {
                 "title": section.title,
                 "lines": list(section.lines),
@@ -293,11 +327,12 @@ class InvestmentReportBuilder:
                 "report_availability": report.availability.value,
                 "report_confidence": report.confidence.value,
                 "analysis_as_of": report.as_of.analysis_as_of,
+                "report_ref": report.report_ref,
             }
             canonical = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
             digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
             self.run_db.upsert_report_section(
-                section_id=f"section:{section.name}",
+                section_id=f"{report.report_ref}:section:{section.name}",
                 section_name=section.name,
                 section_status=section.status.value,
                 content_reference=f"inline-sha256:{digest}",

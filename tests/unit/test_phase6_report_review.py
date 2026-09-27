@@ -7,6 +7,8 @@ from investment_stack.calculations.common import AnalysisResult, AnalysisStatus,
 from investment_stack.reporting.builder import InvestmentReportBuilder
 from investment_stack.reporting.models import Availability, Confidence, ReportSectionInput
 from investment_stack.reporting.runtime import section_from_analysis_result
+from investment_stack.decisions.briefing import NonPostingBriefing
+from investment_stack.contracts.calculation import DataAvailabilityStatus, InvestmentDecision
 from investment_stack.review.engine import ConditionalReviewEngine
 from investment_stack.review.models import FindingSeverity, ReviewContext, ReviewFinding, ReviewTrigger
 from tests.phase6_support import Phase6RunFixture, add_market
@@ -100,6 +102,41 @@ class Phase6UnitTests(unittest.TestCase, Phase6RunFixture):
         result = ConditionalReviewEngine(self.manager).evaluate()
         self.assertIn(ReviewTrigger.SOURCE_CONFLICT, result.triggers)
         self.assertEqual(result.confidence, Confidence.LOW)
+
+    def test_partial_conflict_report_is_korean_and_keeps_ids_in_details(self):
+        self.manager.add_conflict(conflict_id="conflict-private", conflict_type="SOURCE_VALUE_CONFLICT", status="OPEN", details={"values": [1, 2]})
+        review = ConditionalReviewEngine(self.manager).evaluate()
+        report = InvestmentReportBuilder(self.manager).build(
+            title="TEST", sections=(ReportSectionInput("overview", "요약", ("자료를 확인했습니다",), status=Availability.PARTIAL),), review=review,
+        )
+        self.assertEqual(Availability.PARTIAL, report.availability)
+        self.assertIn("자료 제공처 간 값이 다른 항목 1건", report.markdown)
+        self.assertIn("하나의 값으로 합치지 않았습니다", report.markdown)
+        self.assertNotIn("SOURCE_CONFLICT", report.markdown)
+        self.assertNotIn("conflict-private", report.markdown)
+        self.assertIn("분석 기준시각:", report.markdown)
+
+    def test_saved_report_refs_are_distinct_and_sections_do_not_overwrite(self):
+        review = ConditionalReviewEngine(self.manager).evaluate()
+        builder = InvestmentReportBuilder(self.manager)
+        section = (ReportSectionInput("summary", "요약", ("처음 내용",)),)
+        briefing = NonPostingBriefing(
+            DataAvailabilityStatus.PARTIAL, InvestmentDecision.WAIT, "자료 부족으로 판단 보류",
+            {"현재가": "계산 불가"}, (), ("추가 자료 확인",), ("누락된 위험 정보",),
+            ("missing input",), "verified",
+        )
+        first = builder.build(title="TEST", sections=section, review=review, briefing=briefing)
+        second = builder.build(title="TEST", sections=(ReportSectionInput("summary", "요약", ("다음 내용",)),), review=review)
+        self.assertNotEqual(first.report_ref, second.report_ref)
+        rows = self.manager.fetch_phase6_context()["report_sections"]
+        report_rows = [row for row in rows if row["section_name"] == "summary"]
+        self.assertEqual(2, len(report_rows))
+        import json
+        refs = {json.loads(row["metadata_json"])["report_ref"] for row in report_rows}
+        self.assertEqual({first.report_ref, second.report_ref}, refs)
+        briefing_rows = [row for row in rows if row["section_name"] == "investment_briefing"]
+        self.assertEqual(1, len(briefing_rows))
+        self.assertIn("자료 부족으로 판단 보류", "\n".join(json.loads(briefing_rows[0]["metadata_json"])["lines"]))
 
     def test_materiality_pass_in_run_db_triggers_review(self):
         self.manager.add_materiality_decision(decision_id="m1", subject="EQ", decision="PASS", rationale="weight threshold")
