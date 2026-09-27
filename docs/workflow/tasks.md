@@ -1,5 +1,7 @@
 # 작업 상태표
 
+**최신 통합 — C 포트폴리오/가상 시나리오 서비스:** C `codex/luna-c-portfolio-modes-01`(a3b7, 기준 `27d95e4`) source `d9d3e15`·기록 `a0e0773`·FX baseline 보정 `729b727`·인계 `5c30925`를 root `df39667`→`32eb2fc`로 순서대로 통합. 총괄 직접 관련 **45/45 PASS**, 전체 **558 OK, skip1**. 실제 baseline FX 없이 시나리오 환율로 before/delta를 확정하던 반례를 발견해 C에 회송·수정·재확인했다. 두 모드의 비게시 typed 계산/보고 서비스는 있으나 고정 dispatcher/state pin·deep research 연결은 A 후속이다. A는 R01 주말 종가 제품 경로와 기존 웹 시세 회귀를 수정 중. 독립 전체 검토·다른 최종 검증은 아직 미실행. 인계 `handoffs/LUNA-C-PORTFOLIO-MODES-01.md`.
+
 **최신 일정 범위 판정:** B `codex/luna-b-calendar-coverage-01`의 공식 자료 조사 source `3f261fe`를 root `9a844b0`으로 통합(문서만 변경, 런타임 테스트 재실행 불필요). Nasdaq 2026 휴장표와 KRX 휴장 규칙·특정 공고만으로 전체 연속 세션/임시 휴장 부재를 입증할 수 없어, 임의 평일 보간 없이 기존 NASDAQ 9/24–28·KRX 9/22–28만 pinned coverage로 유지한다. 다른 주말은 검증된 거래소 일정이 추가될 때까지 UNAVAILABLE. 구체 근거 `handoffs/LUNA-B-CALENDAR-COVERAGE-01.md`; A의 실제 계산 연결은 계속 진행 중.
 
 **최신 통합 — 2026-09-27 C 논지/보고 갱신 서비스:** C `codex/luna-c-thesis-refresh-01`(a3b7 worktree, 기준 `81dcda8`) source `901983d`를 root `27d95e4`로 통합. 총괄 직접 C 집중 **26/26 PASS**, 전체 **550 OK, skip1**. THESIS_REVIEW의 기존 사용자 논지·반증 조건·근거 없으면 WAIT, REPORT_REFRESH의 새 run/state pin·비게시·재귀 금지와 delta 비교를 합성 run.db로 검증했다. 두 서비스의 고정 dispatcher 연결은 아직 A 후속이며 이 두 모드 제품 완료는 아니다. A는 R01 주말 종가 수직 연결, B는 일반 주말 일정 coverage 조사·가능 범위 구현, C는 personal/portfolio scenario 순수 계산·보고 서비스를 각각 별도 branch/worktree에서 병렬 진행하도록 배정했다. 독립 전체 코드 검토·별도 최종 검증 미실행. 인계 `handoffs/LUNA-C-THESIS-REFRESH-01.md`.
