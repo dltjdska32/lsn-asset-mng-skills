@@ -2,6 +2,29 @@
 
 Last updated: 2026-08-14
 
+## Current Status (Integration Checkpoint `a861b6b`)
+
+As of **2026-09-27**, the system is undergoing a final multi-agent integration. The following milestones represent the current merged state:
+
+- **Completed in this checkpoint (`a861b6b`):**
+  - Agent A: Price safety precursors and contracts.
+  - Agent B: R06–08 deterministic technical calculations, signaling fail-closed gates, and 8-skill strict packaging (wheel/sdist).
+  - Agent C: 13F filing structure, 5-section briefing formats, and WAIT action arithmetic precursors.
+- **Current Test Baseline:** 
+  - Root unittest: 470 OK, 1 skip.
+  - Isolated venv wheel installation & package tests: 5 PASS (verified at prior commit `571101af`).
+- **Skill Discovery:** Repo-local 8 skills were successfully discovered in the current Codex Available skills list.
+
+### Pending / Incomplete
+
+- Agent A: R02–05 / R09 (SEC parser is currently being modified and is pre-integration).
+- Agent C: Formal R10–11 integration.
+- Runtime Execution: Actual execution of the 7 request modes.
+- R17 Number Combination logic.
+- Full independent review and final verification session (to be scheduled after all agents merge).
+
+---
+
 ## Architecture
 
 - Version: v1.3
@@ -9,7 +32,7 @@ Last updated: 2026-08-14
 - Authoritative document: `ARCHITECTURE.md`
 - Do not redesign the architecture without an explicit approved change decision.
 
-## Current Status
+## Historical Status (As of 2026-08-14)
 
 - Phase 1 — Repository / Skeleton: COMPLETE
 - Phase 2 — Storage Safety: COMPLETE
@@ -18,7 +41,7 @@ Last updated: 2026-08-14
 - Phase 5 — Asset Analysis: IMPLEMENTED
 - Phase 6 — Report & Review: IMPLEMENTED
 - Phase 7 — Acceptance: COMPLETE
-- Phase 8 — Final Integration / Hardening: IMPLEMENTED, READY FOR FINAL PRE-COMMIT REVIEW
+- Phase 8 — Final Integration / Hardening: *(Historically marked as READY FOR FINAL PRE-COMMIT REVIEW; currently superseded by the 2026-09-27 integration effort above)*
 
 ## Phase 4 Implemented
 
