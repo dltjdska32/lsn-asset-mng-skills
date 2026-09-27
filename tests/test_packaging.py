@@ -1,7 +1,9 @@
 from pathlib import Path
 import re
+import subprocess
 import sys
 import tarfile
+import tempfile
 import tomllib
 import unittest
 import zipfile
@@ -116,6 +118,36 @@ class TestPackaging(unittest.TestCase):
         self.assertIn("Canonical Final Architecture v1.3", architecture)
         self.assertNotEqual(version, "1.3")
 
+    def test_unpacked_sdist_runs_version_metadata_check(self):
+        sdists = sorted((self.project_root / "dist").glob("*.tar.gz"))
+        self.assertTrue(sdists, "Build an sdist before testing its packaged version check.")
+
+        with tempfile.TemporaryDirectory(prefix="investment-stack-sdist-") as temporary_dir:
+            destination = Path(temporary_dir)
+            with tarfile.open(sdists[0], "r:gz") as artifact:
+                for member in artifact.getmembers():
+                    relative = Path(*Path(member.name).parts)
+                    self.assertFalse(relative.is_absolute())
+                    self.assertNotIn("..", relative.parts)
+                    target = destination / relative
+                    if member.isdir():
+                        target.mkdir(parents=True, exist_ok=True)
+                    elif member.isfile():
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        source = artifact.extractfile(member)
+                        self.assertIsNotNone(source)
+                        target.write_bytes(source.read())
+
+            sdist_root = next(destination.iterdir())
+            completed = subprocess.run(
+                [sys.executable, "-m", "unittest", "test_packaging.TestPackaging.test_distribution_and_runtime_versions_are_not_conflated"],
+                cwd=sdist_root / "tests",
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+
     def test_built_artifacts_match_exact_allowlists(self):
         dist_dir = self.project_root / "dist"
         self.assertTrue(dist_dir.is_dir(), "Build wheel and sdist before the packaging tests.")
@@ -139,7 +171,7 @@ class TestPackaging(unittest.TestCase):
 
         sdist_root = f"investment_stack-{version}/"
         sdist_fixed_paths = {
-            "MANIFEST.in", "PKG-INFO", "README.md", "pyproject.toml", "setup.py", "setup.cfg",
+            "ARCHITECTURE.md", "MANIFEST.in", "PKG-INFO", "README.md", "pyproject.toml", "setup.py", "setup.cfg",
             "docs/workflow/deployment-allowlist.md", "scripts/sync_agent_skills.py",
             "tests/test_packaging.py", "tests/test_r15_skill_sync.py",
         }

@@ -15,7 +15,7 @@ Allowed files are exactly:
 
 Allowed project files are exactly:
 
-- `README.md`, `pyproject.toml`, `setup.py`, generated `setup.cfg`, and `MANIFEST.in`.
+- `ARCHITECTURE.md`, `README.md`, `pyproject.toml`, `setup.py`, generated `setup.cfg`, and `MANIFEST.in`.
 - `docs/workflow/deployment-allowlist.md` and `scripts/sync_agent_skills.py`.
 - The five explicitly named `config/*.yaml` inputs above.
 - All `runtime/investment_stack/**/*.py` source files and setuptools' six generated `runtime/investment_stack.egg-info/` metadata files (`PKG-INFO`, `SOURCES.txt`, `dependency_links.txt`, `entry_points.txt`, `requires.txt`, `top_level.txt`).
