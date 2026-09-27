@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from enum import StrEnum
 
@@ -37,6 +37,13 @@ class DcfAssumptions:
 
 
 @dataclass(frozen=True, slots=True)
+class DcfScenario:
+    name: str
+    assumptions: DcfAssumptions
+    assumption_evidence_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class HighGrowthScenario:
     name: str
     revenue: Decimal
@@ -60,6 +67,8 @@ class EquityValuationInput:
     roe: Decimal | None = None
     dividend_per_share: Decimal | None = None
     dcf: DcfAssumptions | None = None
+    dcf_scenarios: tuple[DcfScenario, ...] = ()
+    dcf_sensitivity_rates: tuple[tuple[Decimal, Decimal], ...] = ()
     explicit_segment_values: tuple[Decimal, ...] = ()
     high_growth_scenarios: tuple[HighGrowthScenario, ...] = ()
     unit_economics: dict[str, Decimal] | None = None
@@ -84,11 +93,11 @@ class EquityValuationAnalyzer:
         metrics: list[MetricResult] = []
         unknowns: list[str] = []
 
-        def add(name: str, value: Decimal | None, formula: str, unit: str = "multiple") -> None:
+        def add(name: str, value: Decimal | None, formula: str, unit: str = "multiple", evidence_ids: tuple[str, ...] | None = None) -> None:
             status = AnalysisStatus.COMPLETE if value is not None else AnalysisStatus.UNAVAILABLE
             if value is None:
                 unknowns.append(name)
-            metrics.append(MetricResult(name, value, unit, formula, status, None if value is not None else "required input unavailable", data.evidence_ids))
+            metrics.append(MetricResult(name, value, unit, formula, status, None if value is not None else "required input unavailable", data.evidence_ids if evidence_ids is None else evidence_ids))
 
         if data.current_price is not None and data.eps is not None and data.eps > 0:
             add("pe", data.current_price / data.eps, "current_price / eps")
@@ -110,8 +119,29 @@ class EquityValuationAnalyzer:
             add("dividend_yield", data.dividend_per_share / data.current_price, "dividend_per_share / current_price", "ratio")
 
         if model is ValuationModel.DCF_MULTIPLES:
-            dcf_value = self._dcf_per_share(data.dcf)
-            add("dcf_value_per_share", dcf_value, "explicit discounted FCF + terminal value - net debt / shares", data.currency or "currency/share")
+            if data.dcf_scenarios:
+                for scenario in data.dcf_scenarios:
+                    assumptions = scenario.assumptions
+                    formula = (
+                        f"DCF(name={scenario.name},fcf={assumptions.starting_fcf},growth={assumptions.annual_growth_rate},"
+                        f"discount={assumptions.discount_rate},terminal_growth={assumptions.terminal_growth_rate},"
+                        f"years={assumptions.years},net_debt={assumptions.net_debt},shares={assumptions.shares_outstanding})"
+                    )
+                    add(f"dcf_scenario_{scenario.name}", self._dcf_per_share(assumptions), formula,
+                        f"{data.currency or 'currency'}/share", scenario.assumption_evidence_ids)
+            else:
+                dcf_value = self._dcf_per_share(data.dcf)
+                add("dcf_value_per_share", dcf_value, "explicit discounted FCF + terminal value - net debt / shares", data.currency or "currency/share")
+            for index, (discount_rate, terminal_growth_rate) in enumerate(data.dcf_sensitivity_rates):
+                if data.dcf is None:
+                    add(f"dcf_sensitivity_{index}", None, "sensitivity requires explicit base DCF assumptions", f"{data.currency or 'currency'}/share")
+                    continue
+                formula = f"discount_rate={discount_rate};terminal_growth_rate={terminal_growth_rate}"
+                try:
+                    value = self._dcf_per_share(replace(data.dcf, discount_rate=discount_rate, terminal_growth_rate=terminal_growth_rate))
+                except ValueError:
+                    value = None
+                add(f"dcf_sensitivity_{index}", value, formula, f"{data.currency or 'currency'}/share")
         elif model is ValuationModel.FINANCIAL_PB_ROE_DIVIDEND:
             add("roe", data.roe, "reported_or_calculated_roe", "ratio")
         elif model is ValuationModel.HIGH_GROWTH_SCENARIO:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Iterable
 
 from investment_stack.evidence.manager import RunDatabaseManager
@@ -20,6 +21,7 @@ class SelectedEvidence:
     observation_id: str | None
     partial: bool
     reason: str
+    selected_observations: tuple[ProviderObservation, ...] = ()
 
 
 def _id(prefix: str) -> str:
@@ -227,7 +229,10 @@ class EvidenceResearchStore:
         selected = winners[0]
         is_partial = selected[1].status is FreshnessStatus.STALE
         reason = "selected stale latest-as-of observation" if is_partial else "selected latest usable observation as of cutoff"
-        return SelectedEvidence(selected[0], selected[1], selected[2], selected[3], is_partial, reason)
+        return SelectedEvidence(
+            selected[0], selected[1], selected[2], selected[3], is_partial, reason,
+            tuple(item[0] for item in winners),
+        )
 
     def _record_conflicts(
         self,
@@ -251,7 +256,7 @@ class EvidenceResearchStore:
                             "provider": item.provider_id,
                             "source": item.source_name,
                             "source_tier": item.source_tier,
-                            "value": item.value,
+                            "value": str(item.value) if isinstance(item.value, Decimal) else item.value,
                             "observed_at": item.observed_at,
                             "published_at": item.published_at,
                         }

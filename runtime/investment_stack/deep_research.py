@@ -7,14 +7,14 @@ calculations.  No personal state is mutated here.
 
 from __future__ import annotations
 
-import json
 import re
+from collections import Counter
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Callable, Iterable, Mapping
 
 from investment_stack.asset_analysis import EquityDeepResult, Phase5AssetAnalysisRuntime
-from investment_stack.calculations import BusinessType, EquityFundamentalInput, EquityValuationInput
+from investment_stack.calculations import BusinessType, DcfScenario, EquityFundamentalInput, EquityValuationInput
 from investment_stack.freshness import FreshnessEngine, FreshnessStatus, observation_time
 from investment_stack.providers import ProviderCapability, ProviderObservation, ProviderRequest
 from investment_stack.research import Phase4ResearchRuntime, ResearchOutcome
@@ -39,6 +39,8 @@ class EquityResearchSpec:
     news_query: str | None = None
     market_parameters: Mapping[str, object] | None = None
     fundamentals_parameters: Mapping[str, object] | None = None
+    dcf_scenarios: tuple[DcfScenario, ...] = ()
+    dcf_sensitivity_rates: tuple[tuple[Decimal, Decimal], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +99,7 @@ _TOTAL_MONEY_METRICS = frozenset(
 )
 _PER_SHARE_MONEY_METRICS = frozenset({"eps", "dividend_per_share", "book_value_per_share"})
 _SHARE_COUNT_METRICS = frozenset({"shares_outstanding"})
+_FLOW_METRICS = frozenset({"revenue", "prior_revenue", "operating_income", "net_income", "cash_from_operations", "capex", "eps", "ebitda", "dividend_per_share"})
 _EXPLICIT_SCALE_FIELDS = ("unit_multiplier", "value_multiplier", "unit_scale", "value_scale")
 
 _NAMED_SCALES: tuple[tuple[tuple[str, ...], Decimal], ...] = (
@@ -161,19 +164,19 @@ def _decimal(value: object) -> Decimal | None:
 
 
 def _explicit_scale(observation: ProviderObservation) -> Decimal | None:
+    found: Decimal | None = None
     for field in _EXPLICIT_SCALE_FIELDS:
         raw = observation.metadata.get(field)
         if raw is None:
             continue
         parsed = _decimal(raw)
-        if parsed is not None and parsed > 0:
-            return parsed
-        if isinstance(raw, str):
-            named = _named_scale(raw)
-            if named is not None:
-                return named
-        return None
-    return None
+        if parsed is None or not parsed.is_finite() or parsed <= 0:
+            if isinstance(raw, str):
+                parsed = _named_scale(raw)
+        if parsed is None or not parsed.is_finite() or parsed <= 0 or found is not None:
+            return None
+        found = parsed
+    return found
 
 
 def _named_scale(label: str) -> Decimal | None:
@@ -192,6 +195,8 @@ def _unit_scale(observation: ProviderObservation) -> Decimal | None:
     explicit = _explicit_scale(observation)
     if explicit is not None:
         return explicit
+    if any(observation.metadata.get(field) is not None for field in _EXPLICIT_SCALE_FIELDS):
+        return None
     if observation.unit is None or not observation.unit.strip():
         return Decimal("1")
     return _named_scale(observation.unit) or Decimal("1")
@@ -235,6 +240,14 @@ def _normalize_metric_value(
 
     if observation.provider_id == "web_research" and not _has_explicit_unit(observation):
         return None, f"{canonical}: web financial input missing explicit unit/scale"
+
+    unit_token = _token(observation.unit or "")
+    if canonical in _SHARE_COUNT_METRICS and not any(token in unit_token for token in ("share", "주")):
+        return None, f"{canonical}: share-count unit is missing or incompatible"
+    if canonical in _PER_SHARE_MONEY_METRICS and not any(token in unit_token for token in ("share", "주")):
+        return None, f"{canonical}: per-share unit is missing or incompatible"
+    if canonical in _TOTAL_MONEY_METRICS and ("share" in unit_token or "주당" in unit_token):
+        return None, f"{canonical}: total monetary metric has per-share unit"
 
     scale = _unit_scale(observation)
     if scale is None:
@@ -357,6 +370,14 @@ class LiveDeepResearchRuntime:
         if not fundamental_evidence and fundamentals.selected.evidence_id:
             fundamental_evidence = (fundamentals.selected.evidence_id,)
         valuation_evidence = tuple(dict.fromkeys((*market_evidence, *fundamental_evidence)))
+        available_evidence_ids = set(evidence_ids)
+        valid_dcf_scenarios = tuple(
+            scenario for scenario in spec.dcf_scenarios
+            if scenario.assumption_evidence_ids
+            and set(scenario.assumption_evidence_ids).issubset(available_evidence_ids)
+        )
+        if len(valid_dcf_scenarios) != len(spec.dcf_scenarios):
+            normalization_warnings.append("valuation assumptions excluded: evidence references are missing or not part of this run")
 
         shares = metrics.get("shares_outstanding")
         equity = metrics.get("equity")
@@ -405,6 +426,9 @@ class LiveDeepResearchRuntime:
             revenue=metrics.get("revenue"),
             market_cap=market_cap,
             dividend_per_share=metrics.get("dividend_per_share"),
+            dcf=next((scenario.assumptions for scenario in valid_dcf_scenarios if scenario.name == "base"), None),
+            dcf_scenarios=valid_dcf_scenarios,
+            dcf_sensitivity_rates=spec.dcf_sensitivity_rates,
             evidence_ids=valuation_evidence,
         )
         analyzed = self.analysis.analyze_equity(fundamental_input, valuation_input)
@@ -474,33 +498,83 @@ class LiveDeepResearchRuntime:
         *,
         target_currency: str,
     ) -> tuple[dict[str, Decimal], tuple[str, ...]]:
-        candidates: dict[str, tuple[object, int, Decimal]] = {}
+        period_groups: dict[tuple[object, ...], dict[str, tuple[object, int, Decimal]]] = {}
+        flow_starts: dict[tuple[object, ...], dict[str, str]] = {}
         warnings: list[str] = []
-        for result in outcome.provider_results:
-            for observation in result.observations:
-                if observation.evidence_type != "financial":
+        selected_observations = outcome.selected.selected_observations
+        if not selected_observations and outcome.selected.observation is not None:
+            selected_observations = (outcome.selected.observation,)
+        for observation in selected_observations:
+            if observation.evidence_type != "financial":
+                continue
+            if observation.metadata.get("calculation_input_approved", True) is False:
+                continue
+            assessment = self.freshness.assess(observation, analysis_as_of=self.analysis_as_of)
+            timestamp = observation_time(observation)
+            if timestamp is None or assessment.status is FreshnessStatus.UNAVAILABLE:
+                continue
+            metadata = observation.metadata
+            period_key = (
+                str(metadata.get("period_end") or metadata.get("end") or ""),
+                str(metadata.get("form") or metadata.get("reporting_frequency") or ""),
+                str(metadata.get("fp") or metadata.get("reporting_period") or ""),
+                str(metadata.get("basis") or metadata.get("accounting_standard") or ""),
+                str(metadata.get("consolidation") or ""),
+                str(metadata.get("adjustment_basis") or ""),
+            )
+            metrics_for_period = period_groups.setdefault(period_key, {})
+            starts_for_period = flow_starts.setdefault(period_key, {})
+            for canonical, value in _observation_metrics(observation):
+                normalized, warning = _normalize_metric_value(
+                    canonical,
+                    value,
+                    observation,
+                    target_currency=target_currency,
+                )
+                if normalized is None:
+                    if warning:
+                        warnings.append(warning)
                     continue
-                if observation.metadata.get("calculation_input_approved", True) is False:
-                    continue
-                assessment = self.freshness.assess(observation, analysis_as_of=self.analysis_as_of)
-                timestamp = observation_time(observation)
-                if timestamp is None or assessment.status is FreshnessStatus.UNAVAILABLE:
-                    continue
-                for canonical, value in _observation_metrics(observation):
-                    normalized, warning = _normalize_metric_value(
-                        canonical,
-                        value,
-                        observation,
-                        target_currency=target_currency,
+                candidate = (timestamp, -observation.source_tier, normalized)
+                if canonical in _FLOW_METRICS:
+                    starts_for_period[canonical] = str(metadata.get("start") or "")
+                previous = metrics_for_period.get(canonical)
+                if previous is None or (candidate[0], candidate[1]) > (previous[0], previous[1]):
+                    metrics_for_period[canonical] = candidate
+        # Choose one latest compatible period/basis group. Never assemble a model
+        # from a newer revenue fact and older equity/debt facts implicitly.
+        if period_groups:
+            compatible_groups: dict[tuple[object, ...], dict[str, tuple[object, int, Decimal]]] = {}
+            group_start: dict[tuple[object, ...], str] = {}
+            for key, metrics_for_period in period_groups.items():
+                starts = flow_starts.get(key, {})
+                distinct_starts = [start for start in starts.values() if start]
+                selected_start = (
+                    sorted(Counter(distinct_starts).items(), key=lambda item: (-item[1], item[0]))[0][0]
+                    if distinct_starts else ""
+                )
+                compatible = dict(metrics_for_period)
+                for metric in _FLOW_METRICS:
+                    start = starts.get(metric, "")
+                    if start and selected_start and start != selected_start:
+                        compatible.pop(metric, None)
+                compatible_groups[key] = compatible
+                group_start[key] = selected_start
+            selected_period = max(
+                compatible_groups,
+                key=lambda key: (key[0], len(compatible_groups[key]), key[1:], group_start[key]),
+            )
+            candidates = compatible_groups[selected_period]
+            for key, starts in flow_starts.items():
+                if key == selected_period:
+                    mismatched = sorted(
+                        metric for metric, start in starts.items()
+                        if start and group_start[key] and start != group_start[key]
                     )
-                    if normalized is None:
-                        if warning:
-                            warnings.append(warning)
-                        continue
-                    candidate = (timestamp, -observation.source_tier, normalized)
-                    previous = candidates.get(canonical)
-                    if previous is None or (candidate[0], candidate[1]) > (previous[0], previous[1]):
-                        candidates[canonical] = candidate
+                    if mismatched:
+                        warnings.append("financial period length mismatch excluded: " + ", ".join(mismatched))
+        else:
+            candidates = {}
         return (
             {name: candidate[2] for name, candidate in candidates.items()},
             tuple(sorted(set(warnings))),
