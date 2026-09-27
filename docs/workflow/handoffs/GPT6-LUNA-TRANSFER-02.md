@@ -31,3 +31,10 @@
 - B source `5d424e4`, `3ffe21d`, `9808438`을 root `3ebd9db`, `19d2850`, `b08fbf9`에 통합. README 한 줄 충돌은 B가 더 정확히 기술한 기본 HTTP transport 미연결 상태로 해결. 총괄이 B 관련 **45/45 PASS**, root 최종 `b08fbf9` 전체 **495 OK, skip1** 직접 실행. B의 별도 패키징5/5와 live probe는 `handoffs/LUNA-B-TRANSFER-02.md` 참조; root가 이 단계에서 wheel 빌드/live를 재실행한 것은 아님.
 - B 임시 scoped truststore probe Naver/Yahoo/Coinbase 200, Investing 403. 기본 `providers/http.py`에는 A가 TLS/Decimal 연결 중; 설치된 `truststore`만으로 성공하지 않음. Naver 9/27 조회 시 9/23 종가는 current price 증거 아님; 조정 근거 없는 OHLCV raw bars는 계산 불가. A에 transport 결과 전달.
 - B task 후속 R07–08 verified BarSet→technical provenance 수직 검증 요청 전달. A task는 R02–05/R09/HTTP 인계 커밋 직전. 전체 7모드·정식 개인 규모 판단·독립 REVIEW-CODE-01·다른 VERIFY-01 미실행.
+
+## 12:08 UTC A 도메인 통합·다음 병렬 배정
+
+- A source `c2a480d`·`6b9689b`·`3d38323`·`649abf0`을 root `f28219f`·`dc76b9c`·`20999be`·`83dfb27`에 통합. 총괄이 A 재무/DCF/HTTP 등 관련 **39/39 PASS**, 최종 root 전체 **500 OK, skip1** 직접 실행. A worktree 전체 416 OK 및 기본 transport Naver/Yahoo/Coinbase 200, Decimal token 보존은 담당 인계 `LUNA-A-02.md`의 별도 증거. 본 root 전체 검사는 live 재조회가 아니다.
+- A의 옛 source branch `pyproject.toml`에는 truststore 선언이 없으나 root 최신 `pyproject.toml` 15행에 `truststore>=0.9.1`이 이미 있다. 따라서 추가 의존성 변경 없이, scoped transport의 root 합성을 다음 검증 대상으로 둔다.
+- A task에 새 branch `codex/luna-a-r14`를 통합 `83dfb27`에서 시작해 `assignments/LUNA-A-R14-01.md`대로 7모드 실제 dispatch/R16 합성 E2E를 요청했다. B task에 R07–08 verified BarSet→technical 계산/근거 수직 슬라이스, C task에 통합 `83dfb27` 기반 새 branch에서 R10–11/17 typed numeric binding/WAIT·DB 불변을 요청했다. 모두 기존 각각의 격리 worktree 사용, 소유 파일 분리.
+- R14 dispatcher, 승인 정책에 따른 수량 판단, R13 backtest와 전체 독립 REVIEW-CODE-01/VERIFY-01은 아직 미검증/미완.
