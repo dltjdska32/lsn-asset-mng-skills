@@ -1,5 +1,7 @@
 # 작업 상태표
 
+**최신 사용자 보정 — 2026-09-27 주말/추석 마지막 거래일 종가:** 경과 시간만으로 Yahoo 9/25·Naver 9/23을 STALE로 간주한 앞선 표현은 철회. NYSE 2026 휴장표에 9/25 휴장 없음, 9/25 공식 closing bell 기록; 행정안전부는 한국 추석 연휴를 9/24~27로 발표, KRX는 공휴일·주말 휴장. 따라서 두 관측은 각각 9/27 기준 마지막 유효 거래일 종가일 **가능성**이 있다. 종목/통화·완료 세션·공식 캘린더·cutoff를 코드에서 검증한 뒤 `LAST_VALID_CLOSE`로 계산해야 하며, 실시간 가격이라고 표기하지 않는다. 기존 `FreshnessEngine.assess`가 CLOSED/HOLIDAY와 임의 날짜만으로 무조건 LAST_VALID_CLOSE인 결함도 함께 수정한다. R01 검증 조건 갱신; B에 freshness/calendar/market_quotes 파일을 이번 슬라이스 단독 배정했고 A는 R14 파일에 집중하도록 알렸다. 통합 전이므로 완료 아님. 근거/인계 `handoffs/WEEKEND-CLOSE-01.md`.
+
 **최신 상태 — 2026-09-27 12:29 UTC, B R06 적격성 통합:** B `codex/luna-b-r06-qualification`(별도 72d3 worktree, 기준 `a7cac1d`) source `8135b19`를 root `145a479`로 통합. 총괄 직접 B 집중 **31/31 PASS**, root 전체 **511 OK, skip1**. 종목·거래소·통화 불일치, 미래/낡은 시각, evaluator 오류를 기록하고 후속 후보로 전환하며 freshness evaluator 부재 시 selected/AVAILABLE을 만들지 않는다. B 실제 Yahoo AAPL/Naver 삼성 공개 응답은 HTTP200/파싱됐으나 9/27보다 오래된 9/25·9/23 시세로 현재가 승인하지 않았다. JP·금속 및 일부 공식 대체 live 미검증. A는 7모드 dispatcher focused 검증 후 인계/commit 중; mock handler 일곱 모드 호출과 실제 제품 일곱 모드 완료는 구분하도록 총괄 피드백 전달. 전체 독립 검토·다른 최종 검증 미실행.
 
 **최신 상태 — 2026-09-27 12:21 UTC, C typed 브리핑 통합:** C `codex/luna-c-brief-binding`(별도 a3b7 worktree, 기준 `83dfb27`) source `1010432`를 root `0d78c64`로 통합. 총괄 직접 C 집중 **15/15 PASS**, root 전체 **505 OK, skip1**. 현재가/가치평가는 목적·typed output·선택 슬롯/적격성·공개시각·계산 lineage가 모두 결속된 단일 값만 표시; 일반 계산 숫자와 시나리오 이름 미확정 값은 거부한다. 정책 provenance가 없으므로 판단 WAIT, 가격 구간·금액·수량 미산출. 개인 DB/주문 호출 없음은 합성 테스트 범위. A 7모드 dispatcher 및 B R06 후보 전환은 진행 중이며, 새 독립 전체 검토/다른 최종 검증 미실행.
