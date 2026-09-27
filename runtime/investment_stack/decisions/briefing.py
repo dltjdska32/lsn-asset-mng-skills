@@ -161,7 +161,14 @@ def _collect_numeric_bindings(
                 calculation_id=record.calculation_id,
                 evidence_ids=tuple(sorted(evidence_ids)),
                 public_available_at=max(public_times).isoformat(),
-                conditional=record.status == CalculationStatus.CONDITIONAL,
+                # Analyst scenario outputs are assumptions-based estimates, not a
+                # definitive fair price, even when their calculation status is
+                # CALCULATED. Preserve that distinction in the user-facing label.
+                conditional=(
+                    record.status == CalculationStatus.CONDITIONAL
+                    or purpose == "VALUATION_MODEL"
+                    and record.requirement == FormulaRequirement.ANALYST_SCENARIO
+                ),
             )
         )
 

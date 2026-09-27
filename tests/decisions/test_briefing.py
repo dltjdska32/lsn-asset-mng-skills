@@ -237,3 +237,27 @@ class TestBriefingLogic(unittest.TestCase):
         self.assertEqual(briefing.decision, InvestmentDecision.WAIT)
         self.assertEqual(briefing.section_table["적정가 산출값"], "150 USD/주 (조건부 산출값)")
         self.assertNotIn("적정가 범위", briefing.section_table)
+
+    def test_calculated_analyst_scenario_is_not_labeled_as_definitive_fair_price(self) -> None:
+        as_of = datetime(2026, 9, 27, tzinfo=timezone.utc)
+        slot = BoundSlotInput(
+            slot_id="financial", canonical_value=Decimal("10"), canonical_unit="USD/share",
+            canonical_currency="USD", evidence_id="ev-fin", eligibility_id="elig-fin",
+            public_available_at="2026-09-26T08:00:00+00:00", input_fingerprint="fp-fin",
+        )
+        inputs = SelectedInputSet.create("run-fin", "VALUATION_MODEL", 1, [slot])
+        calc = CalculationRecord.create(
+            calculation_id="calc-scenario", run_id=inputs.run_id, calculation_name="DCF scenario",
+            formula_id="dcf", formula_version="1", status=CalculationStatus.CALCULATED,
+            bound_inputs=[slot], selection_snapshot_hash=inputs.snapshot_hash,
+            typed_outputs=[TypedOutput(OutputKind.VALUATION, Decimal("150"), "USD/share", "USD")],
+            purpose="VALUATION_MODEL", requirement=FormulaRequirement.ANALYST_SCENARIO,
+        )
+        eligibility = EligibilityDecision.eligible("elig-fin", "FINANCIAL_CALC", "1", "fp-fin")
+        briefing = generate_briefing(
+            inputs, {calc.calculation_id: calc}, True, True, True,
+            eligibility_decisions={"elig-fin": eligibility}, analysis_as_of=as_of,
+        )
+        self.assertEqual(briefing.decision, InvestmentDecision.WAIT)
+        self.assertEqual(briefing.section_table["적정가 산출값"], "150 USD/주 (조건부 산출값)")
+        self.assertEqual(briefing.section_table["금액·수량"], "계산 불가: 승인 정책 provenance 미검증")

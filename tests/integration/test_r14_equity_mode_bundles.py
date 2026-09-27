@@ -179,6 +179,14 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
         self.assertIn("대기", report.briefing)
         self.assertIn("정책 누락", report.briefing)
         self.assertNotIn("6,000 JPY/주", report.briefing)
+        valuation_row = next(row for row in context["report_sections"]
+                             if row["section_name"] == "FANUC_valuation")
+        valuation_section = json.loads(valuation_row["metadata_json"])
+        rendered_valuation = "\n".join(valuation_section.get("lines", ()))
+        self.assertIn("유효 시나리오가 없어 적정가 범위", rendered_valuation)
+        self.assertIn("매수 기준·안전마진 정책(D12)", rendered_valuation)
+        self.assertIn("기준시각: 2026-08-14T10:00:00+09:00", rendered_valuation)
+        self.assertNotIn("6,000 JPY/주", rendered_valuation)
         manifest = json.loads(report_manifest["metadata_json"])
         briefing_ref = next(item["content_reference"] for item in manifest["section_refs"]
                             if item["section_name"] == "final_briefing")
@@ -221,9 +229,9 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
 
     def test_request_typed_price_cannot_claim_persisted_ids_without_value_binding(self) -> None:
         specs = self.specs()[:1]
-        for supplied_price in ("999999", "1.23"):
-            with self.subTest(supplied_price=supplied_price):
-                run_id = f"r14-price-id-spoof-{supplied_price.replace('.', '-')}"
+        for supplied_price, selected_instrument in (("999999", "FANUC"), ("1.23", "FANUC"), ("1.23", "KEYENCE")):
+            with self.subTest(supplied_price=supplied_price, selected_instrument=selected_instrument):
+                run_id = f"r14-price-id-spoof-{supplied_price.replace('.', '-')}-{selected_instrument}"
                 run, services = self.make_services(run_id, specs)
                 run.add_phase4_evidence(
                     evidence_id="ev-poison", evidence_type="market_price",
@@ -241,7 +249,7 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
                     input_fingerprint="caller-supplied",
                 )
                 selected = SelectedInputSet.create(
-                    run.run_id, "CURRENT_PRICE", 1, [slot], instrument_id="FANUC",
+                    run.run_id, "CURRENT_PRICE", 1, [slot], instrument_id=selected_instrument,
                 )
                 calculation = CalculationRecord.create(
                     calculation_id="calc-poison", run_id=run.run_id,
@@ -263,8 +271,26 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
                 ), services)
                 report_step = next(state for state in result.step_states if state.step == "render_partial_aware_report")
                 briefing = report_step.result.output["report"].briefing
-                self.assertIn("적격 가격 근거 미연결", briefing)
+                if selected_instrument == "FANUC":
+                    self.assertIn("적격 가격 근거 미연결", briefing)
+                else:
+                    self.assertIn("수치를 표시하지 않았습니다", briefing)
                 self.assertNotIn(f"{supplied_price} JPY/주", briefing)
+
+    def test_equity_valuation_section_separates_missing_dcf_from_policy_and_pins_cutoff(self) -> None:
+        specs = self.specs()[:1]
+        run, services = self.make_services("r14-valuation-conditional-disclaimer", specs)
+        result = execute_mode(ModeRequest(
+            run.run_id, RequestMode.SINGLE_ASSET_ANALYSIS, {"research_specs": specs},
+        ), services)
+        self.assertTrue(result.report_refs)
+        section = next(row for row in run.fetch_phase6_context()["report_sections"]
+                       if row["section_name"] == "FANUC_valuation")
+        payload = json.loads(section["metadata_json"])
+        rendered = "\n".join(payload.get("lines", ()))
+        self.assertIn("유효 시나리오가 없어 적정가 범위", rendered)
+        self.assertIn("매수 기준·안전마진 정책(D12)", rendered)
+        self.assertIn("기준시각: 2026-08-14T10:00:00+09:00", rendered)
 
     def test_comparison_runs_real_pipeline_and_builds_complete_compatibility_matrix_without_rank(self) -> None:
         specs = self.specs()

@@ -396,6 +396,14 @@ def equity_analysis_services(
     def render_report(request: ModeRequest, context: StepContext) -> StepResult:
         research = context[PipelineStep.DEEP_RESEARCH_REQUESTED_ASSETS.value]
         outcomes: tuple[EquityResearchOutcome, ...] = research.output["outcomes"]
+        run_snapshot = run_db.fetch_phase6_context()
+        pinned_clock = run_snapshot["run_metadata"].get("analysis_as_of")
+        try:
+            section_as_of = datetime.fromisoformat(str(pinned_clock).replace("Z", "+00:00"))
+            if section_as_of.tzinfo is None:
+                section_as_of = None
+        except (TypeError, ValueError):
+            section_as_of = None
         sections: list[ReportSectionInput] = []
         for outcome in outcomes:
             sections.append(section_from_analysis_result(
@@ -403,11 +411,34 @@ def equity_analysis_services(
                 name=f"{outcome.instrument_id}_fundamental",
                 title=f"{outcome.instrument_id} Fundamentals",
             ))
-            sections.append(section_from_analysis_result(
+            valuation_section = section_from_analysis_result(
                 outcome.analysis.valuation,
                 name=f"{outcome.instrument_id}_valuation",
                 title=f"{outcome.instrument_id} Valuation",
-            ))
+            )
+            # This runtime exposes model outputs for analysis, not policy-approved
+            # entry prices. Keep assumptions-based values visibly conditional.
+            dcf_output_names = (
+                "dcf_scenario_", "dcf_value_per_share", "dcf_sensitivity_",
+                "high_growth_scenario", "scenario_",
+            )
+            has_scenario_value = any(
+                metric.value is not None and metric.name.startswith(dcf_output_names)
+                for metric in outcome.analysis.valuation.metrics
+            )
+            valuation_notes = [
+                (
+                    "해석 제한: 유효 DCF/시나리오 결과는 명시 가정에 따른 조건부 가치이며 확정 적정가나 추가매수 기준이 아닙니다."
+                    if has_scenario_value else
+                    "DCF 가정 또는 근거가 연결된 유효 시나리오가 없어 적정가 범위를 산출하지 않았습니다."
+                ),
+                "정책 제한: 승인된 매수 기준·안전마진 정책(D12)이 연결되지 않아 매수·추가매수 가격을 판단할 수 없습니다.",
+                "브리핑 제한: 가격·가치 숫자에는 독립 검증 가능한 eligibility receipt와 종목 결속이 없어 최종 판단 브리핑에서 숨깁니다.",
+            ]
+            valuation_notes.append(
+                f"기준시각: {section_as_of.isoformat()}" if section_as_of else "기준시각: 확인 불가"
+            )
+            sections.append(replace(valuation_section, lines=(*valuation_section.lines, *valuation_notes)))
         comparison = context.get(PipelineStep.BUILD_COMPARISON.value)
         if comparison is not None:
             matrix = comparison.output["compatibility_matrix"]
@@ -433,7 +464,6 @@ def equity_analysis_services(
         review = context[PipelineStep.CONDITIONAL_REVIEW.value].output["review"]
         if not isinstance(review, ReviewResult):
             return StepResult(Availability.FAILED, output={"review_type": type(review).__name__})
-        run_snapshot = run_db.fetch_phase6_context()
         pinned_clock = run_snapshot["run_metadata"].get("analysis_as_of")
         try:
             briefing_as_of = datetime.fromisoformat(str(pinned_clock).replace("Z", "+00:00"))
@@ -516,6 +546,14 @@ def equity_analysis_services(
                 briefing = replace(briefing, section_details=tuple(dict.fromkeys((
                     *briefing.section_details,
                     "브리핑 근거가 이 run의 typed selection·계산·evidence에 결속되지 않아 수치를 표시하지 않았습니다.",
+                ))))
+            else:
+                # Persisted equality alone is insufficient: this request path has
+                # no independently verifiable eligibility policy receipt bound to
+                # the same instrument and cutoff, so user-visible numbers stay off.
+                briefing = replace(briefing, section_details=tuple(dict.fromkeys((
+                    *briefing.section_details,
+                    "run.db 값 일치만으로는 적격성·종목·고정 cutoff 결속을 검증할 수 없어 가격·가치평가 수치를 표시하지 않았습니다.",
                 ))))
             briefings.append((outcome.instrument_id, briefing))
         briefing = _combine_briefings(tuple(briefings))
