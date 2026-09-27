@@ -174,7 +174,14 @@ def equity_analysis_services(
             period_compatible = len(left_periods) == len(right_periods) == 1 and left_periods == right_periods
             left_context = reporting_context(by_id[left_id])
             right_context = reporting_context(by_id[right_id])
-            context_well_formed = all(len(values) <= 1 for values in (*left_context.values(), *right_context.values()))
+            required_context = (
+                "period_start", "reporting_frequency", "reporting_period",
+                "accounting_standard", "consolidation", "adjustment_basis", "restatement",
+            )
+            context_well_formed = all(
+                len(left_context[name]) == 1 and len(right_context[name]) == 1
+                for name in required_context
+            ) and all(len(values) == 1 for values in (left_context["period_end"], right_context["period_end"]))
             reporting_context_compatible = context_well_formed and left_context == right_context
             currency_compatible = left_spec.currency.upper() == right_spec.currency.upper()
             type_compatible = left_spec.business_type is right_spec.business_type

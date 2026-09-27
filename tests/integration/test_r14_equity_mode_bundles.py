@@ -33,12 +33,18 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
 
     def bundle(
         self, specs: tuple[EquityResearchSpec, ...], *, second_period: str = "2026-06-30",
-        first_context: dict[str, str] | None = None, second_context: dict[str, str] | None = None,
+        first_context: dict[str, str | None] | None = None, second_context: dict[str, str | None] | None = None,
     ) -> dict[str, object]:
         responses: list[dict[str, object]] = []
         for index, spec in enumerate(specs):
             period = second_period if index == 1 else "2026-06-30"
-            context = second_context if index == 1 else first_context
+            overrides = second_context if index == 1 else first_context
+            context = {
+                "start": "2025-07-01", "reporting_frequency": "ANNUAL", "reporting_period": "FY",
+                "accounting_standard": "US-GAAP", "consolidation": "CONSOLIDATED",
+                "adjustment_basis": "REPORTED", "restatement": "NONE",
+                **(overrides or {}),
+            }
             responses.append({
                 "intent": "LATEST_CURRENT_DATA",
                 "query": LiveDeepResearchRuntime._market_query(spec),
@@ -71,7 +77,7 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
 
     def make_services(
         self, run_id: str, specs: tuple[EquityResearchSpec, ...], *, second_period: str = "2026-06-30",
-        first_context: dict[str, str] | None = None, second_context: dict[str, str] | None = None,
+        first_context: dict[str, str | None] | None = None, second_context: dict[str, str | None] | None = None,
         mode: RequestMode = RequestMode.SINGLE_ASSET_ANALYSIS,
     ):
         temporary = tempfile.TemporaryDirectory()
@@ -169,6 +175,10 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
              {"start": "2026-04-01", "reporting_frequency": "QUARTERLY", "accounting_standard": "US-GAAP"}),
             ("gaap-ifrs", {"start": "2026-04-01", "reporting_frequency": "QUARTERLY", "accounting_standard": "US-GAAP"},
              {"start": "2026-04-01", "reporting_frequency": "QUARTERLY", "accounting_standard": "IFRS"}),
+            ("same-missing-context", {"start": None, "reporting_frequency": None, "reporting_period": None,
+                "accounting_standard": None, "consolidation": None, "adjustment_basis": None, "restatement": None},
+             {"start": None, "reporting_frequency": None, "reporting_period": None,
+                "accounting_standard": None, "consolidation": None, "adjustment_basis": None, "restatement": None}),
         )
         for suffix, first_context, second_context in cases:
             with self.subTest(context=suffix):

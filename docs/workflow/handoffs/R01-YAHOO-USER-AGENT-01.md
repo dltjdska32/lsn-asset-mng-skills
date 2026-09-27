@@ -3,7 +3,7 @@
 - 요구사항: `REQ-2026-09-23-v1` R01/R06; 설계: `DESIGN-2026-09-23-v0.1` 초안.
 - 기준: 총괄 지정 root `c6e63d9a664d7f9f356685fd15221752328c2827`.
 - Branch/worktree: `codex/luna-price-rc03-rc04` / `C:/Users/lsn/.codex/worktrees/luna-price-rc03-rc04/lsn-asset-mng-skills`.
-- 담당 파일: `runtime/investment_stack/providers/market_quotes.py`, 전용 `tests/unit/test_r01_yahoo_user_agent.py`.
+- 담당 파일: `runtime/investment_stack/providers/market_quotes.py`, 전용 `tests/unit/test_rc03_yahoo_user_agent.py`.
 
 ## 변경 및 검증
 
