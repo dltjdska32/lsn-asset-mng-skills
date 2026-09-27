@@ -28,6 +28,14 @@ class PersistedNumericContextTests(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.manager = RunDatabaseManager(Path(self.temp_dir.name), "run-persisted-context")
         self.assertTrue(self.manager.create().valid)
+        self.cutoff = datetime.now(timezone.utc)
+        self.manager.initialize_run_context(
+            request_mode="SINGLE_ASSET_ANALYSIS",
+            analysis_as_of=self.cutoff.isoformat(),
+            analysis_timezone="UTC",
+            state_version=0,
+            personal_db_instance_id="NONE:TEST",
+        )
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
@@ -39,7 +47,7 @@ class PersistedNumericContextTests(unittest.TestCase):
         typed: bool = True,
         available_at: datetime | None = None,
     ) -> None:
-        now = available_at or datetime.now(timezone.utc)
+        now = available_at or self.cutoff - timedelta(minutes=1)
         available_text = now.isoformat()
         quote = MarketQuote(
             quote_id="q-price",
@@ -86,7 +94,7 @@ class PersistedNumericContextTests(unittest.TestCase):
             requested_value=Decimal("999999"),
             evidence_ids=("ev-price",),
             output_kind=OutputKind.PRICE,
-            analysis_as_of=datetime.now(timezone.utc) + timedelta(days=1),
+            analysis_as_of=self.cutoff,
         )
 
         self.assertIsNone(binding)
@@ -100,7 +108,7 @@ class PersistedNumericContextTests(unittest.TestCase):
             requested_value=Decimal("1.23"),
             evidence_ids=("ev-price",),
             output_kind=OutputKind.PRICE,
-            analysis_as_of=datetime.now(timezone.utc) + timedelta(days=1),
+            analysis_as_of=self.cutoff,
         )
 
         self.assertIsNotNone(binding)
@@ -116,7 +124,7 @@ class PersistedNumericContextTests(unittest.TestCase):
             requested_value=Decimal("1.23"),
             evidence_ids=("ev-price",),
             output_kind=OutputKind.PRICE,
-            analysis_as_of=datetime.now(timezone.utc) + timedelta(days=1),
+            analysis_as_of=self.cutoff,
         )
 
         self.assertIsNone(binding)
@@ -128,13 +136,13 @@ class PersistedNumericContextTests(unittest.TestCase):
             requested_value=Decimal("1.23"),
             evidence_ids=("ev-price",),
             output_kind=OutputKind.PRICE,
-            analysis_as_of=datetime.now(timezone.utc) + timedelta(days=1),
+            analysis_as_of=self.cutoff,
         )
 
         self.assertIsNone(binding)
 
     def test_future_public_evidence_is_unavailable_at_the_pinned_cutoff(self) -> None:
-        self._persist(available_at=datetime.now(timezone.utc) + timedelta(hours=1))
+        self._persist(available_at=self.cutoff + timedelta(hours=1))
 
         binding = bind_persisted_numeric(
             self.manager,
@@ -142,7 +150,7 @@ class PersistedNumericContextTests(unittest.TestCase):
             requested_value=Decimal("1.23"),
             evidence_ids=("ev-price",),
             output_kind=OutputKind.PRICE,
-            analysis_as_of=datetime.now(timezone.utc),
+            analysis_as_of=self.cutoff,
         )
 
         self.assertIsNone(binding)
@@ -167,9 +175,21 @@ class PersistedNumericContextTests(unittest.TestCase):
             requested_value=Decimal("1.23"),
             evidence_ids=("ev-price",),
             output_kind=OutputKind.PRICE,
-            analysis_as_of=datetime.now(timezone.utc) + timedelta(days=1),
+            analysis_as_of=self.cutoff,
         )
 
+        self.assertIsNone(binding)
+
+    def test_caller_cannot_advance_pinned_cutoff_to_admit_future_evidence(self) -> None:
+        self._persist(available_at=self.cutoff + timedelta(hours=1))
+        binding = bind_persisted_numeric(
+            self.manager,
+            calculation_id="calc-price",
+            requested_value=Decimal("1.23"),
+            evidence_ids=("ev-price",),
+            output_kind=OutputKind.PRICE,
+            analysis_as_of=self.cutoff + timedelta(days=1),
+        )
         self.assertIsNone(binding)
 
 

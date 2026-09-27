@@ -60,6 +60,12 @@ def bind_persisted_numeric(
         return None
 
     try:
+        pinned_text = manager.fetch_metadata().get("analysis_as_of")
+        if not isinstance(pinned_text, str) or not pinned_text:
+            return None
+        pinned_as_of = datetime.fromisoformat(pinned_text.replace("Z", "+00:00"))
+        if pinned_as_of.tzinfo is None or analysis_as_of != pinned_as_of:
+            return None
         if not manager.verify_contract_storage_integrity():
             return None
         snapshots = manager.fetch_contract_snapshots()

@@ -8,3 +8,5 @@
 - Validation run: `PYTHONPATH=runtime C:\Users\lsn\lsn-asset-mng-skills\.venv\Scripts\python.exe -m unittest tests.decisions.test_persisted_context tests.decisions.test_briefing tests.decisions.test_builder_briefing -v` — 15 tests passed. `git diff --check` passed.
 - Initial red check: `pytest` could not run because this environment's virtualenv does not contain pytest. The same test suite was executed with `unittest`; before helper implementation, the dedicated test module failed import because `persisted_context` did not yet exist.
 - Not run: full repository suite, live data, eligibility integration, final briefing integration, or complete investment-flow verification.
+
+Root integration follow-up: independent review of `1c3c920` found that a caller could advance `analysis_as_of` beyond the immutable run cutoff to admit later evidence. Root now requires exact aware-instant equality with `run_metadata.analysis_as_of`; an additional future-cutoff bypass test passes. This helper still does not authorize final briefing use.
