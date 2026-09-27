@@ -169,6 +169,20 @@ def _collect_numeric_bindings(
     return tuple(bindings[0] for bindings in candidates.values() if len(bindings) == 1)
 
 
+def _display_numeric_bindings(table: dict[str, str], details: list[str], bindings: tuple[NumericBinding, ...]) -> None:
+    """Show only lineage-checked facts; displaying a fact never authorizes an action."""
+    for binding in bindings:
+        value_text = f"{format_decimal(binding.value)} {binding.currency}/주"
+        if binding.conditional:
+            value_text += " (조건부 산출값)"
+        table["현재가" if binding.key == "current_price" else "적정가 산출값"] = value_text
+        details.append(
+            f"수치 근거 — calculation `{binding.calculation_id}`; evidence "
+            + ", ".join(f"`{evidence_id}`" for evidence_id in binding.evidence_ids)
+            + f"; 공개시점 {binding.public_available_at}."
+        )
+
+
 def make_institutional_briefing_context(
     effective: EffectiveHoldingSet,
     selected_filings: tuple[Filing13F, ...],
@@ -333,12 +347,18 @@ def generate_briefing(
         status = DataAvailabilityStatus.UNAVAILABLE
 
         table = {
-            "현재가": "대기" if has_price else "계산 불가: 가격 누락",
-            "목표/적정가": "대기" if calculations else "계산 불가: A결과 부재",
+            "현재가": "계산 불가: 적격 가격 근거 미연결" if has_price else "계산 불가: 가격 누락",
+            "적정가 산출값": "계산 불가: 적격 가치평가 근거 미연결" if calculations else "계산 불가: A결과 부재",
             "정책한도": "대기" if has_policy else "계산 불가: 정책 누락",
             "개인비중": "대기" if has_personal_snapshot else "계산 불가: 스냅샷 누락",
             "실행규모": "계산 불가: 판단 보류",
         }
+        details = list(reasons)
+        visible_bindings = tuple(
+            binding for binding in numeric_bindings
+            if binding.key != "current_price" or has_price
+        )
+        _display_numeric_bindings(table, details, visible_bindings)
 
         return NonPostingBriefing(
             status=status,
@@ -347,9 +367,10 @@ def generate_briefing(
             section_table=table,
             section_core=(),
             section_conditions=(),
-            section_details=tuple(reasons),
+            section_details=tuple(details),
             reasons=tuple(reasons),
-            verified_hash=inputs.snapshot_hash
+            verified_hash=inputs.snapshot_hash,
+            numeric_bindings=visible_bindings,
         )
 
     # Numeric market/valuation outputs may be displayed only through typed bindings.
@@ -366,16 +387,7 @@ def generate_briefing(
         "축소 구간": "계산 불가: 승인된 축소 정책 미확인",
         "금액·수량": "계산 불가: 승인 정책 provenance 미검증",
     }
-    for binding in numeric_bindings:
-        value_text = f"{format_decimal(binding.value)} {binding.currency}/주"
-        if binding.conditional:
-            value_text += " (조건부 산출값)"
-        table["현재가" if binding.key == "current_price" else "적정가 산출값"] = value_text
-        detail_lines.append(
-            f"수치 근거 — calculation `{binding.calculation_id}`; evidence "
-            + ", ".join(f"`{evidence_id}`" for evidence_id in binding.evidence_ids)
-            + f"; 공개시점 {binding.public_available_at}."
-        )
+    _display_numeric_bindings(table, detail_lines, numeric_bindings)
     if institutional_context is not None:
         core_lines.append(
             f"13F 보고 기준일 {institutional_context.report_period}; 공개시점: {institutional_context.publication_label}; "

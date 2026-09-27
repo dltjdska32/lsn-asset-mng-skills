@@ -8,6 +8,10 @@ from pathlib import Path
 
 from investment_stack.asset_analysis import Phase5AssetAnalysisRuntime
 from investment_stack.calculations import BusinessType
+from investment_stack.contracts.calculation import (
+    CalculationRecord, CalculationStatus, FormulaRequirement, OutputKind, TypedOutput,
+)
+from investment_stack.contracts.slots import BoundSlotInput, EligibilityDecision, SelectedInputSet
 from investment_stack.deep_research import EquityResearchSpec, LiveDeepResearchRuntime
 from investment_stack.evidence import EvidenceResearchStore, RunDatabaseManager
 from investment_stack.execution import Availability, ModeRequest, equity_analysis_services, execute_mode
@@ -186,6 +190,53 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
         self.assertTrue({"FANUC_fundamental", "FANUC_valuation", "data_quality"}.issubset(
             {section["section_name"] for section in context["report_sections"]}))
         self.assertTrue(any(row["task_name"].startswith("execute:SINGLE_ASSET_ANALYSIS:") for row in context["task_states"]))
+
+    def test_request_typed_price_cannot_claim_persisted_ids_without_value_binding(self) -> None:
+        specs = self.specs()[:1]
+        for supplied_price in ("999999", "1.23"):
+            with self.subTest(supplied_price=supplied_price):
+                run_id = f"r14-price-id-spoof-{supplied_price.replace('.', '-')}"
+                run, services = self.make_services(run_id, specs)
+                run.add_phase4_evidence(
+                    evidence_id="ev-poison", evidence_type="market_price",
+                    source_uri="https://synthetic.test/actual", retrieved_at=CUTOFF,
+                    instrument_id="FANUC", value="1.23", unit="JPY/share", currency="JPY",
+                )
+                run.add_calculation(
+                    calculation_id="calc-poison", calculation_name="stored-price",
+                    formula="stored-price-v1", inputs={"evidence_ids": ["ev-poison"]},
+                    result={"price": "1.23"},
+                )
+                slot = BoundSlotInput(
+                    "price", Decimal(supplied_price), "JPY/share", "JPY", "ev-poison",
+                    eligibility_id="elig-poison", public_available_at="2026-08-14T09:59:00+09:00",
+                    input_fingerprint="caller-supplied",
+                )
+                selected = SelectedInputSet.create(
+                    run.run_id, "CURRENT_PRICE", 1, [slot], instrument_id="FANUC",
+                )
+                calculation = CalculationRecord.create(
+                    calculation_id="calc-poison", run_id=run.run_id,
+                    calculation_name="caller-price", formula_id="caller-price-v1", formula_version="1",
+                    status=CalculationStatus.CALCULATED, bound_inputs=[slot],
+                    selection_snapshot_hash=selected.snapshot_hash,
+                    typed_outputs=[TypedOutput(OutputKind.PRICE, Decimal(supplied_price), "JPY/share", "JPY")],
+                    purpose="CURRENT_PRICE", requirement=FormulaRequirement.ARITHMETIC,
+                )
+                result = execute_mode(ModeRequest(
+                    run.run_id, RequestMode.SINGLE_ASSET_ANALYSIS,
+                    {"research_specs": specs, "briefing_contexts": {"FANUC": {
+                        "selected_inputs": selected,
+                        "calculations": {calculation.calculation_id: calculation},
+                        "eligibility_decisions": {"elig-poison": EligibilityDecision.eligible(
+                            "elig-poison", "CURRENT_PRICE", "1", "caller-supplied",
+                        )},
+                    }}},
+                ), services)
+                report_step = next(state for state in result.step_states if state.step == "render_partial_aware_report")
+                briefing = report_step.result.output["report"].briefing
+                self.assertIn("적격 가격 근거 미연결", briefing)
+                self.assertNotIn(f"{supplied_price} JPY/주", briefing)
 
     def test_comparison_runs_real_pipeline_and_builds_complete_compatibility_matrix_without_rank(self) -> None:
         specs = self.specs()

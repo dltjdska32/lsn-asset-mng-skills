@@ -174,6 +174,23 @@ class TestBriefingLogic(unittest.TestCase):
         self.assertEqual(briefing.section_table["금액·수량"], "계산 불가: 승인 정책 provenance 미검증")
         self.assertTrue(any("calc-price" in line and "ev-price" in line for line in briefing.section_details))
 
+        missing_policy = generate_briefing(
+            inputs, {calc.calculation_id: calc}, True, False, False,
+            eligibility_decisions={"elig-price": eligibility}, analysis_as_of=as_of,
+        )
+        self.assertEqual(missing_policy.status, DataAvailabilityStatus.UNAVAILABLE)
+        self.assertEqual(missing_policy.decision, InvestmentDecision.INCONCLUSIVE)
+        self.assertEqual(missing_policy.section_table["현재가"], "123.45 USD/주")
+        self.assertEqual(missing_policy.section_table["실행규모"], "계산 불가: 판단 보류")
+        self.assertTrue(any("calc-price" in line and "ev-price" in line for line in missing_policy.section_details))
+
+        contradictory_price_flag = generate_briefing(
+            inputs, {calc.calculation_id: calc}, False, False, False,
+            eligibility_decisions={"elig-price": eligibility}, analysis_as_of=as_of,
+        )
+        self.assertEqual(contradictory_price_flag.numeric_bindings, ())
+        self.assertIn("가격 누락", contradictory_price_flag.section_table["현재가"])
+
         before_publication = generate_briefing(
             inputs, {calc.calculation_id: calc}, True, True, True,
             eligibility_decisions={"elig-price": eligibility},
@@ -181,6 +198,13 @@ class TestBriefingLogic(unittest.TestCase):
         )
         self.assertEqual(before_publication.numeric_bindings, ())
         self.assertIn("근거 미연결", before_publication.section_table["현재가"])
+        before_publication_without_policy = generate_briefing(
+            inputs, {calc.calculation_id: calc}, True, False, False,
+            eligibility_decisions={"elig-price": eligibility},
+            analysis_as_of=datetime(2026, 9, 27, 7, 59, tzinfo=timezone.utc),
+        )
+        self.assertEqual(before_publication_without_policy.numeric_bindings, ())
+        self.assertIn("근거 미연결", before_publication_without_policy.section_table["현재가"])
 
     def test_generic_result_and_unbound_eligibility_are_never_displayed(self) -> None:
         briefing = generate_briefing(

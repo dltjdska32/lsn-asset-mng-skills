@@ -496,7 +496,10 @@ def equity_analysis_services(
                 selected_inputs, calculations, has_price=has_price,
                 # Equity mode does not own an approved sizing policy or a posting gate.
                 has_policy=False, has_personal_snapshot=has_personal_snapshot,
-                eligibility_decisions=eligibility, analysis_as_of=briefing_as_of,
+                # Request-supplied typed records are not yet value-matched to the
+                # persisted run.db calculation/eligibility payloads. Their IDs alone
+                # cannot authorize a user-visible number in the final report.
+                eligibility_decisions=None, analysis_as_of=briefing_as_of,
                 registered_gates=registered_gates,
             )
             # Incomplete analysis must leave the user with an explicit safe wait.
