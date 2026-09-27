@@ -1,5 +1,7 @@
 investment-stack — Canonical Final Architecture v1.3
 
+R15 packaging note: `v1.3` is the frozen architecture label, not the Python distribution version. The runtime/distribution version is declared separately in `pyproject.toml`; contract, database schema, and config versions evolve independently. Packaging and installation policy are documented in `docs/workflow/deployment-allowlist.md` and do not change this architecture contract.
+
 문서 상태: ARCHITECTURE FROZEN
 Critical 미해결: 0
 High 미해결: 0

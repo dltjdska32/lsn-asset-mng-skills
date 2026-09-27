@@ -1,4 +1,13 @@
 include README.md
+include docs/workflow/deployment-allowlist.md
+include scripts/sync_agent_skills.py
+include tests/test_packaging.py
+include tests/test_r15_skill_sync.py
+include config/freshness.yaml
+include config/materiality.yaml
+include config/providers.yaml
+include config/reconciliation.yaml
+include config/web_research.yaml
 recursive-include runtime *.py
 include skills/investment-orchestrator/SKILL.md
 include skills/investment-orchestrator/agents/openai.yaml
@@ -34,9 +43,19 @@ include .agents/skills/review/SKILL.md
 include .agents/skills/review/agents/openai.yaml
 global-exclude personal.db
 global-exclude run.db
+global-exclude *.db*
+global-exclude *.sqlite*
 prune workspace/runs
+prune workspace/cache
+prune .git
+prune .venv
 prune logs
 global-exclude .env
+global-exclude .env.*
+global-exclude *.pem
+global-exclude *.key
+global-exclude *.p12
+global-exclude *.pfx
 global-exclude *.log
 global-exclude __pycache__
 global-exclude *.py[cod]

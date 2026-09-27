@@ -11,6 +11,13 @@ EXPECTED_SKILLS = [
     "investment-report",
     "review",
 ]
+EXPECTED_CONFIGS = [
+    "freshness.yaml",
+    "materiality.yaml",
+    "providers.yaml",
+    "reconciliation.yaml",
+    "web_research.yaml",
+]
 
 def get_data_files():
     data_files = []
@@ -31,6 +38,16 @@ def get_data_files():
             if not os.path.isfile(openai_yaml):
                 raise FileNotFoundError(f"Missing required UI metadata: {openai_yaml}")
             data_files.append((agents_dir, [openai_yaml]))
+
+    # Runtime configuration examples are allowlisted individually. These are
+    # data inputs, not automatically selected policy defaults by the CLI.
+    config_files = []
+    for config_name in EXPECTED_CONFIGS:
+        config_path = os.path.join("config", config_name)
+        if not os.path.isfile(config_path):
+            raise FileNotFoundError(f"Missing required config resource: {config_path}")
+        config_files.append(config_path)
+    data_files.append(("config", config_files))
 
     return data_files
 

@@ -1,6 +1,15 @@
 # Investment Stack — Implementation Status
 
-Last updated: 2026-08-14
+Last updated: 2026-09-27
+
+## R15 PACKAGE-01 — 2026-09-27 checkpoint
+
+- Work is isolated on `codex/luna-r15-package-01` from root base `fd4355e5d4ed13f4aeacd34eacb7e40e74431342`.
+- The authoritative source tree and `.agents/skills` mirror contain exactly the same eight skill names and the same two allowlisted files (`SKILL.md`, `agents/openai.yaml`) byte-for-byte. `review` is unchanged; D08 remains unresolved.
+- Distribution/runtime `0.1.0` is distinct from architecture `v1.3`, contract `0.2`, personal/run schema migration numbers `3`/`2`, and per-file config versions. No version mapping or schema upgrade is implied.
+- Python metadata allows `>=3.11`; this task verified Windows Python 3.14.6 only. Using an existing build venv (`build==1.6.1`, `setuptools==84.0.0`), wheel and sdist built with `--no-isolation`. A fresh target venv reused the locally installed `tzdata==2026.4` and `truststore==0.10.4` payloads without downloads, then installed the wheel offline through its own `Scripts/python.exe`; `pip check`, both IANA zone loads, and `investment_stack.__version__ == 0.1.0` passed.
+- The same target interpreter ran **10/10** R15 packaging/sync tests, `investment-stack check` (11 invariants), a `THESIS_REVIEW` plan smoke, a synthetic `REPORT_REFRESH` execute preflight smoke, config loads from `sys.prefix/config`, and `scripts/sync_agent_skills.py --check`. No full repository suite, live provider call, account credential, personal DB, or Codex UI auto-discovery from the venv prefix was tested.
+- The exact deployment path allowlist is `docs/workflow/deployment-allowlist.md`. The installed wheel's skill payload is verified under `sys.prefix/skills` and `sys.prefix/.agents/skills`; automatic Codex UI discovery from an arbitrary virtual-environment prefix is not established.
 
 ## Current Status (Integration Checkpoints `a861b6b`, `5d094a5`)
 

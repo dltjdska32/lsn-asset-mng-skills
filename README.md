@@ -6,7 +6,7 @@ The eight skill definitions under `skills/` are authoritative. Codex repository-
 investment analysis. The canonical v1.3 architecture is frozen; v1.3.1 hardens current-quote fallback and Korean user-facing status rendering; implementation
 is proceeding in bounded phases.
 
-The `v1.3` label identifies the architecture, while the Python distribution currently uses package version `0.1.0`; no release mapping between these labels is defined.
+Version labels have separate meanings: canonical architecture `v1.3`, the README's `v1.3.1` hardening description, and Python distribution/runtime `0.1.0` are not mapped release numbers. Contract envelopes (`0.2`), personal/run database schemas (latest migrations `3`/`2`), and config-file versions evolve independently. See [the distribution allowlist and version meanings](docs/workflow/deployment-allowlist.md).
 
 The current slice implements Phase 1 foundations, Phase 2 Storage Safety,
 Phase 3 Personal Ledger & Projection, Phase 4 Evidence & Research, Phase 5 Asset Analysis, Phase 6 Report & Review, Phase 7 Acceptance, and the Phase 8 final integration/hardening handoff:
@@ -73,7 +73,7 @@ run-local derived outputs rather than a personal Source of Truth.
 
 The runtime declares `tzdata` and `truststore>=0.9.1`. The default `providers/http.py` transport now uses a scoped `truststore` SSL context on Windows. Root integration verified HTTP 200 responses for the Naver, Yahoo Finance, and Coinbase public endpoints through that default transport; this is connectivity evidence and does not establish data freshness, adjustment validity, or session completeness.
 
-For an isolated environment, use the following Windows PowerShell commands to create a virtual environment, activate it, install the package in editable mode, and run the validations using the same virtual environment interpreter:
+For source development, create a virtual environment and keep installation, checks, and tests on that interpreter:
 
 ```powershell
 # 1. Create a virtual environment and pin the interpreter path for every later command
@@ -90,6 +90,28 @@ $VenvPython = (Resolve-Path .\.venv\Scripts\python.exe).Path
 & $VenvPython scripts/sync_agent_skills.py --check
 ```
 
+To verify a non-editable wheel in a clean Windows venv, build from the source checkout using an existing build environment, then use the target venv's Python for wheel installation, dependency checks, timezone verification, and tests. This sequence uses no `py` launcher and does not install into or alter the build environment:
+
+```powershell
+# Build step (use an existing Python environment with the `build` package)
+$BuildPython = 'C:\path\to\existing-build-venv\Scripts\python.exe'
+& $BuildPython -m build --wheel --sdist --no-isolation
+
+# Clean target environment; select the required Python executable explicitly
+python -m venv .venv-wheel-check
+$VenvPython = (Resolve-Path .\.venv-wheel-check\Scripts\python.exe).Path
+$Wheel = (Resolve-Path .\dist\investment_stack-0.1.0-py3-none-any.whl).Path
+
+# The same interpreter installs the wheel and runs all checks
+& $VenvPython -m pip install $Wheel
+& $VenvPython -m pip check
+& $VenvPython -c "import sys, zoneinfo, investment_stack; print(sys.executable); print(investment_stack.__version__); zoneinfo.ZoneInfo('America/New_York'); zoneinfo.ZoneInfo('Asia/Seoul')"
+& $VenvPython -m unittest discover -s tests -q
+& $VenvPython scripts\sync_agent_skills.py --check
+```
+
+If dependency installation cannot use the existing package cache, stop and report the missing wheel/package before attempting a broad download. `pyproject.toml` permits Python 3.11 and later, but the Windows install verification in this task is specific to the interpreter version recorded in `IMPLEMENTATION_STATUS.md`; other versions need their own run.
+
 ## Market data and chart limits
 
 `MarketQuoteProvider` validates source identity, price fields, currency, and source timestamps, then records every attempted source. An `AVAILABLE` result means the source response parsed; it does not establish that the quote passes a freshness policy. Callers must provide the R01 eligibility evaluator before using a quote in current-price calculations. No universal delay or age threshold is configured here.
@@ -101,7 +123,7 @@ Indicator conventions are explicit in the calculation API: SMA uses the trailing
 **Skills and Packaging:**
 The authoritative skill instructions are in the `skills/` source directory, while Codex repository-local discovery uses byte-identical mirrors under `.agents/skills/`. The `sync_agent_skills.py --check` command enforces exact byte equality between the source and the mirror. 
 
-When building for distribution (wheel/sdist), the artifact allowlists the 8 expected skills, specifically `SKILL.md` and `agents/openai.yaml` from both the source and mirror paths. It excludes known local database, log, environment, and run-data paths. The package tests inspect built artifacts; they do not prove that every possible sensitive file name is excluded. Repository-local Codex sessions discover the 8 skills in the Available skills list, while automatic UI discovery in other environments after wheel installation remains unverified.
+Wheel and source-distribution file paths are checked against the exact [distribution allowlist](docs/workflow/deployment-allowlist.md), including five explicitly named config inputs and all eight skill definitions/UI metadata files. The wheel places config inputs under `sys.prefix/config`, and skills beneath `sys.prefix/skills` and `sys.prefix/.agents/skills`. Config files are explicit inputs; the CLI does not automatically load them as global defaults. This verifies the installed discovery payload by path, not automatic Codex UI discovery from an arbitrary virtual-environment path. Repository-local Codex sessions use the workspace `.agents/skills/` mirror. The artifact allowlist excludes credential values, databases and sidecars, environment files, cache/run data, logs, virtual environments, Git metadata, bytecode, and key/certificate files by path. It does not scan source text for accidental secrets.
 
 `OPENDART_API_KEY` is optional; when absent the provider reports `MISSING_CREDENTIAL` and the research flow can continue with public/keyless or Web Research fallback paths.
 

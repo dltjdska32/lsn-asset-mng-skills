@@ -1,173 +1,203 @@
-import os
 from pathlib import Path
+import re
+import sys
+import tarfile
+import tomllib
 import unittest
+import zipfile
+
+
+EXPECTED_SKILLS = {
+    "investment-orchestrator",
+    "fundamental-analysis",
+    "valuation",
+    "fund-analysis",
+    "alternative-asset-analysis",
+    "personal-asset-analysis",
+    "investment-report",
+    "review",
+}
+SKILL_FILES = {"SKILL.md", "agents/openai.yaml"}
+EXPECTED_CONFIGS = {
+    "freshness.yaml", "materiality.yaml", "providers.yaml", "reconciliation.yaml", "web_research.yaml",
+}
+
 
 class TestPackaging(unittest.TestCase):
-    """Test packaging prerequisites and skill sync behavior."""
+    """Enforce the exact source, wheel, and installed-skill allowlists."""
 
     def setUp(self):
         self.project_root = Path(__file__).resolve().parents[1]
 
+    def _package_version(self):
+        project = tomllib.loads((self.project_root / "pyproject.toml").read_text(encoding="utf-8"))
+        return project["project"]["version"]
+
+    def _runtime_sources(self):
+        runtime_root = self.project_root / "runtime"
+        return {
+            path.relative_to(runtime_root).as_posix()
+            for path in runtime_root.rglob("*.py")
+        }
+
+    def _skill_payload_paths(self):
+        return {
+            f"{base}/{skill}/{file}"
+            for base in ("skills", ".agents/skills")
+            for skill in EXPECTED_SKILLS
+            for file in SKILL_FILES
+        }
+
+    def _assert_no_sensitive_paths(self, names, artifact):
+        blocked_components = {
+            ".git", ".venv", "cache", "caches", "credentials", "secrets",
+            "backups", "backup", "logs", "__pycache__", "workspace",
+        }
+        blocked_suffixes = (
+            ".db", ".db-wal", ".db-shm", ".db-journal", ".sqlite", ".sqlite3",
+            ".pem", ".key", ".p12", ".pfx", ".log",
+        )
+        for raw_name in names:
+            normalized = raw_name.replace("\\", "/").lower()
+            parts = normalized.split("/")
+            blocked = (
+                any(part in blocked_components for part in parts)
+                or normalized.endswith(blocked_suffixes)
+                or any(part == ".env" or part.startswith(".env.") for part in parts)
+            )
+            self.assertFalse(blocked, f"Excluded path found in {artifact}: {raw_name}")
+
     def test_manifest_exclusions(self):
-        """Verify MANIFEST.in explicitly excludes sensitive paths."""
-        manifest_path = self.project_root / "MANIFEST.in"
-        self.assertTrue(manifest_path.exists(), "MANIFEST.in is missing")
+        content = (self.project_root / "MANIFEST.in").read_text(encoding="utf-8")
+        for exclusion in (
+            "global-exclude *.db*", "global-exclude *.sqlite*", "prune workspace/runs",
+            "prune workspace/cache", "prune .git", "prune .venv", "prune logs",
+            "global-exclude .env", "global-exclude .env.*", "global-exclude *.pem",
+            "global-exclude *.key", "global-exclude *.p12", "global-exclude *.pfx",
+        ):
+            self.assertIn(exclusion, content)
 
-        content = manifest_path.read_text(encoding="utf-8")
+    def test_pyproject_declares_windows_timezone_data_and_tls_dependencies(self):
+        project = tomllib.loads((self.project_root / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+        self.assertIn("tzdata; sys_platform == 'win32'", project["dependencies"])
+        self.assertTrue(any(dependency.startswith("truststore>=") for dependency in project["dependencies"]))
+        self.assertEqual(project["requires-python"], ">=3.11")
 
-        required_exclusions = [
-            "global-exclude personal.db",
-            "global-exclude run.db",
-            "prune workspace/runs",
-            "prune logs",
-            "global-exclude .env"
-        ]
+    def test_sync_tool_is_present_and_inventory_is_exact(self):
+        source = (self.project_root / "scripts" / "sync_agent_skills.py").read_text(encoding="utf-8")
+        self.assertIn("check_only: bool = False", source)
+        self.assertIn("Byte mismatch", source)
+        self.assertIn("agents/openai.yaml", source)
+        self.assertIn("Unexpected files under", source)
+        source_dirs = {path.name for path in (self.project_root / "skills").iterdir() if path.is_dir()}
+        mirror_dirs = {path.name for path in (self.project_root / ".agents" / "skills").iterdir() if path.is_dir()}
+        self.assertEqual(source_dirs, EXPECTED_SKILLS)
+        self.assertEqual(mirror_dirs, EXPECTED_SKILLS)
+        for skill in EXPECTED_SKILLS:
+            for rel_path in SKILL_FILES:
+                source_path = self.project_root / "skills" / skill / rel_path
+                mirror_path = self.project_root / ".agents" / "skills" / skill / rel_path
+                self.assertTrue(source_path.is_file())
+                self.assertTrue(mirror_path.is_file())
+                source_bytes = source_path.read_bytes()
+                self.assertEqual(source_bytes, mirror_path.read_bytes())
+                if rel_path == "agents/openai.yaml":
+                    metadata = source_bytes.decode("utf-8")
+                    for field in ("interface:", "display_name:", "short_description:", "default_prompt:"):
+                        self.assertIn(field, metadata, f"{skill} UI metadata missing {field}")
 
-        for exc in required_exclusions:
-            self.assertIn(exc, content, f"MANIFEST.in missing exclusion: {exc}")
+    def test_distribution_and_runtime_versions_are_not_conflated(self):
+        version = self._package_version()
+        init_source = (self.project_root / "runtime" / "investment_stack" / "__init__.py").read_text(encoding="utf-8")
+        runtime_version = re.search(r'__version__\s*=\s*["\']([^"\']+)', init_source)
+        self.assertIsNotNone(runtime_version)
+        self.assertEqual(version, runtime_version.group(1))
+        architecture = (self.project_root / "ARCHITECTURE.md").read_text(encoding="utf-8")
+        self.assertIn("Canonical Final Architecture v1.3", architecture)
+        self.assertNotEqual(version, "1.3")
 
-    def test_pyproject_dependencies(self):
-        """Verify pyproject.toml contains required dependencies."""
-        toml_path = self.project_root / "pyproject.toml"
-        self.assertTrue(toml_path.exists(), "pyproject.toml is missing")
-
-        content = toml_path.read_text(encoding="utf-8")
-
-        self.assertIn("tzdata; sys_platform == 'win32'", content)
-        self.assertIn("truststore", content)
-
-    def test_skill_sync_script_exists(self):
-        """Verify sync_agent_skills script exists and has check option."""
-        script_path = self.project_root / "scripts" / "sync_agent_skills.py"
-        self.assertTrue(script_path.exists(), "sync_agent_skills.py is missing")
-
-        content = script_path.read_text(encoding="utf-8")
-        self.assertIn("check_only: bool = False", content)
-        self.assertIn("target_bytes =", content)
-        self.assertIn("source_bytes !=", content)
-        self.assertIn("agents/openai.yaml", content)
-
-    def test_built_artifacts_contain_skills(self):
-        """Dynamically check built wheel and sdist to ensure all 8 skills and metadata are included."""
+    def test_built_artifacts_match_exact_allowlists(self):
         dist_dir = self.project_root / "dist"
+        self.assertTrue(dist_dir.is_dir(), "Build wheel and sdist before the packaging tests.")
+        wheels = sorted(dist_dir.glob("*.whl"))
+        sdists = sorted(dist_dir.glob("*.tar.gz"))
+        self.assertTrue(wheels, "No wheel found in dist/.")
+        self.assertTrue(sdists, "No sdist found in dist/.")
 
-        # We must FAIL if the build hasn't happened, as this is a strict verification step.
-        self.assertTrue(dist_dir.exists(), "No dist/ directory found. Coordinator must run 'python -m build' first.")
+        version = self._package_version()
+        skills = self._skill_payload_paths()
+        runtime = self._runtime_sources()
+        wheel_data_prefix = f"investment_stack-{version}.data/data/"
+        wheel_skill_paths = {wheel_data_prefix + path for path in skills}
+        wheel_config_paths = {wheel_data_prefix + f"config/{name}" for name in EXPECTED_CONFIGS}
+        wheel_runtime_paths = set(runtime)
+        wheel_metadata = {
+            f"investment_stack-{version}.dist-info/{name}"
+            for name in ("METADATA", "WHEEL", "entry_points.txt", "top_level.txt", "RECORD")
+        }
+        expected_wheel = wheel_skill_paths | wheel_config_paths | wheel_runtime_paths | wheel_metadata
 
-        wheels = list(dist_dir.glob("*.whl"))
-        sdists = list(dist_dir.glob("*.tar.gz"))
+        sdist_root = f"investment_stack-{version}/"
+        sdist_fixed_paths = {
+            "MANIFEST.in", "PKG-INFO", "README.md", "pyproject.toml", "setup.py", "setup.cfg",
+            "docs/workflow/deployment-allowlist.md", "scripts/sync_agent_skills.py",
+            "tests/test_packaging.py", "tests/test_r15_skill_sync.py",
+        }
+        sdist_config_paths = {f"config/{name}" for name in EXPECTED_CONFIGS}
+        sdist_runtime = {f"runtime/{path}" for path in runtime}
+        sdist_egg_info = {
+            f"runtime/investment_stack.egg-info/{name}"
+            for name in ("PKG-INFO", "SOURCES.txt", "dependency_links.txt", "entry_points.txt", "requires.txt", "top_level.txt")
+        }
+        expected_sdist = {
+            sdist_root + path
+            for path in sdist_fixed_paths | sdist_config_paths | sdist_runtime | skills | sdist_egg_info
+        }
 
-        self.assertTrue(wheels, "No wheel found in dist/. Coordinator must run 'python -m build' first.")
-        self.assertTrue(sdists, "No sdist found in dist/. Coordinator must run 'python -m build' first.")
-
-        import tarfile
-        import zipfile
-
-        expected_skills = [
-            "investment-orchestrator",
-            "fundamental-analysis",
-            "valuation",
-            "fund-analysis",
-            "alternative-asset-analysis",
-            "personal-asset-analysis",
-            "investment-report",
-            "review",
-        ]
-
-        sensitive_patterns = ["personal.db", "run.db", "workspace/runs", ".env"]
-
-        def _check_strict_allowlist(items, container_name):
-            """Ensure no arbitrary files sneaked into the skills or runtime directories."""
-            for name, is_dir in items:
-                # Normalize path separators for checking
-                norm_name = name.replace("\\", "/")
-
-                # Check for sensitive files
-                for sp in sensitive_patterns:
-                    self.assertFalse(sp in norm_name, f"Sensitive pattern {sp} found in {container_name}: {norm_name}")
-
-                if is_dir:
-                    continue
-
-                # Check strict allowlist for skills directories
-                if "skills/" in norm_name or ".agents/skills/" in norm_name:
-                    is_allowed = norm_name.endswith("SKILL.md") or norm_name.endswith("openai.yaml")
-                    self.assertTrue(is_allowed, f"Unauthorized file found in skills data inside {container_name}: {norm_name}")
-
-                # Check runtime boundary (only .py allowed for actual package sources)
-                # In sdist it is typically `pkgname-version/runtime/...`
-                # In wheel it is typically `investment_stack/...`
-                if "/runtime/" in "/" + norm_name or norm_name.startswith("runtime/"):
-                    if ".egg-info/" in norm_name:
-                        continue
-                    self.assertTrue(norm_name.endswith(".py"), f"Non-.py file leaked into runtime in sdist {container_name}: {norm_name}")
-                if norm_name.startswith("investment_stack/"):
-                    self.assertTrue(norm_name.endswith(".py"), f"Non-.py file leaked into investment_stack in wheel {container_name}: {norm_name}")
-
-        for whl in wheels:
-            with zipfile.ZipFile(whl, "r") as z:
-                items = [(info.filename, info.is_dir()) for info in z.infolist()]
-                _check_strict_allowlist(items, whl.name)
-
-                names = [item[0] for item in items]
-                for expected_skill in expected_skills:
-                    has_skill_md = any(expected_skill in n and "SKILL.md" in n for n in names)
-                    has_ui_meta = any(expected_skill in n and "openai.yaml" in n for n in names)
-                    self.assertTrue(has_skill_md, f"SKILL.md for {expected_skill} missing in wheel {whl.name}")
-                    self.assertTrue(has_ui_meta, f"UI metadata openai.yaml for {expected_skill} missing in wheel {whl.name}")
+        for wheel in wheels:
+            with zipfile.ZipFile(wheel) as artifact:
+                names = set(artifact.namelist())
+            self._assert_no_sensitive_paths(names, wheel.name)
+            self.assertEqual(names, expected_wheel,
+                             f"Wheel allowlist mismatch: missing={sorted(expected_wheel - names)}, extra={sorted(names - expected_wheel)}")
 
         for sdist in sdists:
-            with tarfile.open(sdist, "r:gz") as t:
-                items = [(member.name, member.isdir()) for member in t.getmembers()]
-                _check_strict_allowlist(items, sdist.name)
+            with tarfile.open(sdist, "r:gz") as artifact:
+                names = {member.name for member in artifact.getmembers() if member.isfile()}
+            self._assert_no_sensitive_paths(names, sdist.name)
+            self.assertEqual(names, expected_sdist,
+                             f"Sdist allowlist mismatch: missing={sorted(expected_sdist - names)}, extra={sorted(names - expected_sdist)}")
 
-                names = [item[0] for item in items]
-                for expected_skill in expected_skills:
-                    has_skill_md = any(expected_skill in n and "SKILL.md" in n for n in names)
-                    has_ui_meta = any(expected_skill in n and "openai.yaml" in n for n in names)
-                    self.assertTrue(has_skill_md, f"SKILL.md for {expected_skill} missing in sdist {sdist.name}")
-                    self.assertTrue(has_ui_meta, f"UI metadata openai.yaml for {expected_skill} missing in sdist {sdist.name}")
+    def test_installed_skill_and_ui_discovery_files_are_exact(self):
+        installed_source = Path(sys.prefix) / "skills"
+        installed_mirror = Path(sys.prefix) / ".agents" / "skills"
+        if not installed_source.exists() or not installed_mirror.exists():
+            self.skipTest("Install the wheel with this interpreter before checking installed skill files.")
 
-    def test_installation_target_skills(self):
-        """Verify deployed files in sys.prefix match exactly if the package is installed."""
-        import sys
+        if sys.platform == "win32":
+            from importlib.metadata import version
+            from zoneinfo import ZoneInfo
 
-        # When installed via wheel data_files, skills land in sys.prefix.
-        deployed_skills_dir = Path(sys.prefix) / "skills"
-        deployed_agents_dir = Path(sys.prefix) / ".agents" / "skills"
+            self.assertTrue(version("tzdata"))
+            ZoneInfo("America/New_York")
+            ZoneInfo("Asia/Seoul")
 
-        # If running purely in the source repo without pip install, skip this specific check.
-        # But if the coordinator runs it in the target venv as requested, it will run.
-        if not deployed_skills_dir.exists() or not deployed_agents_dir.exists():
-            self.skipTest("Target deployed skills not found in sys.prefix. Coordinator must install the wheel in a venv and run the test with that venv's python.")
+        self.assertEqual({path.name for path in installed_source.iterdir() if path.is_dir()}, EXPECTED_SKILLS)
+        self.assertEqual({path.name for path in installed_mirror.iterdir() if path.is_dir()}, EXPECTED_SKILLS)
+        expected_files = {f"{skill}/{file}" for skill in EXPECTED_SKILLS for file in SKILL_FILES}
+        for root in (installed_source, installed_mirror):
+            actual = {path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file()}
+            self.assertEqual(actual, expected_files)
+        for skill in EXPECTED_SKILLS:
+            for rel_path in SKILL_FILES:
+                self.assertEqual(
+                    (installed_source / skill / rel_path).read_bytes(),
+                    (installed_mirror / skill / rel_path).read_bytes(),
+                )
 
-        expected_skills = [
-            "investment-orchestrator",
-            "fundamental-analysis",
-            "valuation",
-            "fund-analysis",
-            "alternative-asset-analysis",
-            "personal-asset-analysis",
-            "investment-report",
-            "review",
-        ]
+        installed_config = Path(sys.prefix) / "config"
+        self.assertEqual({path.name for path in installed_config.iterdir() if path.is_file()}, EXPECTED_CONFIGS)
 
-        for skill in expected_skills:
-            # Check original
-            orig_md = deployed_skills_dir / skill / "SKILL.md"
-            orig_yaml = deployed_skills_dir / skill / "agents" / "openai.yaml"
-            self.assertTrue(orig_md.exists(), f"Missing deployed {orig_md}")
-            self.assertTrue(orig_yaml.exists(), f"Missing deployed {orig_yaml}")
-
-            # Check mirror
-            mirror_md = deployed_agents_dir / skill / "SKILL.md"
-            mirror_yaml = deployed_agents_dir / skill / "agents" / "openai.yaml"
-            self.assertTrue(mirror_md.exists(), f"Missing deployed mirror {mirror_md}")
-            self.assertTrue(mirror_yaml.exists(), f"Missing deployed mirror {mirror_yaml}")
-
-            # Check byte equality
-            self.assertEqual(orig_md.read_bytes(), mirror_md.read_bytes(), f"Byte mismatch for {skill} SKILL.md after deployment")
-            self.assertEqual(orig_yaml.read_bytes(), mirror_yaml.read_bytes(), f"Byte mismatch for {skill} openai.yaml after deployment")
 
 if __name__ == "__main__":
     unittest.main()
