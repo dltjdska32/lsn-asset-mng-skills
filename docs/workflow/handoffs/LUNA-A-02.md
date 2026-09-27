@@ -6,7 +6,7 @@
 - Design: `DESIGN-2026-09-23-v0.1`; requirements: `REQ-2026-09-23-v1`.
 - Starting checkpoint: `codex/gemini31-a` / `1d5d8fb0a5e63e95d0fbff1a29e800312a8208f3`.
 - Isolated branch: `codex/luna-a-transfer-02`.
-- Latest implementation HEAD: `6b9689bbc033d4bbe550c5c515b14a822b947aa8`.
+- Latest implementation HEAD: `6b9689bbc033d4bbe550c5c515b14a822b947aa8`; handoff update HEAD: `3d38323aba4ff46a3a51899b68422f57d8ab0928`.
 - Commits: `b0548e4` (Evidence tests/Decimal persistence), `c2a480d` (selected finance consumption, DCF, HTTP), `6b9689b` (DCF validation and scenario coverage).
 
 ## Changes
@@ -25,11 +25,12 @@ Using `C:/Users/lsn/lsn-asset-mng-skills/.venv/Scripts/python.exe` and this work
 - Targeted financial, DCF, transport/TLS, SEC parser, structured fallback, and deep-research integration tests: **33 passed**.
 - Full worktree suite: `python -m unittest discover -s tests` — **416 passed**.
 - `git diff --check` passed before the final commits.
-- Tests use temporary synthetic run databases only. No personal database, credentials, or live HTTP request was used.
+- Live default-provider transport check using the Windows `.venv` and actual `urllib_transport`/`fetch_json` returned valid Naver quote, Yahoo chart, and Coinbase ticker JSON. A second check using the same scoped `truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)` observed HTTP **200** from all three endpoints, with `verify_mode == CERT_REQUIRED` and `check_hostname == True`. The Yahoo JSON preserved 120 fractional numeric tokens as `Decimal`.
+- Tests use temporary synthetic run databases only. No personal database or credentials were used.
 
 ## Not run / remaining work
 
-- Live Windows TLS/network verification was not run. The TLS unit test mocks truststore and the opener; packaged availability of `truststore` depends on the B-owned dependency/package work and is not changed here.
+- The deterministic TLS unit test mocks truststore and the opener; the additional live verification above was a one-time local check, not a repeatable network test. `truststore` is not currently listed in `pyproject.toml` at the B checkpoint inspected, so installed distributions without it take the verified `ssl.create_default_context()` fallback. Adding/packaging truststore is B-owned and was not changed here.
 - No test of a production/default service wiring or CLI `execute` was made. R14's actual seven-mode dispatcher and R16 cross-requirement integration remain for a separate assignment, per the coordinator's follow-up.
 - The new period grouping is fixture-verified but not validated against a broad real-world cross-company filing corpus. Financial periods with missing or ambiguous basis metadata may be excluded or grouped conservatively.
 - DCF scenario assumptions require evidence IDs from selected evidence for the same instrument/run. No automatic market-derived assumptions or valuation policy defaults are supplied; callers must provide the three named scenarios and sensitivity points.
