@@ -71,7 +71,7 @@ run-local derived outputs rather than a personal Source of Truth.
 
 ## Run locally
 
-The declared runtime dependencies include `tzdata` (for Windows time zones) and `truststore>=0.9.1` (for Windows certificate-store TLS support). The current default transport in `providers/http.py` does not yet create a scoped `truststore` context, so the dependency declaration alone does not enable that behavior; the Windows public-provider path remains dependent on the A-owned transport integration.
+The runtime declares `tzdata` and `truststore>=0.9.1`. The default `providers/http.py` transport now uses a scoped `truststore` SSL context on Windows. Root integration verified HTTP 200 responses for the Naver, Yahoo Finance, and Coinbase public endpoints through that default transport; this is connectivity evidence and does not establish data freshness, adjustment validity, or session completeness.
 
 For an isolated environment, use the following Windows PowerShell commands to create a virtual environment, activate it, install the package in editable mode, and run the validations using the same virtual environment interpreter:
 

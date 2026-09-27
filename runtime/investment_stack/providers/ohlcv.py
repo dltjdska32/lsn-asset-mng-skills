@@ -59,10 +59,27 @@ class OHLCVParseResult:
     missing_sessions: tuple[str, ...] = ()
     error_reasons: tuple[str, ...] = ()
     adjustment_verified: bool = False
+    source_url: str | None = None
+    adjustment_receipt: str | None = None
+    calendar_receipt: str | None = None
+    expected_session_dates: tuple[str, ...] = ()
+    analysis_as_of: datetime | None = None
 
     @property
     def is_usable(self) -> bool:
         return self.bar_set is not None and bool(self.bar_set.bars) and not self.error_reasons
+
+    @property
+    def analysis_eligible(self) -> bool:
+        """Strict production-input gate; caller receipts remain attestations, not verified records."""
+        if (not self.is_usable or not self.adjustment_verified or not self.adjustment_receipt
+                or not self.calendar_receipt or not self.source_url or not self.analysis_as_of
+                or self.incomplete_bars or self.discarded_bars or self.missing_sessions
+                or self.bar_set is None or self.bar_set.adjustment_mode == AdjustmentMode.RAW
+                or not self.expected_session_dates):
+            return False
+        observed = tuple(b.session_date for b in self.bar_set.bars)
+        return observed == self.expected_session_dates
 
 
 def parse_naver_ohlcv(
@@ -80,6 +97,7 @@ def parse_naver_ohlcv(
     adjustment_verified: bool = False,
     adjustment_receipt: str | None = None,
     calendar_receipt: str | None = None,
+    expected_session_dates: Sequence[str] = (),
 ) -> OHLCVParseResult:
     """Parse Naver Pay Securities daily OHLCV (dayCandle) JSON response.
 
@@ -313,6 +331,11 @@ def parse_naver_ohlcv(
                 "UNVERIFIED_ADJUSTMENT: requires a strict verified flag and a non-empty adjustment receipt",
             ),
             adjustment_verified=False,
+            source_url=request_url,
+            adjustment_receipt=adjustment_receipt,
+            calendar_receipt=calendar_receipt,
+            expected_session_dates=tuple(expected_session_dates),
+            analysis_as_of=analysis_as_of,
         )
 
     bar_set: BarSet | None = None
@@ -341,6 +364,11 @@ def parse_naver_ohlcv(
         incomplete_bars=tuple(incomplete_bars),
         discarded_bars=tuple(discarded_bars),
         adjustment_verified=True,
+        source_url=request_url,
+        adjustment_receipt=adjustment_receipt,
+        calendar_receipt=calendar_receipt,
+        expected_session_dates=tuple(expected_session_dates),
+        analysis_as_of=analysis_as_of,
     )
 
 
@@ -351,6 +379,11 @@ def parse_yahoo_chart_ohlcv(
     interval: str = "1D",
     analysis_as_of: datetime | None = None,
     evidence_id_prefix: str | None = None,
+    source_url: str | None = None,
+    adjustment_verified: bool = False,
+    adjustment_receipt: str | None = None,
+    calendar_receipt: str | None = None,
+    expected_session_dates: Sequence[str] = (),
 ) -> OHLCVParseResult:
     """Parse Yahoo Finance Chart OHLCV response (Live HTTP 200 confirmed by supervisor).
 
@@ -413,7 +446,11 @@ def parse_yahoo_chart_ohlcv(
         if epoch is None:
             continue
 
-        raw_o, raw_h, raw_l, raw_c, raw_v = opens[i], highs[i], lows[i], closes[i], volumes[i]
+        arrays = (opens, highs, lows, closes, volumes)
+        if any(i >= len(values) for values in arrays):
+            discarded_bars.append({"index": i, "reason": "OHLCV_ARRAY_LENGTH_MISMATCH", "timestamp": epoch})
+            continue
+        raw_o, raw_h, raw_l, raw_c, raw_v = (values[i] for values in arrays)
         if None in (raw_o, raw_h, raw_l, raw_c):
             discarded_bars.append({"index": i, "reason": "NULL_OHLC_VALUE", "timestamp": epoch})
             continue
@@ -451,8 +488,8 @@ def parse_yahoo_chart_ohlcv(
             available_at=bar_close_dt, locator=f"yahoo_chart:{symbol}"
         )
 
-        has_adj = i < len(adj_list) and adj_list[i] is not None
-        adj_mode = AdjustmentMode.SPLIT_ADJUSTED if has_adj else AdjustmentMode.RAW
+        has_receipt = adjustment_verified is True and isinstance(adjustment_receipt, str) and bool(adjustment_receipt.strip())
+        adj_mode = AdjustmentMode.SPLIT_ADJUSTED if has_receipt else AdjustmentMode.RAW
 
         bar = Bar(
             bar_id=f"bar_{ev_prefix}_{epoch}",
@@ -482,7 +519,8 @@ def parse_yahoo_chart_ohlcv(
 
     completed_bars.sort(key=lambda b: b.open_time)
     bar_set = None
-    if completed_bars:
+    has_receipt = adjustment_verified is True and isinstance(adjustment_receipt, str) and bool(adjustment_receipt.strip())
+    if completed_bars and has_receipt:
         try:
             bar_set = BarSet.create(
                 instrument_id=instrument_id,
@@ -506,7 +544,12 @@ def parse_yahoo_chart_ohlcv(
         bars=tuple(completed_bars),
         incomplete_bars=tuple(incomplete_bars),
         discarded_bars=tuple(discarded_bars),
-        adjustment_verified=True,
+        adjustment_verified=has_receipt,
+        source_url=source_url,
+        adjustment_receipt=adjustment_receipt,
+        calendar_receipt=calendar_receipt,
+        expected_session_dates=tuple(expected_session_dates),
+        analysis_as_of=analysis_as_of,
     )
 
 

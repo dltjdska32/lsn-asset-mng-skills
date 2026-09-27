@@ -18,10 +18,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal
 import unittest
+from zoneinfo import ZoneInfo
 
 from investment_stack.contracts.context import PublicAvailability
 from investment_stack.contracts.market import AdjustmentMode, Bar, BarSet
 from investment_stack.calculations.technical import (
+    TechnicalParameters,
+    calculate_verified_technical_analysis,
     calculate_atr,
     calculate_ema,
     calculate_macd,
@@ -75,6 +78,54 @@ def _make_bar(
 
 class TestTechnicalCalculationsR08(unittest.TestCase):
     """R08 Deterministic technical calculation test suite."""
+
+    def test_verified_barset_to_indicator_keeps_lineage_and_hand_value(self) -> None:
+        from investment_stack.providers.ohlcv import parse_naver_ohlcv
+        dates = ("2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24", "2026-09-25")
+        closes = ("100", "102", "104", "106", "108")
+        payload = {"code": "005930", "priceInfos": [
+            {"localDate": d.replace("-", ""), "openPrice": c, "highPrice": str(int(c)+1),
+             "lowPrice": str(int(c)-1), "closePrice": c, "accumulatedTradingVolume": "100"}
+            for d, c in zip(dates, closes)
+        ]}
+        parsed = parse_naver_ohlcv(
+            payload, instrument_id="KRX:005930", request_url="https://m.stock.naver.com/api/stock/005930/price",
+            analysis_as_of=datetime(2026, 9, 25, 16, 0, tzinfo=ZoneInfo("Asia/Seoul")),
+            adjustment_verified=True, adjustment_receipt="fixture-split-review",
+            calendar_receipt="fixture-calendar", expected_session_dates=dates,
+        )
+        params = TechnicalParameters(2, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2)
+        result = calculate_verified_technical_analysis(parsed, params)
+        self.assertEqual(result.points[-1].sma, Decimal("107"))
+        self.assertEqual(result.points[-1].bar_id, parsed.bar_set.bars[-1].bar_id)
+        self.assertEqual(result.points[-1].evidence_id, parsed.bar_set.bars[-1].evidence_id)
+        self.assertEqual(result.source_url, "https://m.stock.naver.com/api/stock/005930/price")
+        self.assertTrue(result.input_fingerprint)
+        self.assertEqual(result.signal_status, "UNAVAILABLE")
+
+        raw = parse_naver_ohlcv(payload, instrument_id="KRX:005930")
+        blocked = calculate_verified_technical_analysis(raw, params)
+        self.assertEqual(blocked.status, "UNAVAILABLE")
+        self.assertEqual(blocked.points, ())
+        self.assertIsNone(blocked.trend)
+
+        for altered in (
+            parse_naver_ohlcv(payload, instrument_id="KRX:005930", request_url="https://m.stock.naver.com/api/stock/005930/price",
+                analysis_as_of=datetime(2026, 9, 24, 12, 0, tzinfo=ZoneInfo("Asia/Seoul")),
+                adjustment_verified=True, adjustment_receipt="fixture", calendar_receipt="fixture-calendar", expected_session_dates=dates),
+            parse_naver_ohlcv(payload, instrument_id="KRX:005930", request_url="https://m.stock.naver.com/api/stock/005930/price",
+                analysis_as_of=datetime(2026, 9, 25, 16, 0, tzinfo=ZoneInfo("Asia/Seoul")),
+                adjustment_verified=True, adjustment_receipt="fixture", calendar_receipt="fixture-calendar", expected_session_dates=dates[:-1]),
+            parse_naver_ohlcv({"code": "005930", "priceInfos": payload["priceInfos"] + [{
+                "localDate": "20260926", "openPrice": "109", "highPrice": "110", "lowPrice": "108", "closePrice": "109", "accumulatedTradingVolume": "100"}]},
+                instrument_id="KRX:005930", request_url="https://m.stock.naver.com/api/stock/005930/price",
+                analysis_as_of=datetime(2026, 9, 25, 16, 0, tzinfo=ZoneInfo("Asia/Seoul")),
+                adjustment_verified=True, adjustment_receipt="fixture", calendar_receipt="fixture-calendar", expected_session_dates=dates),
+        ):
+            denied = calculate_verified_technical_analysis(altered, params)
+            self.assertEqual(denied.status, "UNAVAILABLE")
+            self.assertEqual(denied.points, ())
+            self.assertIsNone(denied.trend)
 
     def test_sma_hand_calculated_fixture(self) -> None:
         """Hand calculation: Closes = [10, 11, 12, 13, 14], Period = 3.

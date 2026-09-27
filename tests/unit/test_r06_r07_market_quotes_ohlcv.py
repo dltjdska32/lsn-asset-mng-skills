@@ -540,11 +540,18 @@ class TestOHLCVR07(unittest.TestCase):
             }
         }
         res = parse_yahoo_chart_ohlcv(payload, instrument_id="NASDAQ:AAPL")
-        self.assertTrue(res.is_usable)
-        self.assertIsNotNone(res.bar_set)
-        assert res.bar_set is not None
-        self.assertEqual(len(res.bar_set.bars), 2)
-        self.assertEqual(res.bar_set.bars[0].adjustment_mode, AdjustmentMode.SPLIT_ADJUSTED)
+        self.assertFalse(res.is_usable)
+        self.assertIsNone(res.bar_set)
+        # Yahoo adjclose alone does not establish that the OHLC fields share its adjustment basis.
+        self.assertTrue(all(b.adjustment_mode == AdjustmentMode.RAW for b in res.bars))
+
+        verified = parse_yahoo_chart_ohlcv(
+            payload, instrument_id="NASDAQ:AAPL", source_url="https://query1.finance.yahoo.com/chart/AAPL",
+            adjustment_verified=True, adjustment_receipt="fixture-adjustment-v1",
+            calendar_receipt="fixture-calendar-v1", expected_session_dates=("2024-09-23", "2024-09-24"),
+            analysis_as_of=datetime(2024, 9, 25, tzinfo=timezone.utc),
+        )
+        self.assertTrue(verified.analysis_eligible)
 
 
 if __name__ == "__main__":

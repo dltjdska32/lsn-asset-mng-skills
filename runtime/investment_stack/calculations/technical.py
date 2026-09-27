@@ -100,6 +100,85 @@ class TradingSignalResult:
     indicator_summary: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True, slots=True)
+class TechnicalParameters:
+    sma_period: int
+    ema_period: int
+    rsi_period: int
+    macd_fast: int
+    macd_slow: int
+    macd_signal: int
+    relative_volume_period: int
+    volatility_period: int
+    atr_period: int
+    trend_fast: int
+    trend_slow: int
+
+
+@dataclass(frozen=True, slots=True)
+class TechnicalPoint:
+    bar_id: str
+    evidence_id: str
+    session_date: str
+    sma: Decimal | None
+    ema: Decimal | None
+    rsi: Decimal | None
+    macd: MacdPoint | None
+    relative_volume: Decimal | None
+    volatility: Decimal | None
+    atr: Decimal | None
+
+
+@dataclass(frozen=True, slots=True)
+class TechnicalAnalysisResult:
+    status: str
+    points: tuple[TechnicalPoint, ...]
+    source_url: str | None
+    input_fingerprint: str | None
+    validation_receipt_id: str | None
+    formula_version: str
+    signal_status: str
+    trend: TrendEvaluation | None = None
+    reasons: tuple[str, ...] = ()
+
+
+def calculate_verified_technical_analysis(parse_result: Any, params: TechnicalParameters) -> TechnicalAnalysisResult:
+    """Calculate indicators only from an OHLCV parse result with complete source/calendar lineage."""
+    if not getattr(parse_result, "analysis_eligible", False):
+        return TechnicalAnalysisResult("UNAVAILABLE", (), getattr(parse_result, "source_url", None), None,
+                                       None, "R08-v1", "UNAVAILABLE", None,
+                                       ("OHLCV_PROVENANCE_OR_COMPLETENESS_NOT_VERIFIED",))
+    bar_set = parse_result.bar_set
+    bars = _extract_bars(bar_set)
+    series = (
+        calculate_sma(bars, params.sma_period), calculate_ema(bars, params.ema_period),
+        calculate_wilder_rsi(bars, params.rsi_period), calculate_macd(bars, params.macd_fast, params.macd_slow, params.macd_signal),
+        calculate_relative_volume(bars, params.relative_volume_period), calculate_volatility(bars, params.volatility_period),
+        calculate_atr(bars, params.atr_period),
+    )
+    points = tuple(TechnicalPoint(b.bar_id, b.evidence_id, b.session_date, *(s[i] for s in series)) for i, b in enumerate(bars))
+    complete = bool(points) and all(p.sma is not None and p.ema is not None and p.rsi is not None and p.macd is not None
+                                    and p.macd.signal is not None and p.relative_volume is not None
+                                    and p.volatility is not None and p.atr is not None for p in points)
+    trend = detect_trend(bars, params.trend_fast, params.trend_slow)
+    return TechnicalAnalysisResult("AVAILABLE" if complete else "PARTIAL", points, parse_result.source_url,
+                                   _bar_fingerprint(bars), _validation_receipt_id(parse_result), "R08-v1",
+                                   "UNAVAILABLE", trend,
+                                   () if complete else ("INSUFFICIENT_LOOKBACK_FOR_SOME_INDICATORS",))
+
+
+def _bar_fingerprint(bars: Sequence[Bar]) -> str:
+    import hashlib, json
+    payload = json.dumps([(b.bar_id, b.evidence_id, b.session_date, str(b.open), str(b.high), str(b.low), str(b.close), str(b.volume)) for b in bars], separators=(",", ":"))
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def _validation_receipt_id(parse_result: Any) -> str:
+    import hashlib
+    return hashlib.sha256((str(parse_result.source_url) + str(parse_result.adjustment_receipt) + str(parse_result.calendar_receipt)
+                           + _bar_fingerprint(parse_result.bar_set.bars)).encode()).hexdigest()
+
+
 def _extract_bars(bars_or_set: BarSet | Sequence[Bar]) -> tuple[Bar, ...]:
     """Extract and validate completed, contiguous bars from input.
 
