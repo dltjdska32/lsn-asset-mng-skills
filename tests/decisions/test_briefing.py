@@ -52,7 +52,10 @@ class TestBriefingLogic(unittest.TestCase):
         self.assertEqual(briefing.status, DataAvailabilityStatus.PARTIAL)
         self.assertEqual(briefing.decision, InvestmentDecision.WAIT)
         self.assertIn("대기", briefing.section_judgement)
-        self.assertIn("A도메인 실 판단 통합 대기", briefing.section_table["진행상태"])
+        self.assertIn("적격 가격 결과 미연결", briefing.section_table["현재가"])
+        self.assertIn("승인 정책 provenance", briefing.section_table["금액·수량"])
+        self.assertTrue(any("Test Calc = 50.0 SHARE USD" in line for line in briefing.section_details))
+        self.assertTrue(any("UNVALIDATED" in line for line in briefing.section_core))
 
     def test_briefing_missing_price_inconclusive(self) -> None:
         briefing = generate_briefing(

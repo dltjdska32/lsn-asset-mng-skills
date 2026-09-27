@@ -128,17 +128,32 @@ def generate_briefing(
             verified_hash=inputs.snapshot_hash
         )
 
-    # Valid scenario (not fully implemented in current phase, fallback to WAIT)
-    reasons.append("Domain A calculation results are structurally bound, but final BUY/scale judgement is explicitly reserved/withheld until A-domain results and approved policies are fully linked.")
-
+    # Presence booleans do not prove trusted price eligibility, valuation semantics,
+    # policy provenance, or a pinned personal snapshot. Keep all executable actions
+    # unavailable until those typed integrations exist.
+    reasons.append("적격 가격·가치평가 결과와 승인 정책 출처가 검증되지 않아 행동 판단을 보류합니다.")
+    bound_results = []
+    for calc_id, calc in sorted(calculations.items()):
+        if calc.result_numeric is None or str(calc.status) not in {"CALCULATED", "CONDITIONAL"}:
+            continue
+        unit = f" {calc.result_unit}" if calc.result_unit else ""
+        currency = f" {calc.result_currency}" if calc.result_currency else ""
+        bound_results.append(f"결속된 계산 결과: {calc.calculation_name} = {calc.result_numeric}{unit}{currency} (계산 근거 {calc_id})")
+    
     return NonPostingBriefing(
         status=DataAvailabilityStatus.PARTIAL,
         decision=InvestmentDecision.WAIT,
-        section_judgement="대기 (최종 매수·규모 판단 보류)",
-        section_table={"진행상태": "계산 불가: A도메인 실 판단 통합 대기"},
-        section_core=("기본 데이터 구조는 결속되었으나, 구체적인 매매 임계값과 규모는 산출되지 않았습니다.",),
-        section_conditions=("A 도메인의 적정가 및 할인율 산출 결과가 입수될 때,", "개인 포트폴리오 위험 한도 검증이 완료될 때."),
-        section_details=tuple(reasons),
+        section_judgement="대기 — 적격 가격·가치와 승인 정책을 확인할 때까지 매수·추가매수·축소 판단을 보류합니다.",
+        section_table={
+            "현재가": "계산 불가: 적격 가격 결과 미연결",
+            "적정가 범위": "계산 불가: 적격 가치평가 결과 미연결",
+            "진입·추가매수 구간": "계산 불가: 승인된 안전마진 정책 미확인",
+            "축소 구간": "계산 불가: 승인된 축소 정책 미확인",
+            "금액·수량": "계산 불가: 승인 정책 provenance 미검증",
+        },
+        section_core=("13F 자료는 공개 지연이 있는 보조 근거이며, UNVALIDATED 점수는 판단 가중치나 거래 신호로 쓰지 않습니다.",),
+        section_conditions=("A 도메인의 적격 가격과 가치평가 결과가 결속될 때 재평가합니다.", "승인된 정책 출처와 같은 시점의 개인 상태가 검증된 뒤에만 규모를 계산합니다."),
+        section_details=tuple(reasons + bound_results),
         reasons=tuple(reasons),
         verified_hash=inputs.snapshot_hash
     )
