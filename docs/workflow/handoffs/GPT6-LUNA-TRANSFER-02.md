@@ -9,3 +9,10 @@
 | C | `codex/gemini31-c` / `1d5f2f2` | 13F·5섹션 브리핑·WAIT action 전구체 root `a861b6b` 통합. C ACTION 11/11, root 이후 전체 470/skip1. 아직 정식 정책/가치평가 결속 없음 | R10–11/17의 non-posting 판단·숫자 결속, 정책 출처/개인 상태 검증 없으면 WAIT 유지. 13F 미검증 가중치 거래 신호 금지 |
 
 현재 root `codex/autonomous-integration` 코드 HEAD `50fea51`에서 전 테스트 475 OK/skip1는 B README 전 코드 동일 상태에서 실행. root README의 truststore 실제 연결 미완 문구는 메모리와 함께 후속 commit 예정. 8개 스킬/7모드/personal.db vs run.db 분리, 개인 데이터·인증정보 금지, 자동주문 금지. 세 구현 세션은 각 격리 작업 폴더에서 자기 소유 파일만 수정하고 작업별 인계에 기준·결과·미실행 검증을 쓴다. 총괄이 merge/test/version 공유 메모리 관리. 이후 새 별도 Codex 독립 검토, 담당 수정, 다른 새 Codex 최종 검증을 구분해 수행한다. 사용자에게 실제 검증 전 완료 보고 금지.
+
+## 실제 Luna 생성·활성 확인 (11:41 UTC)
+
+- A 실제 task `01a0e2a4-f627-7610-8cbf-fabe9bad1a70`, `C:/Users/lsn/.codex/worktrees/f01e/lsn-asset-mng-skills`, `codex/luna-a-transfer-02`, 현재 `b0548e4` Evidence 수정 checkpoint. 후속 `providers/http.py` WIP 진행 중.
+- B 실제 task `01a0e2a5-b0ff-7690-b818-5652533aa0c1`, `C:/Users/lsn/.codex/worktrees/72d3/lsn-asset-mng-skills`, `codex/luna-b-transfer-02`, 시작 `0ed93d8`. Naver OHLCV 실제 최상위 list 응답과 fixture schema 불일치 발견, B 코드 수정 중. 중복 준비 task `01a0e2a5-437e-7f30-a5fe-8548c3a40239`(91bc)는 새 B task를 생성하고 idle로 끝나 archive했다.
+- C 실제 task `01a0e2a5-8c93-7470-afcf-b67ee0577db6`, `C:/Users/lsn/.codex/worktrees/a3b7/lsn-asset-mng-skills`, `codex/gpt6-luna-c`, source `1d5f2f2` 위 `adfdbae` 13F와 `098a0b8` 브리핑 checkpoint. 담당 자체 합성 37 PASS 보고, 총괄 재검증 전.
+- 각 실제 Codex session_meta/turn_context에서 `gpt-6-luna`, `medium` 확인. App `wait_threads`에서 세 구현 task 동시에 active/inProgress, 세 분리 폴더 코드 수정 확인. 별도 독립 검토/최종 검증은 미시작.
