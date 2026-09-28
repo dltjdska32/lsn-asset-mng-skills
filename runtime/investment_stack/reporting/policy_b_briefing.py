@@ -10,6 +10,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from investment_stack.decisions.policy_b import PolicyBResult
+from investment_stack.decisions.policy_b_sizing import PolicyBSizingResult
 from investment_stack.reporting.models import Availability, ReportSectionInput
 
 
@@ -18,6 +19,7 @@ def build_policy_b_section(
     analysis_as_of: datetime,
     policy: PolicyBResult | None,
     *,
+    sizing: PolicyBSizingResult | None = None,
     evidence_ids: tuple[str, ...] = (),
     calculation_ids: tuple[str, ...] = (),
     missing_inputs: tuple[str, ...] = (),
@@ -66,9 +68,29 @@ def build_policy_b_section(
         f"{index}차 {tier.price} {policy.evaluation_currency}/주 이하"
         for index, tier in enumerate(policy.entry_tiers, 1)
     )
+    quantity_text = "거래 수량은 별도 비용·거래 단위 검증 전 대기."
+    if (isinstance(sizing, PolicyBSizingResult) and sizing.status == "CONDITIONAL"
+            and not sizing.orders_posted and len(sizing.tiers) == 3
+            and isinstance(sizing.total_maximum_cost, Decimal)
+            and sizing.total_maximum_cost.is_finite()
+            and sizing.total_maximum_cost <= policy.max_total_add_budget
+            and all(
+                isinstance(sized.limit_price, Decimal) and sized.limit_price.is_finite()
+                and sized.limit_price > 0 and sized.limit_price <= reference.price
+                and isinstance(sized.quantity, Decimal) and sized.quantity.is_finite()
+                and sized.quantity > 0
+                and isinstance(sized.maximum_cost, Decimal) and sized.maximum_cost.is_finite()
+                and sized.maximum_cost > 0 and sized.maximum_cost <= reference.tranche_budget
+                for sized, reference in zip(sizing.tiers, policy.entry_tiers)
+            )
+            and sum((tier.maximum_cost for tier in sizing.tiers), Decimal(0)) == sizing.total_maximum_cost):
+        quantity_text = "검증된 거래 단위 기준 조건부 수량: " + ", ".join(
+            f"{index}차 {tier.quantity}주(상한 {tier.limit_price} {policy.evaluation_currency}/주)"
+            for index, tier in enumerate(sizing.tiers, 1)
+        ) + ". 주문은 생성하지 않았습니다."
     lines = (
         "지금 판단: 조건부 검토. 매수·축소는 자동 실행되지 않습니다.",
-        f"가격·행동 표: {prices}; 추가 예산 상한 {policy.max_total_add_budget} {policy.evaluation_currency}. 거래 수량은 별도 비용·거래 단위 검증 전 대기.",
+        f"가격·행동 표: {prices}; 추가 예산 상한 {policy.max_total_add_budget} {policy.evaluation_currency}. {quantity_text}",
         "핵심 근거: D12 B는 종목 8% 상한과 투자현금 10% 하한에서 3회 분할을 검토합니다.",
         "판단 변경 조건: 투자 근거 훼손, 비중 10% 초과, 가격이 검증된 낙관 적정가의 1.2배 이상이면 추가매수를 멈추거나 축소를 재검토합니다.",
         "상세 근거: 비거래 정책 계산 결과입니다. 실제 주문은 생성하지 않았습니다.",

@@ -5,6 +5,7 @@ import unittest
 from investment_stack.decisions.policy_b import (
     EntryPricePrerequisites, Money, PolicyBInput, evaluate_policy_b,
 )
+from investment_stack.decisions.policy_b_sizing import TradingRules, size_policy_b_tranches
 from investment_stack.reporting.models import Availability
 from investment_stack.reporting.policy_b_briefing import build_policy_b_section
 
@@ -66,6 +67,21 @@ class PolicyBBriefingTests(unittest.TestCase):
                 self.assertEqual(Availability.PARTIAL, section.status)
                 self.assertNotIn("80.00 USD/주", rendered)
                 self.assertNotIn("추가 예산 상한", rendered)
+
+    def test_verified_sizing_can_show_conditional_lot_quantities(self):
+        policy = complete_policy()
+        sizing = size_policy_b_tranches(
+            policy, TradingRules("USD", D("1"), D("0.01"), D("1"), "synthetic", True),
+        )
+        section = build_policy_b_section(
+            "ABC", CUTOFF, policy, sizing=sizing,
+            evidence_ids=("ev:quote", "ev:valuation", "ev:state", "ev:trade-rules"),
+            calculation_ids=("calc:policy", "calc:sizing"),
+        )
+        rendered = "\n".join(section.lines)
+        self.assertIn("1차 16주", rendered)
+        self.assertIn("3차 18주", rendered)
+        self.assertIn("주문은 생성하지 않았습니다", rendered)
 
 
 if __name__ == "__main__":
