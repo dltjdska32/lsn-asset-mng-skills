@@ -30,6 +30,10 @@ class TechnicalBriefingContext:
     evidence_ids: tuple[str, ...]
     indicators: tuple[tuple[str, Decimal | None], ...]
     signal_status: str = "UNAVAILABLE"
+    instrument_id: str | None = None
+    analysis_as_of: str | None = None
+    latest_bar_close_time: str | None = None
+    delay_seconds: int | None = None
 
     def indicator(self, name: str) -> Decimal | None:
         return dict(self.indicators).get(name)
@@ -133,6 +137,8 @@ def build_technical_briefing_context(
     # Project only from the fresh calculation, never from caller-supplied result fields.
     verified_points = recalculated.points
     latest = verified_points[-1]
+    latest_bar = bars[-1]
+    delay_seconds = max(0, int((cutoff - latest_bar.close_time).total_seconds()))
     macd = latest.macd
     indicators: tuple[tuple[str, Decimal | None], ...] = (
         ("sma", latest.sma),
@@ -158,6 +164,10 @@ def build_technical_briefing_context(
         evidence_ids=tuple(point.evidence_id for point in verified_points),
         indicators=indicators,
         signal_status="UNAVAILABLE",
+        instrument_id=bar_set.instrument_id,
+        analysis_as_of=cutoff.isoformat(),
+        latest_bar_close_time=latest_bar.close_time.isoformat(),
+        delay_seconds=delay_seconds,
     )
 
 
