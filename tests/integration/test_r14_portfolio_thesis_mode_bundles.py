@@ -163,6 +163,8 @@ class PortfolioThesisModeBundleIntegrationTests(unittest.TestCase):
         self.assertNotIn("state_version=", portfolio_markdown)
         self.assertNotIn("snapshot:synthetic-7", portfolio_markdown)
         self.assertIn("보유 자산 현황", portfolio_markdown)
+        self.assertIn("추가매수·축소 검토: SYNTH-EQ", portfolio_markdown)
+        self.assertIn("진입 가격·금액·수량 대기", portfolio_markdown)
         self.assertIn("상세 계산 근거", portfolio_markdown)
         self.assertTrue(any(row["calculation_name"] == "portfolio_analysis"
                             for row in portfolio_manager.fetch_phase6_context()["calculations"]))

@@ -21,6 +21,7 @@ from investment_stack.providers import EnvironmentCredentials, ProviderObservati
 from investment_stack.research import Phase4ResearchRuntime, ResearchOutcome
 from investment_stack.routing import RequestMode
 from investment_stack.reporting.portfolio_modes import PinnedPortfolioState, PortfolioAnalysisRequest, PortfolioPosition
+from investment_stack.reporting.models import Availability as ReportAvailability
 from investment_stack.web_research import WebResearchAdapter, WebResearchBundleBackend
 
 
@@ -329,6 +330,10 @@ class SelectedAssetResearchIntegrationTests(unittest.TestCase):
         self.assertIn(result.availability, {Availability.COMPLETE, Availability.PARTIAL})
         report = result.step_states[-1].result.output["report"]
         section = next(item for item in report.sections if item.name == "selected_asset:FANUC")
+        policy_section = next(item for item in report.sections if item.name == "policy_b:FANUC")
+        self.assertEqual(ReportAvailability.PARTIAL, policy_section.status)
+        self.assertIn("진입 가격·금액·수량 대기", "\n".join(policy_section.lines))
+        self.assertNotIn("1차", "\n".join(policy_section.lines))
         self.assertTrue(section.evidence_ids)
         self.assertEqual(2, len(section.calculation_ids))
         self.assertIn("FANUC", report.markdown)

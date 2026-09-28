@@ -18,8 +18,12 @@ from typing import Callable, Mapping
 from uuid import uuid4
 
 from investment_stack.evidence import RunDatabaseManager
+from investment_stack.decisions.policy_b import PolicyBInput, evaluate_policy_b
+from investment_stack.decisions.policy_b_market import load_policy_b_market_evidence
+from investment_stack.decisions.policy_b_personal import PersonalPortfolioSnapshot, bind_personal_snapshot
 from investment_stack.pipelines import PipelineStep
 from investment_stack.reporting.models import Availability as ReportAvailability, ReportSectionInput
+from investment_stack.reporting.policy_b_briefing import build_policy_b_section
 from investment_stack.reporting.portfolio_modes import (
     FxEvidence,
     PortfolioAnalysisRequest,
@@ -607,6 +611,46 @@ def portfolio_thesis_services(
             for child in step_result.output.get("sections", ()):
                 if isinstance(child, ReportSectionInput):
                     sections.append(child)
+        if request.mode is RequestMode.PERSONAL_PORTFOLIO_ANALYSIS:
+            selected_step = context.get(PipelineStep.APPLY_MATERIALITY_GATE.value)
+            selected_ids = (selected_step.output.get("selected_instrument_ids", ())
+                            if selected_step is not None else ())
+            pinned = run_db.fetch_phase6_context()["run_metadata"]
+            try:
+                policy_as_of = datetime.fromisoformat(str(pinned["analysis_as_of"]).replace("Z", "+00:00"))
+                if policy_as_of.tzinfo is None:
+                    raise ValueError("naive analysis time")
+            except (KeyError, TypeError, ValueError):
+                policy_as_of = None
+            portfolio_step = context.get(PipelineStep.PIN_PERSONAL_STATE.value)
+            portfolio = portfolio_step.output.get("portfolio_request") if portfolio_step else None
+            supplied_snapshot = request.payload.get("policy_b_personal_snapshot")
+            personal_snapshot = supplied_snapshot if isinstance(supplied_snapshot, PersonalPortfolioSnapshot) else None
+            for instrument_id in selected_ids if isinstance(selected_ids, tuple) else ():
+                if policy_as_of is None or not isinstance(instrument_id, str) or not instrument_id:
+                    continue
+                market = load_policy_b_market_evidence(
+                    run_db.database_path, run_id=run_db.run_id,
+                    instrument_id=instrument_id, as_of=policy_as_of.isoformat(),
+                )
+                personal = bind_personal_snapshot(run_db, personal_snapshot, instrument_id=instrument_id)
+                evaluation_currency = (portfolio.evaluation_currency
+                                       if isinstance(portfolio, PortfolioAnalysisRequest) else "")
+                policy = evaluate_policy_b(PolicyBInput(
+                    evaluation_currency=evaluation_currency,
+                    fair_value_per_share=market.fair_value_per_share,
+                    optimistic_fair_value_per_share=market.optimistic_fair_value_per_share,
+                    quote_per_share=market.quote_per_share,
+                    portfolio_value=personal.portfolio_denominator,
+                    cash=personal.investable_cash,
+                    holding_value=personal.instrument_holding_value,
+                ))
+                sections.append(build_policy_b_section(
+                    instrument_id, policy_as_of, policy,
+                    missing_inputs=tuple(dict.fromkeys((
+                        *market.unavailable_reasons, *personal.unavailable_reasons,
+                    ))),
+                ))
         incomplete_steps = tuple(sorted(
             name for name, item in context.items() if item.availability is Availability.PARTIAL
         ))
