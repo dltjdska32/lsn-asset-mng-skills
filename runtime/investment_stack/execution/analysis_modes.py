@@ -771,7 +771,16 @@ def _persisted_last_valid_close_note(outcome, snapshot: Mapping[str, object], *,
     """Rebuild the non-live close note from selected, persisted run-local records."""
     selected = outcome.market.selected
     evidence_id = selected.evidence_id
-    if not isinstance(evidence_id, str) or not evidence_id:
+    selected_observation = selected.observation
+    selected_freshness = selected.freshness
+    if (
+        not isinstance(evidence_id, str) or not evidence_id
+        or selected_observation is None or selected_freshness is None
+        or selected_observation.evidence_type != "market"
+        or selected_observation.metric != "current_price"
+        or selected_observation.instrument_id != outcome.instrument_id
+        or selected_freshness.status.value != "LAST_VALID_CLOSE"
+    ):
         return None
     evidence_rows = [
         row for row in snapshot.get("evidence", ())
@@ -791,13 +800,28 @@ def _persisted_last_valid_close_note(outcome, snapshot: Mapping[str, object], *,
     assessments = [
         row for row in snapshot.get("freshness_assessments", ())
         if row.get("run_id") == run_id and row.get("evidence_id") == evidence_id
-        and row.get("status") == "LAST_VALID_CLOSE"
     ]
-    if len(evidence_rows) != 1 or len(observations) != 1 or len(assessments) != 1:
+    if (
+        len(evidence_rows) != 1 or len(observations) != 1 or len(assessments) != 1
+        or assessments[0].get("status") != "LAST_VALID_CLOSE"
+        or selected.observation_id is None
+    ):
         return None
     evidence, observation, assessment = evidence_rows[0], observations[0], assessments[0]
     try:
         details = json.loads(str(assessment.get("details_json") or ""))
+        observation_metadata = json.loads(str(observation.get("metadata_json") or "{}"))
+        evidence_value = json.loads(str(evidence.get("value_text") or ""))
+        run_metadata = snapshot.get("run_metadata", {})
+        cutoff_text = run_metadata.get("analysis_as_of") if isinstance(run_metadata, Mapping) else None
+        cutoff = datetime.fromisoformat(str(cutoff_text).replace("Z", "+00:00"))
+        public_at = datetime.fromisoformat(str(details.get("public_available_time")).replace("Z", "+00:00"))
+        effective_at = datetime.fromisoformat(str(details.get("effective_time")).replace("Z", "+00:00"))
+        observed_at = datetime.fromisoformat(str(observation.get("observed_at")).replace("Z", "+00:00"))
+        claimed_at = datetime.fromisoformat(str(observation.get("claimed_market_time")).replace("Z", "+00:00"))
+        persisted_value = Decimal(str(evidence_value))
+        selected_value = Decimal(str(selected_observation.value))
+        market_value = Decimal(str(observation.get("value_numeric")))
     except (TypeError, ValueError, json.JSONDecodeError):
         return None
     session_date = details.get("market_session_date")
@@ -805,6 +829,33 @@ def _persisted_last_valid_close_note(outcome, snapshot: Mapping[str, object], *,
     calendar_id = details.get("calendar_id")
     currency = observation.get("currency") or evidence.get("currency")
     claimed_time = observation.get("claimed_market_time")
+    freshness_projection = {
+        "effective_time": selected_freshness.effective_time,
+        "age_seconds": selected_freshness.age_seconds,
+        "reason": selected_freshness.reason,
+        "market_session_date": selected_freshness.market_session_date,
+        "quote_kind": selected_freshness.quote_kind,
+        "calendar_id": selected_freshness.calendar_id,
+        "public_available_time": selected_freshness.public_available_time,
+    }
+    if (
+        cutoff.tzinfo is None or public_at.tzinfo is None or effective_at.tzinfo is None
+        or observed_at.tzinfo is None or claimed_at.tzinfo is None
+        or any(timestamp > cutoff for timestamp in (public_at, effective_at, observed_at, claimed_at))
+        or details != freshness_projection
+        or observation.get("observation_id") != selected.observation_id
+        or selected_observation.currency != (observation.get("currency") or evidence.get("currency"))
+        or selected_observation.unit != observation.get("unit")
+        or selected_observation.claimed_market_time != claimed_time
+        or selected_observation.market_session_date != observation.get("market_session_date")
+        or selected_observation.observed_at != observation.get("observed_at")
+        or selected_observation.provider_id != observation.get("provider_id")
+        or selected_observation.metadata != observation_metadata
+        or selected_value != persisted_value or market_value != persisted_value
+        or evidence.get("observed_at") != observation.get("observed_at")
+        or selected_freshness.effective_time != details.get("effective_time")
+    ):
+        return None
     if not all(isinstance(value, str) and value for value in (
         session_date, public_time, calendar_id, currency, claimed_time,
     )):

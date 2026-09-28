@@ -142,6 +142,25 @@ class WeekendPriceEndToEndTests(unittest.TestCase):
             final_lines = (*guarded_section.lines, close_note)
             self.assertIn("마지막 유효 거래일 종가", " ".join(final_lines))
             self.assertIn("실시간 시세가 아닙니다", " ".join(final_lines))
+            selected = outcome.market.selected
+            spoofed_selections = (
+                replace(selected, observation=replace(selected.observation, instrument_id="OTHER")),
+                replace(selected, observation=replace(selected.observation, value=Decimal("999.99"))),
+                replace(selected, observation=replace(selected.observation, currency="EUR")),
+                replace(selected, observation=replace(selected.observation, claimed_market_time="2026-09-26T20:00:00Z")),
+                replace(selected, freshness=replace(selected.freshness, status=FreshnessStatus.FRESH)),
+                replace(selected, freshness=replace(
+                    selected.freshness, public_available_time="2026-09-28T20:00:01+00:00",
+                )),
+            )
+            for spoofed in spoofed_selections:
+                with self.subTest(spoofed=spoofed):
+                    forged_outcome = replace(
+                        outcome, market=replace(outcome.market, selected=spoofed),
+                    )
+                    self.assertIsNone(_persisted_last_valid_close_note(
+                        forged_outcome, phase6, run_id=run.run_id,
+                    ))
 
     def test_krx_close_flows_through_phase4_and_publication_gate(self) -> None:
         default = build_default_provider_executor()
