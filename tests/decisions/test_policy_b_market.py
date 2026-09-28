@@ -63,9 +63,10 @@ def make_db(
     """)
     connection.execute("INSERT INTO run_metadata VALUES (?, ?)", ("r1", as_of))
     connection.execute(
-        "INSERT INTO evidence (evidence_id,run_id,evidence_type,instrument_id,metric,value_text,unit,currency,observed_at,published_at,freshness_status,selection_state,retrieved_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO evidence (evidence_id,run_id,evidence_type,instrument_id,metric,value_text,unit,currency,observed_at,published_at,freshness_status,selection_state,retrieved_at,source_uri,source_name,source_tier,provider_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         ("e1", "r1", "market", instrument_id, "current_price", evidence_value, evidence_unit, "USD",
-         observed_at, published, status, "SELECTED", published),
+         observed_at, published, status, "SELECTED", published, "https://quotes.example.test/ABC",
+         "SyntheticQuote", 1, "synthetic"),
     )
     connection.execute(
         "INSERT INTO market_observations VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -221,6 +222,81 @@ class PolicyBMarketAdapterTests(unittest.TestCase):
         result = self.load()
         self.assertIsNone(result.quote_per_share)
         self.assertTrue(any("units do not match" in reason for reason in result.unavailable_reasons))
+
+    def test_market_observed_time_must_match_evidence_for_fresh_quote(self):
+        make_db(self.db)
+        connection = sqlite3.connect(self.db)
+        try:
+            connection.execute(
+                "UPDATE market_observations SET observed_at=?",
+                ("2026-09-01T11:00:00+00:00",),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        result = self.load()
+        self.assertIsNone(result.quote_per_share)
+        self.assertTrue(any("evidence and market observation timestamps do not match" in reason
+                            for reason in result.unavailable_reasons))
+
+    def test_market_observed_time_must_match_evidence_for_weekend_close(self):
+        weekend = "2026-09-27T16:00:00+00:00"
+        make_db(self.db, status="LAST_VALID_CLOSE", as_of=weekend)
+        connection = sqlite3.connect(self.db)
+        try:
+            connection.execute(
+                "UPDATE market_observations SET observed_at=?",
+                ("2026-09-01T11:00:00+00:00",),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        result = self.load(instrument_id="NASDAQ:ABC", as_of=weekend)
+        self.assertIsNone(result.quote_per_share)
+        self.assertTrue(any("evidence and market observation timestamps do not match" in reason
+                            for reason in result.unavailable_reasons))
+
+    def test_claimed_market_time_must_match_fresh_evidence_time(self):
+        make_db(self.db)
+        connection = sqlite3.connect(self.db)
+        try:
+            connection.execute(
+                "UPDATE market_observations SET claimed_market_time=?",
+                ("2026-09-01T11:00:00+00:00",),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        result = self.load()
+        self.assertIsNone(result.quote_per_share)
+        self.assertTrue(any("claimed market time does not match evidence" in reason
+                            for reason in result.unavailable_reasons))
+
+    def test_provider_identity_must_match_evidence_and_market_observation(self):
+        make_db(self.db)
+        connection = sqlite3.connect(self.db)
+        try:
+            connection.execute(
+                "UPDATE market_observations SET provider_id='other-provider'"
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        result = self.load()
+        self.assertIsNone(result.quote_per_share)
+        self.assertTrue(any("provider IDs do not match" in reason for reason in result.unavailable_reasons))
+
+    def test_quote_source_receipt_fields_are_required_by_current_adapter_contract(self):
+        make_db(self.db)
+        connection = sqlite3.connect(self.db)
+        try:
+            connection.execute("UPDATE evidence SET source_uri=NULL, source_name=NULL")
+            connection.commit()
+        finally:
+            connection.close()
+        result = self.load()
+        self.assertIsNone(result.quote_per_share)
+        self.assertTrue(any("source name and HTTPS locator" in reason for reason in result.unavailable_reasons))
 
     def test_forged_market_value_mismatch_is_rejected(self):
         make_db(self.db, market_value="999")

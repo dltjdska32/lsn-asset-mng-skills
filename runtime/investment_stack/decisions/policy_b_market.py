@@ -12,6 +12,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from investment_stack.decisions.policy_b import Money
 from investment_stack.calculations.valuation import DcfAssumptions, EquityValuationAnalyzer
@@ -345,6 +346,22 @@ def load_policy_b_market_evidence(
                             or row["market_instrument_id"] != row["instrument_id"]
                         ):
                             reasons.append("persisted evidence and market observation instrument IDs do not match")
+                        evidence_observed = _dt(row["observed_at"])
+                        market_observed = _dt(row["market_observed_at"])
+                        claimed_market = _dt(row["claimed_market_time"])
+                        if evidence_observed is None or market_observed is None or evidence_observed != market_observed:
+                            reasons.append("persisted evidence and market observation timestamps do not match")
+                        if evidence_observed is None or claimed_market is None or evidence_observed != claimed_market:
+                            reasons.append("persisted claimed market time does not match evidence observation time")
+                        if not row["provider_id"] or row["provider_id"] != row["market_provider_id"]:
+                            reasons.append("persisted evidence and market observation provider IDs do not match")
+                        source_uri = str(row["source_uri"] or "").strip()
+                        source_host = urlparse(source_uri)
+                        if (
+                            not row["source_name"] or source_host.scheme.lower() != "https"
+                            or not source_host.hostname
+                        ):
+                            reasons.append("persisted quote lacks the source name and HTTPS locator required by market provider receipts")
                         try:
                             value = _stored_number(row["value_text"])
                             market_value = Decimal(str(row["value_numeric"]))
