@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 
 from investment_stack.asset_analysis import Phase5AssetAnalysisRuntime
 from investment_stack.calculations import BusinessType
+from investment_stack.calculations.common import AnalysisResult, AnalysisStatus, MetricResult
 from investment_stack.deep_research import EquityResearchSpec, LiveDeepResearchRuntime
 from investment_stack.evidence import EvidenceResearchStore, RunDatabaseManager
 from investment_stack.execution.models import Availability, ModeRequest
@@ -79,6 +81,8 @@ class SelectedAssetResearchIntegrationTests(unittest.TestCase):
         self.assertEqual("selected_asset:FANUC", section.name)
         self.assertTrue(section.evidence_ids)
         self.assertEqual(2, len(section.calculation_ids))
+        self.assertFalse(any("현재가: COMPLETE" in line or "현재가: PARTIAL" in line for line in section.lines))
+        self.assertFalse(any("명시 가정에 따른 조건부 평가값" in line for line in section.lines))
         context = self.run.fetch_phase6_context()
         self.assertTrue(set(section.evidence_ids).issubset({row["evidence_id"] for row in context["evidence"]}))
         self.assertTrue(set(section.calculation_ids).issubset({row["calculation_id"] for row in context["calculations"]}))
@@ -116,6 +120,74 @@ class SelectedAssetResearchIntegrationTests(unittest.TestCase):
         self.assertIn("current_price:FANUC", result.missing_inputs)
         self.assertIn("fundamentals:FANUC", result.missing_inputs)
         self.assertEqual("PARTIAL", result.sections[0].status.value)
+        self.assertTrue(any("current_price:FANUC" in line for line in result.sections[0].lines))
+
+    def test_non_portfolio_mode_is_rejected_before_research(self) -> None:
+        result = self.service(("FANUC",), ModeRequest(self.run.run_id, RequestMode.SINGLE_ASSET_ANALYSIS))
+        self.assertTrue(result.unsupported_reasons)
+        context = self.run.fetch_phase6_context()
+        self.assertEqual((), context["evidence"])
+        self.assertFalse(any(row["task_name"] == "deep_research:FANUC" for row in context["task_states"]))
+
+    def _dcf_runtime(self, *, persist_metric: bool, wrong_id: bool = False):
+        original_runtime = self.runtime
+
+        class DcfRuntime:
+            research = original_runtime.research
+            analysis = original_runtime.analysis
+            analysis_as_of = original_runtime.analysis_as_of
+            analysis_timezone = original_runtime.analysis_timezone
+
+            def analyze_equity(self, spec):
+                outcome = original_runtime.analyze_equity(spec)
+                valuation = outcome.analysis.valuation
+                metric = MetricResult("dcf_scenario_base", Decimal("1234.50"), "JPY/share",
+                                      "explicit evidence-backed DCF", evidence_ids=outcome.evidence_ids)
+                calculation_id = valuation.metadata["calculation_id"]
+                if persist_metric:
+                    calculation_id = "calc:synthetic-dcf-value"
+                    original_runtime.analysis.run_db.add_calculation(
+                        calculation_id=calculation_id, calculation_name="EQUITY_VALUATION",
+                        formula="synthetic explicit assumptions", inputs={"subject": spec.instrument_id,
+                                                                            "evidence_ids": list(outcome.evidence_ids)},
+                        result={"metrics": [{"name": metric.name, "value": str(metric.value),
+                                             "unit": metric.unit, "status": metric.status.value,
+                                             "evidence_ids": list(metric.evidence_ids)}]},
+                    )
+                if wrong_id:
+                    calculation_id = "calc:missing-valuation-result"
+                with_dcf = AnalysisResult(
+                    valuation.subject, valuation.analysis_type, AnalysisStatus.COMPLETE,
+                    (metric,), valuation.findings, valuation.risks, valuation.unknowns,
+                    {**valuation.metadata, "calculation_id": calculation_id},
+                )
+                return replace(outcome, analysis=replace(outcome.analysis, valuation=with_dcf))
+
+        return DcfRuntime()
+
+    def test_persisted_evidence_backed_dcf_value_is_explicitly_not_a_buy_price(self) -> None:
+        result = LiveSelectedAssetResearch(self._dcf_runtime(persist_metric=True), {"FANUC": self.spec})(
+            ("FANUC",), ModeRequest(self.run.run_id, RequestMode.PERSONAL_PORTFOLIO_ANALYSIS))
+        lines = result.sections[0].lines
+        self.assertTrue(any("명시 가정에 따른 조건부 평가값, 매수 가격 아님" in line
+                            and "dcf_scenario_base=1234.50 JPY/share" in line for line in lines))
+        self.assertFalse(any("현재가:" in line for line in lines))
+
+    def test_dcf_value_missing_from_persisted_calculation_is_hidden_and_partial(self) -> None:
+        result = LiveSelectedAssetResearch(self._dcf_runtime(persist_metric=False), {"FANUC": self.spec})(
+            ("FANUC",), ModeRequest(self.run.run_id, RequestMode.PERSONAL_PORTFOLIO_ANALYSIS))
+        section = result.sections[0]
+        self.assertFalse(any("dcf_scenario_base=1234.50" in line for line in section.lines))
+        self.assertFalse(any("조건부 평가값" in line for line in section.lines))
+        self.assertIn("valuation_metric_persistence:FANUC", section.metadata["missing_inputs"])
+        self.assertEqual("PARTIAL", section.status.value)
+
+    def test_dcf_value_with_unresolved_calculation_id_is_hidden(self) -> None:
+        result = LiveSelectedAssetResearch(self._dcf_runtime(persist_metric=True, wrong_id=True),
+                                           {"FANUC": self.spec})(
+            ("FANUC",), ModeRequest(self.run.run_id, RequestMode.PERSONAL_PORTFOLIO_ANALYSIS))
+        self.assertFalse(any("dcf_scenario_base=1234.50" in line for line in result.sections[0].lines))
+        self.assertIn("valuation_metric_persistence:FANUC", result.sections[0].metadata["missing_inputs"])
 
     def test_portfolio_pipeline_reports_selected_asset_evaluation_section(self) -> None:
         portfolio = PortfolioAnalysisRequest(

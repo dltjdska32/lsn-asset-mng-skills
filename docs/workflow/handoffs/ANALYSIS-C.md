@@ -22,3 +22,11 @@
 
 - The host still supplies the approved materiality selector and resolved equity specs when constructing `portfolio_thesis_services`; automatic instrument resolution and personal.db access remain outside this adapter.
 - Provider availability and real-source completeness were not live-tested. Unsupported asset classes need their own typed analysis service and remain outside this equity-only implementation.
+
+## Coordinator review follow-up
+
+- Removed the misleading status-as-price line. The adapter now renders a numeric valuation metric only when its evidence belongs to the selected instrument and the same-run Phase 5 calculation has the same subject/evidence lineage and an exactly matching persisted `result_json` metric (name, value, unit, status, and evidence IDs). An evidence or content mismatch hides the value and marks the section PARTIAL with a missing-input reason. DCF output is labeled as a conditional value under explicit assumptions and explicitly not a buy price.
+- The adapter now rejects every mode except `PERSONAL_PORTFOLIO_ANALYSIS` before running research. `REPORT_REFRESH` remains outside this callback boundary.
+- Added regression cases for valid persisted DCF display, a fabricated DCF metric that reuses another calculation ID, a nonexistent calculation ID, and invocation from another fixed mode.
+- Verification rerun: selected-asset integration tests 9 passed; existing portfolio thesis bundle tests 3 passed; `git diff --check` clean.
+- Verification environment: system `python` 3.14; `tzdata` installed temporarily to workspace-local `.testdeps` for Windows `zoneinfo`, then `.testdeps` removed. No dependency was added to the repository or committed.
