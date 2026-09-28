@@ -20,7 +20,8 @@ from uuid import uuid4
 from investment_stack.evidence import RunDatabaseManager
 from investment_stack.decisions.policy_b import PolicyBInput, evaluate_policy_b
 from investment_stack.decisions.policy_b_market import load_policy_b_market_evidence
-from investment_stack.decisions.policy_b_personal import PersonalPortfolioSnapshot, bind_personal_snapshot
+from investment_stack.decisions.policy_b_personal import bind_personal_snapshot
+from investment_stack.personal.ledger import PersonalLedgerService
 from investment_stack.pipelines import PipelineStep
 from investment_stack.reporting.models import Availability as ReportAvailability, ReportSectionInput
 from investment_stack.reporting.policy_b_briefing import build_policy_b_section
@@ -91,6 +92,7 @@ def portfolio_thesis_services(
     run_dbs: Mapping[str, RunDatabaseManager] | None = None,
     base_services: RuntimeServices | None = None,
     portfolio_loader: PortfolioLoader | None = None,
+    personal_ledger: PersonalLedgerService | None = None,
     materiality_selector: MaterialitySelector | None = None,
     selected_asset_research: SelectedAssetResearch | None = None,
     scenario_gate_verifier: ScenarioGateVerifier | None = None,
@@ -624,8 +626,6 @@ def portfolio_thesis_services(
                 policy_as_of = None
             portfolio_step = context.get(PipelineStep.PIN_PERSONAL_STATE.value)
             portfolio = portfolio_step.output.get("portfolio_request") if portfolio_step else None
-            supplied_snapshot = request.payload.get("policy_b_personal_snapshot")
-            personal_snapshot = supplied_snapshot if isinstance(supplied_snapshot, PersonalPortfolioSnapshot) else None
             for instrument_id in selected_ids if isinstance(selected_ids, tuple) else ():
                 if policy_as_of is None or not isinstance(instrument_id, str) or not instrument_id:
                     continue
@@ -633,7 +633,7 @@ def portfolio_thesis_services(
                     run_db.database_path, run_id=run_db.run_id,
                     instrument_id=instrument_id, as_of=policy_as_of.isoformat(),
                 )
-                personal = bind_personal_snapshot(run_db, personal_snapshot, instrument_id=instrument_id)
+                personal = bind_personal_snapshot(run_db, personal_ledger, instrument_id=instrument_id)
                 evaluation_currency = (portfolio.evaluation_currency
                                        if isinstance(portfolio, PortfolioAnalysisRequest) else "")
                 policy = evaluate_policy_b(PolicyBInput(
@@ -644,6 +644,8 @@ def portfolio_thesis_services(
                     portfolio_value=personal.portfolio_denominator,
                     cash=personal.investable_cash,
                     holding_value=personal.instrument_holding_value,
+                    holding_units=personal.instrument_holding_units,
+                    holding_units_verified=personal.portfolio_state_bound and personal.instrument_holding_units is not None,
                 ))
                 sections.append(build_policy_b_section(
                     instrument_id, policy_as_of, policy,
