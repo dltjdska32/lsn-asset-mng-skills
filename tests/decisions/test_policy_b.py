@@ -18,6 +18,7 @@ def full(**changes):
         cash=m("20000"),
         holding_value=m("4000"),
         holding_units=D("40"),
+        holding_units_verified=True,
         thesis_impaired=False,
     )
     values.update(changes)
@@ -97,6 +98,25 @@ class PolicyBTests(unittest.TestCase):
         self.assertEqual(result.status, "WAIT")
         self.assertFalse(result.reduction_triggers)
         self.assertIsNone(result.candidate_reduction_fraction)
+
+    def test_cash_plus_holding_above_portfolio_is_inconsistent(self):
+        result = evaluate_policy_b(full(cash=m("25000"), holding_value=m("80000"), quote_per_share=m("200")))
+        self.assertEqual(result.status, "WAIT")
+        self.assertIsNone(result.max_total_add_budget)
+        self.assertFalse(result.reduction_triggers)
+        self.assertIsNone(result.candidate_reduction_fraction)
+
+    def test_overvaluation_requires_verified_positive_holding(self):
+        for changed in (
+            {"holding_value": m("0"), "holding_units": D("0")},
+            {"holding_value": None},
+            {"holding_units": None},
+            {"holding_units_verified": False},
+        ):
+            with self.subTest(changed=changed):
+                result = evaluate_policy_b(full(quote_per_share=m("144"), **changed))
+                self.assertIsNone(result.candidate_reduction_fraction)
+                self.assertFalse(any("1.2x" in x for x in result.reduction_triggers))
 
     def test_monetary_inputs_must_be_decimal_without_coercion(self):
         for value in (100.0, "100"):

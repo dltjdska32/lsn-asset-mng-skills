@@ -27,6 +27,7 @@ class PolicyBInput:
     cash: Optional[Money] = None
     holding_value: Optional[Money] = None
     holding_units: Optional[Decimal] = None
+    holding_units_verified: Optional[bool] = None
     approved_risk_budget: Optional[Money] = None
     thesis_impaired: Optional[bool] = None
 
@@ -130,6 +131,8 @@ def evaluate_policy_b(inputs: PolicyBInput) -> PolicyBResult:
     units = _decimal(inputs.holding_units, "holding units", reasons) if inputs.holding_units is not None else None
     if inputs.holding_units is None:
         reasons.append("holding units is missing")
+    if inputs.holding_units_verified is not True:
+        reasons.append("holding units are not verified")
     if inputs.thesis_impaired is None:
         reasons.append("thesis status is missing")
     elif not isinstance(inputs.thesis_impaired, bool):
@@ -143,11 +146,14 @@ def evaluate_policy_b(inputs: PolicyBInput) -> PolicyBResult:
     inconsistent_portfolio_state = (
         (holding is not None and portfolio is not None and holding > portfolio)
         or (cash is not None and portfolio is not None and cash > portfolio)
+        or (cash is not None and holding is not None and portfolio is not None and cash + holding > portfolio)
     )
     if holding is not None and portfolio is not None and holding > portfolio:
         reasons.append("holding value exceeds portfolio value")
     if cash is not None and portfolio is not None and cash > portfolio:
         reasons.append("cash exceeds portfolio value")
+    if cash is not None and holding is not None and portfolio is not None and cash <= portfolio and holding <= portfolio and cash + holding > portfolio:
+        reasons.append("cash plus holding value exceeds portfolio value")
     if units is not None and units == 0 and holding is not None and holding > 0:
         reasons.append("positive holding value requires positive holding units")
 
@@ -188,7 +194,20 @@ def evaluate_policy_b(inputs: PolicyBInput) -> PolicyBResult:
         reduction.append("holding concentration strictly above 10%; review reduction to 8% target")
     if inputs.thesis_impaired is True:
         reduction.append("investment thesis impaired; review reduction")
-    if not inconsistent_portfolio_state and verified_matches.get("quote per share") and verified_matches.get("optimistic fair value per share") and quote is not None and optimistic is not None and quote >= optimistic * _D("1.2"):
+    if (
+        not inconsistent_portfolio_state
+        and verified_matches.get("quote per share")
+        and verified_matches.get("optimistic fair value per share")
+        and verified_matches.get("holding value")
+        and inputs.holding_units_verified is True
+        and holding is not None
+        and holding > 0
+        and units is not None
+        and units > 0
+        and quote is not None
+        and optimistic is not None
+        and quote >= optimistic * _D("1.2")
+    ):
         reduction.append("quote at or above 1.2x verified optimistic fair value; review 1/3 reduction")
         candidate_fraction = _D(1) / _D(3)
 
