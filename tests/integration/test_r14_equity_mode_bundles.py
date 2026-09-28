@@ -341,7 +341,8 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
             calculation_id=calculation_id,
             calculation_name=persisted_result.analysis_type,
             formula="deterministic_phase5_asset_analysis",
-            inputs={"subject": persisted_result.subject, "evidence_ids": []},
+            inputs={"subject": persisted_result.subject, "evidence_ids": [],
+                    "dcf_assumption_value_bindings": []},
             result=Phase5AssetAnalysisRuntime._jsonable(persisted_result),
         )
         returned_result = replace(
@@ -372,7 +373,8 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
             calculation_id=calculation_id,
             calculation_name=persisted_result.analysis_type,
             formula="deterministic_phase5_asset_analysis",
-            inputs={"subject": persisted_result.subject, "evidence_ids": []},
+            inputs={"subject": persisted_result.subject, "evidence_ids": [],
+                    "dcf_assumption_value_bindings": []},
             result=Phase5AssetAnalysisRuntime._jsonable(persisted_result),
         )
         forged_result = replace(

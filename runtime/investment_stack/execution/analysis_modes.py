@@ -755,6 +755,7 @@ def _validated_analysis_section(
     expected_inputs = {
         "subject": result.subject,
         "evidence_ids": sorted({evidence_id for metric in result.metrics for evidence_id in metric.evidence_ids}),
+        "dcf_assumption_value_bindings": result.metadata.get("dcf_assumption_value_bindings", []),
     }
     expected_result = json.loads(json.dumps(
         Phase5AssetAnalysisRuntime._jsonable(result), sort_keys=True, default=str,
