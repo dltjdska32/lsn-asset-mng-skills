@@ -2,6 +2,14 @@
 
 Last updated: 2026-09-28
 
+## CLOSE-R11 D12 data binding — independently reviewed code `9fa62bd`
+
+The B policy now has a read-only adapter for the pinned personal ledger projection and a read-only market/DCF adapter. Portfolio analysis renders a five-part D12 section. Independent review found and returned stale/fake close labels, divergent instrument/time/provider/unit records, self-authored DCF/quote source strings, and fake reference flags releasing action numbers. The fixes reassess bounded NASDAQ/KRX sessions and timestamps, keep source-content-unproven DCF and D12 quote values unavailable, and withhold entry prices, budgets, and quantities in the public report. Pure lot/fee arithmetic is labeled `ARITHMETIC_ONLY` and cannot release a report action. The ordinary Phase 4 → 5 Sunday prior-session close path remains tested.
+
+Two GPT-6 Luna Medium implementation sessions worked in separate `codex/close-a` and `codex/close-b` branches/worktrees; the coordinator owned integration/report files. At code source `9fa62bd30fc5214b2ee275748e28515babe8f15f`, a fresh wheel/sdist build, 67 focused tests, and **698 full tests OK (1 skipped)** passed. A separate Codex reviewer re-ran the adversarial probes and 63 focused tests and found no remaining P1/P2 in the implemented safety boundary. A different Codex final verifier is still pending, so this is not final sign-off. See [review](docs/workflow/reviews/CLOSE-R11-REVIEW-01.md), [handoff](docs/workflow/handoffs/CLOSE-R11.md), and [task memory](docs/workflow/tasks.md).
+
+This does **not** complete live R11 investment recommendations. Authenticated market and DCF source-content receipts, marked personal holdings/FX, emergency and planned-spending reserves, pending-order reservations, and verified fee/lot rules have no complete production binding. User-specific add/reduce prices, budgets, and quantities remain `WAIT`; no real personal DB or order was used. Calendar coverage is limited to the pinned September 2026 sessions and the default CLI still needs host injection.
+
 ## D12 B selected policy — independently verified exact source `61fd2eb`
 
 The user selected B: three equal-budget entry tiers at 80%/75%/70% of a verified base fair value, an 8% individual-equity cap, a 10% investable-cash floor after separate reserves, concentration reduction review strictly above 10% toward 8%, review of a one-third reduction at or above 1.2 times verified optimistic fair value, and a stop/review on thesis impairment. A pure non-posting policy evaluator implements these rules. It returns no numeric entry tiers or add budget without complete typed values and trusted-host readiness attestations. The generic equity report records that B was selected but leaves actionable entry prices, amounts, and quantity at WAIT; DCF scenario values alone cannot clear its provenance gate. No order or ledger post is performed.
