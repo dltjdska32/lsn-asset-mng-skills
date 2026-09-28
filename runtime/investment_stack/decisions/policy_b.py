@@ -14,7 +14,23 @@ from typing import Optional
 class Money:
     amount: Decimal
     currency: str
-    verified: bool = True
+    verified: bool = False
+
+
+@dataclass(frozen=True)
+class EntryPricePrerequisites:
+    """Readiness attestations populated only by a trusted, state-aware host.
+
+    These flags are not provenance verification. The evaluator has no access to
+    persisted run or personal records; the host must bind and verify those
+    records before constructing this complete bundle.
+    """
+
+    valuation_provenance_verified: bool
+    pinned_personal_state_verified: bool
+    reserves_excluded: bool
+    transaction_costs_verified: bool
+    trade_units_verified: bool
 
 
 @dataclass(frozen=True)
@@ -30,6 +46,7 @@ class PolicyBInput:
     holding_units_verified: Optional[bool] = None
     approved_risk_budget: Optional[Money] = None
     thesis_impaired: Optional[bool] = None
+    entry_price_prerequisites: Optional[EntryPricePrerequisites] = None
 
 
 @dataclass(frozen=True)
@@ -137,6 +154,22 @@ def evaluate_policy_b(inputs: PolicyBInput) -> PolicyBResult:
         reasons.append("thesis status is missing")
     elif not isinstance(inputs.thesis_impaired, bool):
         reasons.append("thesis status is invalid")
+    elif inputs.thesis_impaired:
+        reasons.append("impaired thesis blocks entry price levels and add budget")
+    prerequisites = inputs.entry_price_prerequisites
+    prerequisite_fields = (
+        "valuation_provenance_verified",
+        "pinned_personal_state_verified",
+        "reserves_excluded",
+        "transaction_costs_verified",
+        "trade_units_verified",
+    )
+    if not isinstance(prerequisites, EntryPricePrerequisites):
+        reasons.append("complete entry price prerequisites are missing")
+    else:
+        for field in prerequisite_fields:
+            if getattr(prerequisites, field) is not True:
+                reasons.append(f"entry price prerequisite {field} is not verified")
     fv = amounts["fair value per share"]
     optimistic = amounts["optimistic fair value per share"]
     quote = amounts["quote per share"]
@@ -160,7 +193,7 @@ def evaluate_policy_b(inputs: PolicyBInput) -> PolicyBResult:
     entry_tiers: tuple[EntryTier, ...] = ()
     base_currency = inputs.fair_value_per_share.currency.strip().upper() if isinstance(inputs.fair_value_per_share, Money) and isinstance(inputs.fair_value_per_share.currency, str) else ""
     base_verified = verified_matches.get("fair value per share", False)
-    if fv is not None and base_verified and currency and base_currency == currency:
+    if fv is not None and base_verified and currency and base_currency == currency and not reasons:
         entry_tiers = tuple(EntryTier(fv * factor, factor, _D(0)) for factor in _TIER_FRACTIONS)
 
     floor = portfolio * _D("0.10") if verified_matches.get("portfolio value") and portfolio is not None else None

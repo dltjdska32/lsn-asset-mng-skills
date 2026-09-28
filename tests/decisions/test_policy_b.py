@@ -1,7 +1,12 @@
 from decimal import Decimal as D
 import unittest
 
-from investment_stack.decisions.policy_b import Money, PolicyBInput, evaluate_policy_b
+from investment_stack.decisions.policy_b import (
+    EntryPricePrerequisites,
+    Money,
+    PolicyBInput,
+    evaluate_policy_b,
+)
 
 
 def m(value, currency="USD", verified=True):
@@ -20,6 +25,13 @@ def full(**changes):
         holding_units=D("40"),
         holding_units_verified=True,
         thesis_impaired=False,
+        entry_price_prerequisites=EntryPricePrerequisites(
+            valuation_provenance_verified=True,
+            pinned_personal_state_verified=True,
+            reserves_excluded=True,
+            transaction_costs_verified=True,
+            trade_units_verified=True,
+        ),
     )
     values.update(changes)
     return PolicyBInput(**values)
@@ -126,10 +138,17 @@ class PolicyBTests(unittest.TestCase):
                 self.assertEqual(result.status, "WAIT")
                 self.assertEqual(result.entry_tiers, ())
 
+    def test_money_defaults_to_unverified(self):
+        result = evaluate_policy_b(full(fair_value_per_share=Money(D("100"), "USD")))
+        self.assertFalse(Money(D("100"), "USD").verified)
+        self.assertEqual(result.entry_tiers, ())
+        self.assertEqual(result.status, "WAIT")
+
     def test_thesis_impairment_stops_additions_and_prompts_review(self):
         result = evaluate_policy_b(full(thesis_impaired=True))
         self.assertTrue(result.additions_stopped)
-        self.assertEqual(result.max_total_add_budget, D("0"))
+        self.assertIsNone(result.max_total_add_budget)
+        self.assertEqual(result.status, "WAIT")
         self.assertTrue(any("thesis impaired" in x for x in result.reduction_triggers))
 
     def test_missing_thesis_state_blocks_budget(self):
@@ -139,9 +158,30 @@ class PolicyBTests(unittest.TestCase):
 
     def test_partial_state_keeps_reference_levels_but_no_budget(self):
         result = evaluate_policy_b(PolicyBInput(evaluation_currency="USD", fair_value_per_share=m("100")))
-        self.assertEqual([x.price for x in result.entry_tiers], [D("80"), D("75"), D("70")])
+        self.assertEqual(result.entry_tiers, ())
         self.assertEqual(result.status, "WAIT")
         self.assertIsNone(result.max_total_add_budget)
+
+    def test_each_entry_readiness_gate_suppresses_numeric_prices(self):
+        gates = (
+            "valuation_provenance_verified",
+            "pinned_personal_state_verified",
+            "reserves_excluded",
+            "transaction_costs_verified",
+            "trade_units_verified",
+        )
+        for missing_gate in gates:
+            flags = {name: True for name in gates}
+            flags[missing_gate] = False
+            with self.subTest(missing_gate=missing_gate):
+                result = evaluate_policy_b(full(entry_price_prerequisites=EntryPricePrerequisites(**flags)))
+                self.assertEqual(result.entry_tiers, ())
+                self.assertEqual(result.status, "WAIT")
+
+    def test_raw_truthy_string_is_not_an_entry_prerequisite_bundle(self):
+        result = evaluate_policy_b(full(entry_price_prerequisites="all-verified"))
+        self.assertEqual(result.entry_tiers, ())
+        self.assertEqual(result.status, "WAIT")
 
     def test_invalid_base_values_never_default_to_zero(self):
         for bad in (None, D("NaN"), D("Infinity"), D("-1")):
