@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from investment_stack.calculations import BusinessType
 from investment_stack.calculations.common import AnalysisStatus
+from investment_stack.asset_analysis import Phase5AssetAnalysisRuntime
 from investment_stack.contracts.calculation import (
     CalculationRecord,
     DataAvailabilityStatus,
@@ -405,39 +406,52 @@ def equity_analysis_services(
         except (TypeError, ValueError):
             section_as_of = None
         sections: list[ReportSectionInput] = []
+        unverified_outputs: list[str] = []
         for outcome in outcomes:
-            sections.append(section_from_analysis_result(
+            fundamental_section = _validated_analysis_section(
                 outcome.analysis.fundamental,
                 name=f"{outcome.instrument_id}_fundamental",
                 title=f"{outcome.instrument_id} Fundamentals",
-            ))
-            valuation_section = section_from_analysis_result(
+                stored_calculations=run_snapshot["calculations"],
+                run_id=run_db.run_id,
+            )
+            if not fundamental_section.metadata.get("numeric_output_verified"):
+                unverified_outputs.append(f"{outcome.instrument_id}:fundamental")
+            sections.append(fundamental_section)
+            valuation_section = _validated_analysis_section(
                 outcome.analysis.valuation,
                 name=f"{outcome.instrument_id}_valuation",
                 title=f"{outcome.instrument_id} Valuation",
+                stored_calculations=run_snapshot["calculations"],
+                run_id=run_db.run_id,
             )
+            if not valuation_section.metadata.get("numeric_output_verified"):
+                unverified_outputs.append(f"{outcome.instrument_id}:valuation")
             # This runtime exposes model outputs for analysis, not policy-approved
             # entry prices. Keep assumptions-based values visibly conditional.
-            dcf_output_names = (
-                "dcf_scenario_", "dcf_value_per_share", "dcf_sensitivity_",
-                "high_growth_scenario", "scenario_",
-            )
-            has_scenario_value = any(
-                metric.value is not None and metric.name.startswith(dcf_output_names)
-                for metric in outcome.analysis.valuation.metrics
-            )
-            valuation_notes = [
-                (
-                    "해석 제한: 유효 DCF/시나리오 결과는 명시 가정에 따른 조건부 가치이며 확정 적정가나 추가매수 기준이 아닙니다."
-                    if has_scenario_value else
-                    "DCF 가정 또는 근거가 연결된 유효 시나리오가 없어 적정가 범위를 산출하지 않았습니다."
-                ),
-                "정책 제한: 승인된 매수 기준·안전마진 정책(D12)이 연결되지 않아 매수·추가매수 가격을 판단할 수 없습니다.",
-                "브리핑 제한: 가격·가치 숫자에는 독립 검증 가능한 eligibility receipt와 종목 결속이 없어 최종 판단 브리핑에서 숨깁니다.",
-            ]
-            valuation_notes.append(
-                f"기준시각: {section_as_of.isoformat()}" if section_as_of else "기준시각: 확인 불가"
-            )
+            if valuation_section.metadata.get("numeric_output_verified"):
+                dcf_output_names = (
+                    "dcf_scenario_", "dcf_value_per_share", "dcf_sensitivity_",
+                    "high_growth_scenario", "scenario_",
+                )
+                has_scenario_value = any(
+                    metric.value is not None and metric.name.startswith(dcf_output_names)
+                    for metric in outcome.analysis.valuation.metrics
+                )
+                valuation_notes = [
+                    (
+                        "해석 제한: 유효 DCF/시나리오 결과는 명시 가정에 따른 조건부 가치이며 확정 적정가나 추가매수 기준이 아닙니다."
+                        if has_scenario_value else
+                        "DCF 가정 또는 근거가 연결된 유효 시나리오가 없어 적정가 범위를 산출하지 않았습니다."
+                    ),
+                    "정책 제한: 승인된 매수 기준·안전마진 정책(D12)이 연결되지 않아 매수·추가매수 가격을 판단할 수 없습니다.",
+                    "브리핑 제한: 가격·가치 숫자에는 독립 검증 가능한 eligibility receipt와 종목 결속이 없어 최종 판단 브리핑에서 숨깁니다.",
+                    f"기준시각: {section_as_of.isoformat()}" if section_as_of else "기준시각: 확인 불가",
+                ]
+            else:
+                valuation_notes = [
+                    "저장 결과 검증 실패: 분석 본문·metric 또는 근거가 run.db와 일치하지 않아 내용을 숨겼습니다."
+                ]
             sections.append(replace(valuation_section, lines=(*valuation_section.lines, *valuation_notes)))
         comparison = context.get(PipelineStep.BUILD_COMPARISON.value)
         if comparison is not None:
@@ -638,12 +652,14 @@ def equity_analysis_services(
             task_status=report.availability.value,
             metadata={"report_ref": report_ref, **manifest},
         )
-        partial = report.availability is not ReportAvailability.AVAILABLE or research.availability is Availability.PARTIAL
+        partial = (report.availability is not ReportAvailability.AVAILABLE
+                   or research.availability is Availability.PARTIAL or bool(unverified_outputs))
         comparison_partial = comparison is not None and comparison.availability is Availability.PARTIAL
         status = Availability.PARTIAL if partial or comparison_partial else Availability.COMPLETE
         missing = []
         if research.availability is Availability.PARTIAL:
             missing.extend(research.missing_inputs)
+        missing.extend(f"unverified_analysis_result:{item}" for item in unverified_outputs)
         if comparison_partial and comparison is not None:
             missing.extend(comparison.missing_inputs)
         if status is Availability.PARTIAL and not missing:
@@ -664,6 +680,50 @@ def equity_analysis_services(
         PipelineStep.BUILD_COMPARISON: pairwise_comparison,
     }
     return RuntimeServices(handlers=handlers, run_db=run_db)
+
+
+def _validated_analysis_section(
+    result, *, name: str, title: str, stored_calculations: tuple[dict[str, object], ...], run_id: str,
+) -> ReportSectionInput:
+    """Render Phase 5 output only when it exactly matches its run-local ledger row."""
+    calculation_id = result.metadata.get("calculation_id")
+    matches = [
+        row for row in stored_calculations
+        if row.get("calculation_id") == calculation_id
+        and row.get("run_id") == run_id
+    ] if isinstance(calculation_id, str) and calculation_id else []
+    reason = "저장된 run.db 계산 결과와 분석 결과의 일치 여부를 검증할 수 없어 수치를 숨겼습니다."
+    if len(matches) != 1:
+        return ReportSectionInput(
+            name=name, title=title, lines=(reason,), status=ReportAvailability.UNAVAILABLE,
+            metadata={"subject": result.subject, "analysis_type": result.analysis_type,
+                      "numeric_output_verified": False},
+        )
+
+    row = matches[0]
+    expected_inputs = {
+        "subject": result.subject,
+        "evidence_ids": sorted({evidence_id for metric in result.metrics for evidence_id in metric.evidence_ids}),
+    }
+    expected_result = json.loads(json.dumps(
+        Phase5AssetAnalysisRuntime._jsonable(result), sort_keys=True, default=str,
+        separators=(",", ":"),
+    ))
+    if isinstance(expected_result.get("metadata"), dict):
+        expected_result["metadata"].pop("calculation_id", None)
+    try:
+        stored_inputs = json.loads(str(row.get("inputs_json") or ""))
+        stored_result = json.loads(str(row.get("result_json") or ""))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        stored_inputs = stored_result = None
+    if row.get("calculation_name") != result.analysis_type or stored_inputs != expected_inputs or stored_result != expected_result:
+        return ReportSectionInput(
+            name=name, title=title, lines=(reason,), status=ReportAvailability.PARTIAL,
+            metadata={"subject": result.subject, "analysis_type": result.analysis_type,
+                      "numeric_output_verified": False},
+        )
+    section = section_from_analysis_result(result, name=name, title=title)
+    return replace(section, metadata={**section.metadata, "numeric_output_verified": True})
 
 
 def _default_title(request: ModeRequest) -> str:

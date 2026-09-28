@@ -3,11 +3,13 @@ from __future__ import annotations
 import tempfile
 import unittest
 import json
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 
-from investment_stack.asset_analysis import Phase5AssetAnalysisRuntime
-from investment_stack.calculations import BusinessType
+from investment_stack.asset_analysis import EquityDeepResult, Phase5AssetAnalysisRuntime
+from investment_stack.calculations import AnalysisResult, BusinessType
+from investment_stack.calculations.common import AnalysisStatus, MetricResult
 from investment_stack.contracts.calculation import (
     CalculationRecord, CalculationStatus, FormulaRequirement, OutputKind, TypedOutput,
 )
@@ -20,6 +22,7 @@ from investment_stack.pipelines import FixedPipelinePlanner
 from investment_stack.reporting.runtime import Phase6ReportReviewRuntime
 from investment_stack.reporting.models import Availability as ReportAvailability, ReportSectionInput
 from investment_stack.routing import RequestMode
+from investment_stack.execution.analysis_modes import _validated_analysis_section
 from investment_stack.web_research import WebResearchAdapter, WebResearchBundleBackend
 from investment_stack.providers import EnvironmentCredentials, ProviderFallbackExecutor, build_default_provider_executor
 from investment_stack.research import Phase4ResearchRuntime
@@ -197,7 +200,83 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
         self.assertGreaterEqual(len(context["calculations"]), 2)
         self.assertTrue({"FANUC_fundamental", "FANUC_valuation", "data_quality"}.issubset(
             {section["section_name"] for section in context["report_sections"]}))
+        for section_name in ("FANUC_fundamental", "FANUC_valuation"):
+            section_row = next(row for row in context["report_sections"]
+                               if row["section_name"] == section_name)
+            self.assertTrue(json.loads(section_row["metadata_json"])["metadata"]["numeric_output_verified"])
         self.assertTrue(any(row["task_name"].startswith("execute:SINGLE_ASSET_ANALYSIS:") for row in context["task_states"]))
+
+    def test_same_calculation_id_cannot_authorize_a_forged_dcf_metric(self) -> None:
+        specs = self.specs()[:1]
+        run, base_services = self.make_services("r14-forged-dcf-result", specs)
+        handlers = dict(base_services.handlers)
+        original_research = handlers[next(step for step in handlers if step.value == "deep_research_requested_assets")]
+
+        def forged_research(request, context):
+            step_result = original_research(request, context)
+            outcomes = list(step_result.output["outcomes"])
+            outcome = outcomes[0]
+            original = outcome.analysis.valuation
+            metrics = tuple(
+                replace(metric, value=Decimal("1234.50"))
+                if metric.name == "dcf_value_per_share" else metric
+                for metric in original.metrics
+            )
+            forged = replace(original, metrics=metrics)
+            outcomes[0] = replace(
+                outcome,
+                analysis=replace(outcome.analysis, valuation=forged),
+            )
+            return replace(step_result, output={**step_result.output, "outcomes": tuple(outcomes)})
+
+        deep_step = next(step for step in handlers if step.value == "deep_research_requested_assets")
+        handlers[deep_step] = forged_research
+        services = replace(base_services, handlers=handlers)
+        result = execute_mode(ModeRequest(
+            run.run_id, RequestMode.SINGLE_ASSET_ANALYSIS, {"research_specs": specs},
+        ), services)
+        self.assertEqual(Availability.PARTIAL, result.availability)
+        self.assertIn("unverified_analysis_result:FANUC:valuation", result.missing_inputs)
+        report = next(state.result.output["report"] for state in result.step_states
+                      if state.step == "render_partial_aware_report")
+        section = next(item for item in report.sections if item.name == "FANUC_valuation")
+        self.assertEqual(ReportAvailability.PARTIAL, section.status)
+        self.assertNotIn("1234.50", " ".join(section.lines))
+        self.assertIn("일치 여부를 검증할 수 없어 수치를 숨겼습니다", " ".join(section.lines))
+        self.assertNotIn("유효 DCF/시나리오", " ".join(section.lines))
+        self.assertIn("저장 결과 검증 실패", " ".join(section.lines))
+
+    def test_valid_persisted_result_with_decimal_metadata_stays_verified(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        run = RunDatabaseManager(Path(temporary.name), "r14-decimal-result-metadata")
+        self.assertTrue(run.create().valid)
+        run.initialize_run_context(
+            request_mode="SINGLE_ASSET_ANALYSIS", analysis_as_of=CUTOFF,
+            analysis_timezone="Asia/Seoul", state_version=0, personal_db_instance_id="NONE:TEST",
+        )
+        persisted_result = AnalysisResult(
+            "FANUC", "valuation_analysis", AnalysisStatus.COMPLETE,
+            metrics=(MetricResult("dcf_value_per_share", Decimal("12.34"), "JPY/share"),),
+            metadata={"discount_rate": Decimal("0.095")},
+        )
+        calculation_id = "calc:decimal-metadata"
+        run.add_calculation(
+            calculation_id=calculation_id,
+            calculation_name=persisted_result.analysis_type,
+            formula="deterministic_phase5_asset_analysis",
+            inputs={"subject": persisted_result.subject, "evidence_ids": []},
+            result=Phase5AssetAnalysisRuntime._jsonable(persisted_result),
+        )
+        returned_result = replace(
+            persisted_result, metadata={**persisted_result.metadata, "calculation_id": calculation_id},
+        )
+        section = _validated_analysis_section(
+            returned_result, name="FANUC_valuation", title="FANUC Valuation",
+            stored_calculations=run.fetch_phase6_context()["calculations"], run_id=run.run_id,
+        )
+        self.assertTrue(section.metadata["numeric_output_verified"])
+        self.assertIn("12.34 JPY/share", " ".join(section.lines))
 
     def test_new_report_manifest_uses_only_its_own_content_addressed_sections(self) -> None:
         specs = self.specs()[:1]

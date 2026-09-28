@@ -4,14 +4,15 @@
 - 요구사항/설계: `REQ-2026-09-23-v1` / `DESIGN-2026-09-23-v0.1`
 - 기준: `46306d23b29eed81eea349c777d186bc00cf4fab`
 - 브랜치/작업 폴더: `codex/analysis-a` / `workspace/cache/analysis-a`
-- 최종 변경 tree: 미커밋 상태 (총괄의 commit 권한에 따라 커밋은 수행하지 않음)
+- 후속 기준: 총괄 커밋 `9525742179316c415b808dc4b9bf99ba3b60cf35` 이후 추가 변경 (미커밋; AGENTS의 총괄 단독 commit 규칙에 따라 총괄 통합 대상)
 
 ## 변경
 
 - `runtime/investment_stack/decisions/briefing.py`: `VALUATION_MODEL`의 `ANALYST_SCENARIO` 출력은 계산 상태가 `CALCULATED`여도 확정 적정가로 읽히지 않도록 조건부 산출값으로 표시한다.
 - `runtime/investment_stack/execution/analysis_modes.py`: 매수/추가매수/축소 수치의 보고서 노출은 계속 차단한다. 값이 run에 존재해도 요청 컨텍스트의 ID 일치만으로 독립 검증되는 적격성·종목·고정 cutoff 근거가 되지 않는다는 이유를 브리핑에 추가했다. 유효 DCF/시나리오 출력이 있을 때만 가정 기반 조건부 가치라고 표시하고, 값이 없으면 적정가 범위 미산출을 명시한다. D12 매수 기준·안전마진 정책 부재와 기준시각·검증 한계는 별도로 기록한다.
+- 후속 위조 방지: 보고서로 가기 전에 저장에 쓰는 `Phase5AssetAnalysisRuntime._jsonable` serializer와 동일한 JSON canonical 변환으로 `AnalysisResult` 전체를 만들고, 자동 추가된 calculation ID만 제거한 뒤 `metadata.calculation_id`가 가리키는 동일 run.db calculations row와 대조한다. 저장 row가 없거나 값이 다르면 section에서 분석 내용을 모두 숨기고 PARTIAL/UNAVAILABLE 및 사유를 남기며 mode result도 PARTIAL로 표시한다. 검증에 실패한 결과의 metric을 근거로 시나리오 존재/부재 문구를 만들지 않는다.
 - `tests/decisions/test_briefing.py`: `CALCULATED` analyst scenario가 조건부 가치로 표시되고 규모는 계속 WAIT임을 검증한다.
-- `tests/integration/test_r14_equity_mode_bundles.py`: ID가 같은 다른 숫자 및 같은 값의 다른 종목 위조가 최종 브리핑에 나오지 않음을 검증하고, DCF 가정 미제공과 D12 정책 부재의 별도 표기·고정 cutoff를 검증한다.
+- `tests/integration/test_r14_equity_mode_bundles.py`: ID가 같은 다른 숫자 및 같은 값의 다른 종목 위조가 최종 브리핑에 나오지 않음을 검증하고, DCF 가정 미제공과 D12 정책 부재의 별도 표기·고정 cutoff를 검증한다. 같은 calculation ID/evidence IDs의 가짜 DCF `1234.50`은 분석 섹션에서 숨기고 PARTIAL로 표시하며, 동일 run.db 결과와 Decimal metadata 결과는 일치 검증됨을 확인한다.
 
 ## 저장 계약 blocker
 
@@ -26,7 +27,7 @@
 
 ## 검증
 
-- 통과: `tests.decisions.test_briefing`, `tests.decisions.test_persisted_context`, `tests.integration.test_r14_equity_mode_bundles` — 27 tests, OK.
+- 통과: `tests.decisions.test_briefing`, `tests.decisions.test_persisted_context`, `tests.integration.test_r14_equity_mode_bundles` — serializer·검증 실패 안내 보정 포함 29 tests, OK. 위조 DCF, 정상 동일 결과, Decimal metadata 통합 반례를 모두 포함.
 - 통과: 변경된 Python 파일 `compileall` 및 `git diff --check`.
 - 확인된 반례: 동일 evidence/calculation ID와 다른 요청 숫자, 동일 값과 다른 instrument, 고정 cutoff 뒤의 evidence, 계산된 analyst scenario의 조건부 표기, 정책 부재 시 WAIT.
 - 미실행: 전체 회귀, wheel/sdist 빌드, 독립 코드 검토 및 최종 검증. 총괄 통합 이후 별도 수행 대상이다.
