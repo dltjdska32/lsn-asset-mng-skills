@@ -43,10 +43,14 @@ from investment_stack.personal.intent import (
 from investment_stack.personal.manager import PersonalDatabaseManager, StorageNotWritableError
 from investment_stack.personal.projection import (
     ProjectionState,
+    VerifiedPortfolioSnapshotProjection,
     compute_projection,
     replace_projection,
 )
-from investment_stack.personal.validation import validate_personal_database
+from investment_stack.personal.validation import (
+    validate_personal_connection,
+    validate_personal_database,
+)
 from investment_stack.storage.sqlite import sqlite_readonly_connection
 
 
@@ -937,6 +941,72 @@ class PersonalLedgerService:
             raise
         except (OSError, sqlite3.Error, ValueError) as exc:
             raise ProjectionError(f"projection query failed: {exc}") from exc
+
+    def get_verified_portfolio_snapshot_projection(
+        self,
+        *,
+        expected_personal_db_instance_id: str,
+        expected_state_version: int,
+        expected_snapshot_id: str,
+        expected_data_as_of: str,
+    ) -> VerifiedPortfolioSnapshotProjection:
+        """Read and bind the referenced snapshot row to its ledger projection.
+
+        The snapshot's JSON payload and valuation status are returned only as
+        descriptive metadata; neither is used as proof of marked values.
+        Projection quantities, cash, and liabilities are recomputed solely from
+        posted entries through the pinned state version.
+        """
+        if (
+            not isinstance(expected_state_version, int)
+            or isinstance(expected_state_version, bool)
+            or expected_state_version < 0
+        ):
+            raise ProjectionError("pinned state_version must be a non-negative integer")
+        if not all((expected_personal_db_instance_id, expected_snapshot_id, expected_data_as_of)):
+            raise ProjectionError("personal DB instance, snapshot ID, and data-as-of pin are required")
+        try:
+            database_path = self.manager._operational_database_path()
+            with sqlite_readonly_connection(database_path) as connection:
+                connection.execute("BEGIN")
+                report = validate_personal_connection(
+                    connection, path=database_path, require_current=True,
+                    migrations=self.manager.migrations,
+                )
+                if not report.valid or not report.instance_id:
+                    raise ProjectionError("personal database failed read-only validation")
+                if report.instance_id != expected_personal_db_instance_id:
+                    raise ProjectionError("personal DB instance does not match run pin")
+                row = connection.execute(
+                    "SELECT snapshot_id, state_version, snapshot_type, as_of, valuation_status "
+                    "FROM portfolio_snapshots WHERE snapshot_id = ?",
+                    (expected_snapshot_id,),
+                ).fetchone()
+                if row is None:
+                    raise ProjectionError("pinned portfolio snapshot row is missing")
+                if (
+                    row["state_version"] != expected_state_version
+                    or row["as_of"] != expected_data_as_of
+                ):
+                    raise ProjectionError("portfolio snapshot row does not match pinned version/as-of")
+                projection = compute_projection(
+                    connection, target_state_version=expected_state_version
+                )
+                if projection.state_version != expected_state_version:
+                    raise ProjectionError("computed personal projection does not match pinned version")
+                return VerifiedPortfolioSnapshotProjection(
+                    personal_db_instance_id=report.instance_id,
+                    snapshot_id=str(row["snapshot_id"]),
+                    state_version=int(row["state_version"]),
+                    snapshot_type=str(row["snapshot_type"]),
+                    data_as_of=str(row["as_of"]),
+                    valuation_status=row["valuation_status"],
+                    projection=projection,
+                )
+        except (OSError, sqlite3.Error, ValueError, StorageNotWritableError) as exc:
+            if isinstance(exc, ProjectionError):
+                raise
+            raise ProjectionError(f"pinned snapshot read failed: {exc}") from exc
 
     def get_positions(self):
         return self.get_projection_as_of_state_version(self.get_current_state_version()).positions
