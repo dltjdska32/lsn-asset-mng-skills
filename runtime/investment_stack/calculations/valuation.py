@@ -57,6 +57,7 @@ class DcfScenario:
     name: str
     assumptions: DcfAssumptions
     assumption_evidence_ids: tuple[str, ...]
+    assumption_value_bindings: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -65,6 +66,14 @@ class DcfScenario:
             raise ValueError("DCF scenario assumptions must use DcfAssumptions")
         if not isinstance(self.assumption_evidence_ids, tuple) or not self.assumption_evidence_ids or any(not isinstance(item, str) or not item.strip() for item in self.assumption_evidence_ids):
             raise ValueError("DCF scenario assumptions require evidence references")
+        if not isinstance(self.assumption_value_bindings, tuple):
+            raise ValueError("DCF assumption value bindings must be a tuple")
+        if any(
+            not isinstance(binding, tuple) or len(binding) != 2
+            or any(not isinstance(part, str) or not part.strip() for part in binding)
+            for binding in self.assumption_value_bindings
+        ):
+            raise ValueError("DCF assumption value bindings must be (parameter, evidence_id) pairs")
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,7 +211,28 @@ class EquityValuationAnalyzer:
             (f"selected model: {model.value}",),
             (),
             tuple(sorted(set(unknowns))),
-            {"model": model.value, "currency": data.currency, "current_price_available": data.current_price is not None, "unit_economics": data.unit_economics or {}},
+            {
+                "model": model.value,
+                "currency": data.currency,
+                "current_price_available": data.current_price is not None,
+                "unit_economics": data.unit_economics or {},
+                "dcf_assumption_value_bindings": [
+                    {
+                        "scenario": scenario.name.casefold(),
+                        "values": {
+                            "starting_fcf": str(scenario.assumptions.starting_fcf),
+                            "annual_growth_rate": str(scenario.assumptions.annual_growth_rate),
+                            "discount_rate": str(scenario.assumptions.discount_rate),
+                            "terminal_growth_rate": str(scenario.assumptions.terminal_growth_rate),
+                            "years": str(scenario.assumptions.years),
+                            "net_debt": str(scenario.assumptions.net_debt),
+                            "shares_outstanding": str(scenario.assumptions.shares_outstanding),
+                        },
+                        "evidence": dict(scenario.assumption_value_bindings),
+                    }
+                    for scenario in data.dcf_scenarios
+                ],
+            },
         )
 
     @staticmethod

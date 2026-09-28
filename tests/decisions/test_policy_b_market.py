@@ -4,8 +4,10 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from decimal import Decimal as D
 from pathlib import Path
 
+from investment_stack.calculations.valuation import DcfAssumptions, EquityValuationAnalyzer
 from investment_stack.decisions.policy_b_market import load_policy_b_market_evidence
 
 
@@ -18,7 +20,8 @@ def make_db(path: Path, *, status: str = "FRESH", evidence_value: str = "100", m
         CREATE TABLE run_metadata(run_id TEXT, analysis_as_of TEXT);
         CREATE TABLE evidence(evidence_id TEXT, run_id TEXT, evidence_type TEXT,
           instrument_id TEXT, metric TEXT, value_text TEXT, unit TEXT, currency TEXT,
-          observed_at TEXT, published_at TEXT, freshness_status TEXT, selection_state TEXT);
+          observed_at TEXT, published_at TEXT, freshness_status TEXT, selection_state TEXT,
+          source_uri TEXT, source_name TEXT, retrieved_at TEXT);
         CREATE TABLE market_observations(observation_id TEXT, run_id TEXT, evidence_id TEXT,
           instrument_id TEXT, observed_at TEXT, value_numeric NUMERIC, unit TEXT,
           metadata_json TEXT, currency TEXT, claimed_market_time TEXT, market_session_date TEXT,
@@ -30,7 +33,7 @@ def make_db(path: Path, *, status: str = "FRESH", evidence_value: str = "100", m
     """)
     connection.execute("INSERT INTO run_metadata VALUES (?, ?)", ("r1", AS_OF))
     connection.execute(
-        "INSERT INTO evidence VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO evidence (evidence_id,run_id,evidence_type,instrument_id,metric,value_text,unit,currency,observed_at,published_at,freshness_status,selection_state) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
         ("e1", "r1", "market", "ABC", "current_price", evidence_value, "USD/share", "USD",
          "2026-09-28T11:00:00+00:00", published, status, "SELECTED"),
     )
@@ -45,6 +48,60 @@ def make_db(path: Path, *, status: str = "FRESH", evidence_value: str = "100", m
                "calendar_id": "XNYS-v1"} if status == "LAST_VALID_CLOSE" else {}
     connection.execute("INSERT INTO freshness_assessments VALUES (?,?,?,?,?,?)",
                        ("f1", "r1", "e1", status, AS_OF, json.dumps(details)))
+    connection.commit()
+    connection.close()
+
+
+def add_valid_dcf(path: Path, *, forged_field: str | None = None, future_field: str | None = None, omit_field: str | None = None, duplicate_field: str | None = None, forged_output: bool = False) -> None:
+    connection = sqlite3.connect(path)
+    scenarios = {
+        "base": DcfAssumptions(D("100"), D("0.05"), D("0.10"), D("0.02"), 5, D("10"), D("10")),
+        "optimistic": DcfAssumptions(D("100"), D("0.08"), D("0.10"), D("0.02"), 5, D("10"), D("10")),
+    }
+    fields = ("starting_fcf", "annual_growth_rate", "discount_rate", "terminal_growth_rate", "years", "net_debt", "shares_outstanding")
+    units = {"starting_fcf": ("currency", "USD"), "annual_growth_rate": ("ratio", None),
+             "discount_rate": ("ratio", None), "terminal_growth_rate": ("ratio", None),
+             "years": ("years", None), "net_debt": ("currency", "USD"), "shares_outstanding": ("shares", None)}
+    records, metrics = [], []
+    for scenario_name, assumptions in scenarios.items():
+        values = {field: str(getattr(assumptions, field)) for field in fields}
+        evidence = {}
+        for field in fields:
+            if scenario_name == "base" and field == omit_field:
+                continue
+            evidence_id = f"{scenario_name}-{field}"
+            evidence[field] = evidence_id
+            stored_value = values[field]
+            if scenario_name == "base" and field == forged_field:
+                stored_value = str(D(stored_value) + D("1"))
+            published = "2026-09-28T13:00:00+00:00" if scenario_name == "base" and field == future_field else "2026-09-28T10:00:00+00:00"
+            unit, currency = units[field]
+            connection.execute(
+                "INSERT INTO evidence (evidence_id,run_id,evidence_type,instrument_id,metric,value_text,unit,currency,published_at,retrieved_at,selection_state,source_uri,source_name) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (evidence_id, "r1", "assumption", "ABC", f"dcf_assumption:{scenario_name}:{field}",
+                 json.dumps(stored_value), unit, currency, published, "2026-09-28T11:00:00+00:00",
+                 "SELECTED", "https://example.invalid/source", "synthetic receipt"),
+            )
+            if scenario_name == "base" and field == duplicate_field:
+                connection.execute(
+                    "INSERT INTO evidence (evidence_id,run_id,evidence_type,instrument_id,metric,value_text,unit,currency,published_at,retrieved_at,selection_state,source_uri,source_name) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (f"duplicate-{evidence_id}", "r1", "assumption", "ABC",
+                     f"dcf_assumption:{scenario_name}:{field}", json.dumps(stored_value), unit,
+                     currency, published, "2026-09-28T11:00:00+00:00", "SELECTED",
+                     "https://example.invalid/duplicate", "synthetic duplicate"),
+                )
+        records.append({"scenario": scenario_name, "values": values, "evidence": evidence})
+        metrics.append({"name": f"dcf_scenario_{scenario_name}",
+                        "value": str(EquityValuationAnalyzer._dcf_per_share(assumptions)),
+                        "evidence_ids": list(evidence.values())})
+    if forged_output:
+        next(metric for metric in metrics if metric["name"] == "dcf_scenario_base")["value"] = "999"
+    result = {"subject": "ABC", "analysis_type": "EQUITY_VALUATION",
+              "metadata": {"currency": "USD", "dcf_assumption_value_bindings": records}, "metrics": metrics}
+    inputs = {"subject": "ABC", "dcf_assumption_value_bindings": records}
+    connection.execute("INSERT INTO calculations VALUES (?,?,?,?,?,?,?)",
+                       ("valuation1", "r1", "EQUITY_VALUATION", "deterministic_phase5_asset_analysis",
+                        json.dumps(inputs), json.dumps(result), AS_OF))
     connection.commit()
     connection.close()
 
@@ -118,7 +175,36 @@ class PolicyBMarketAdapterTests(unittest.TestCase):
         self.assertIsNotNone(result.quote_per_share)
         self.assertIsNone(result.fair_value_per_share)
         self.assertIsNone(result.optimistic_fair_value_per_share)
-        self.assertTrue(any("assumption-value provenance" in reason for reason in result.unavailable_reasons))
+        self.assertTrue(any("calculation is missing" in reason or "binding contract" in reason for reason in result.unavailable_reasons))
+
+    def test_complete_value_bound_dcf_scenarios_produce_verified_money(self):
+        make_db(self.db)
+        add_valid_dcf(self.db)
+        result = self.load()
+        self.assertIsNotNone(result.fair_value_per_share, result.unavailable_reasons)
+        expected = EquityValuationAnalyzer._dcf_per_share(
+            DcfAssumptions(D("100"), D("0.05"), D("0.10"), D("0.02"), 5, D("10"), D("10"))
+        )
+        self.assertEqual(result.fair_value_per_share.amount, expected)
+        self.assertEqual(result.optimistic_fair_value_per_share.currency, "USD")
+        self.assertTrue(result.optimistic_fair_value_per_share.verified)
+
+    def test_forged_missing_or_future_dcf_binding_fails_closed(self):
+        for kwargs, expected in (
+            ({"forged_field": "annual_growth_rate"}, "does not equal"),
+            ({"future_field": "discount_rate"}, "future provenance"),
+            ({"omit_field": "shares_outstanding"}, "lacks complete"),
+            ({"duplicate_field": "net_debt"}, "duplicate, or conflicting"),
+            ({"forged_output": True}, "does not match its verified assumptions"),
+        ):
+            with self.subTest(kwargs=kwargs):
+                if self.db.exists():
+                    self.db.unlink()
+                make_db(self.db)
+                add_valid_dcf(self.db, **kwargs)
+                result = self.load()
+                self.assertIsNone(result.fair_value_per_share)
+                self.assertTrue(any(expected in reason for reason in result.unavailable_reasons))
 
 
 if __name__ == "__main__":

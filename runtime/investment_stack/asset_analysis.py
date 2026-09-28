@@ -122,7 +122,11 @@ class Phase5AssetAnalysisRuntime:
             calculation_id=calculation_id,
             calculation_name=result.analysis_type,
             formula="deterministic_phase5_asset_analysis",
-            inputs={"subject": result.subject, "evidence_ids": sorted({eid for metric in result.metrics for eid in metric.evidence_ids})},
+            inputs={
+                "subject": result.subject,
+                "evidence_ids": sorted({eid for metric in result.metrics for eid in metric.evidence_ids}),
+                "dcf_assumption_value_bindings": result.metadata.get("dcf_assumption_value_bindings", []),
+            },
             result=self._jsonable(result),
         )
         return AnalysisResult(

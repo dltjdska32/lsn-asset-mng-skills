@@ -7,9 +7,11 @@ calculations.  No personal state is mutated here.
 
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Callable, Iterable, Mapping
 
@@ -98,6 +100,34 @@ _TOTAL_MONEY_METRICS = frozenset(
         "market_cap",
     }
 )
+
+_DCF_ASSUMPTION_FIELDS = (
+    "starting_fcf", "annual_growth_rate", "discount_rate", "terminal_growth_rate",
+    "years", "net_debt", "shares_outstanding",
+)
+
+
+def _timestamp(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else None
+
+
+def _assumption_value(value: object) -> Decimal | None:
+    try:
+        parsed = json.loads(str(value))
+        if isinstance(parsed, bool) or parsed is None:
+            return None
+        result = Decimal(str(parsed))
+    except (TypeError, ValueError, InvalidOperation, json.JSONDecodeError):
+        return None
+    return result if result.is_finite() else None
+
+
 _PER_SHARE_MONEY_METRICS = frozenset({"eps", "dividend_per_share", "book_value_per_share"})
 _SHARE_COUNT_METRICS = frozenset({"shares_outstanding"})
 _FLOW_METRICS = frozenset({"revenue", "prior_revenue", "operating_income", "net_income", "cash_from_operations", "capex", "eps", "ebitda", "dividend_per_share"})
@@ -371,14 +401,39 @@ class LiveDeepResearchRuntime:
         if not fundamental_evidence and fundamentals.selected.evidence_id:
             fundamental_evidence = (fundamentals.selected.evidence_id,)
         valuation_evidence = tuple(dict.fromkeys((*market_evidence, *fundamental_evidence)))
-        available_evidence_ids = set(evidence_ids)
-        valid_dcf_scenarios = tuple(
+        evidence_rows = self.analysis.run_db.fetch_evidence_rows()
+        available_evidence_ids = {
+            row.get("evidence_id") for row in evidence_rows
+            if row.get("instrument_id") == spec.instrument_id and row.get("selection_state") == "SELECTED"
+        }
+        context = self.analysis.run_db.fetch_phase6_context()
+        run_metadata = context.get("run_metadata", {})
+        pinned_as_of = _timestamp(run_metadata.get("analysis_as_of")) if isinstance(run_metadata, Mapping) else None
+        candidate_dcf_scenarios = tuple(
             scenario for scenario in spec.dcf_scenarios
             if scenario.assumption_evidence_ids
             and set(scenario.assumption_evidence_ids).issubset(available_evidence_ids)
+            and self._verify_dcf_scenario_bindings(
+                scenario, evidence_rows, self.analysis.run_db.run_id,
+                spec.instrument_id, spec.currency, pinned_as_of
+            )
+        )
+        bound_policy_scenarios = [
+            scenario for scenario in candidate_dcf_scenarios
+            if scenario.name.casefold() in {"base", "optimistic"}
+        ]
+        policy_binding_ids = [
+            evidence_id
+            for scenario in bound_policy_scenarios
+            for _, evidence_id in scenario.assumption_value_bindings
+        ]
+        duplicate_policy_bindings = len(policy_binding_ids) != len(set(policy_binding_ids))
+        valid_dcf_scenarios = tuple(
+            scenario for scenario in candidate_dcf_scenarios
+            if not (duplicate_policy_bindings and scenario.name.casefold() in {"base", "optimistic"})
         )
         if len(valid_dcf_scenarios) != len(spec.dcf_scenarios):
-            normalization_warnings.append("valuation assumptions excluded: evidence references are missing or not part of this run")
+            normalization_warnings.append("valuation assumptions excluded: every assumption value must match unique selected same-run evidence available by pinned as_of")
 
         shares = metrics.get("shares_outstanding")
         equity = metrics.get("equity")
@@ -601,6 +656,86 @@ class LiveDeepResearchRuntime:
             for row in self.analysis.run_db.fetch_evidence_rows()
             if row.get("instrument_id") == instrument_id and row.get("selection_state") == "SELECTED"
         )
+
+    @staticmethod
+    def _verify_dcf_scenario_bindings(
+        scenario: DcfScenario,
+        evidence_rows: Iterable[Mapping[str, object]],
+        run_id: str,
+        instrument_id: str,
+        currency: str,
+        pinned_as_of: datetime | None,
+    ) -> bool:
+        """Require one selected, timestamped evidence value for every DCF input."""
+        if pinned_as_of is None or len(scenario.assumption_value_bindings) != len(_DCF_ASSUMPTION_FIELDS):
+            return False
+        if any(
+            not isinstance(binding, tuple) or len(binding) != 2
+            or any(not isinstance(part, str) or not part.strip() for part in binding)
+            for binding in scenario.assumption_value_bindings
+        ):
+            return False
+        bindings = dict(scenario.assumption_value_bindings)
+        if len(bindings) != len(_DCF_ASSUMPTION_FIELDS) or set(bindings) != set(_DCF_ASSUMPTION_FIELDS):
+            return False
+        binding_ids = tuple(bindings[field] for field in _DCF_ASSUMPTION_FIELDS)
+        if any(not isinstance(item, str) or not item for item in binding_ids) or len(set(binding_ids)) != len(binding_ids):
+            return False
+        if set(binding_ids) != set(scenario.assumption_evidence_ids):
+            return False
+        values = {
+            "starting_fcf": scenario.assumptions.starting_fcf,
+            "annual_growth_rate": scenario.assumptions.annual_growth_rate,
+            "discount_rate": scenario.assumptions.discount_rate,
+            "terminal_growth_rate": scenario.assumptions.terminal_growth_rate,
+            "years": Decimal(scenario.assumptions.years),
+            "net_debt": scenario.assumptions.net_debt,
+            "shares_outstanding": scenario.assumptions.shares_outstanding,
+        }
+        expected_units = {
+            "starting_fcf": "currency", "annual_growth_rate": "ratio", "discount_rate": "ratio",
+            "terminal_growth_rate": "ratio", "years": "years", "net_debt": "currency",
+            "shares_outstanding": "shares",
+        }
+        rows = tuple(evidence_rows)
+        for field in _DCF_ASSUMPTION_FIELDS:
+            evidence_id = bindings[field]
+            matching_metric = [
+                row for row in rows
+                if row.get("run_id") == run_id
+                and row.get("evidence_id") == evidence_id
+                and row.get("instrument_id") == instrument_id
+                and row.get("metric") == f"dcf_assumption:{scenario.name.casefold()}:{field}"
+                and row.get("selection_state") == "SELECTED"
+            ]
+            if len(matching_metric) != 1:
+                return False
+            row = matching_metric[0]
+            if row.get("evidence_type") != "assumption" or not row.get("source_uri") or not row.get("source_name"):
+                return False
+            if row.get("unit") != expected_units[field]:
+                return False
+            if field in {"starting_fcf", "net_debt"} and str(row.get("currency") or "").upper() != currency.upper():
+                return False
+            if field not in {"starting_fcf", "net_debt"} and row.get("currency") not in (None, ""):
+                return False
+            retrieved, published = _timestamp(row.get("retrieved_at")), _timestamp(row.get("published_at"))
+            if retrieved is None or published is None or retrieved > pinned_as_of or published > pinned_as_of:
+                return False
+            if _assumption_value(row.get("value_text")) != values[field]:
+                return False
+            # A competing selected value for the same assumption invalidates the slot,
+            # even if the chosen reference itself matches.
+            competitors = [
+                item for item in rows
+                if item.get("run_id") == run_id
+                and item.get("instrument_id") == instrument_id
+                and item.get("metric") == f"dcf_assumption:{scenario.name.casefold()}:{field}"
+                and item.get("selection_state") == "SELECTED"
+            ]
+            if len(competitors) != 1:
+                return False
+        return True
 
     def _evidence_type(self, evidence_id: str) -> str | None:
         for row in self.analysis.run_db.fetch_evidence_rows():
