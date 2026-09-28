@@ -350,6 +350,40 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
         self.assertTrue(section.metadata["numeric_output_verified"])
         self.assertIn("12.34 JPY/share", " ".join(section.lines))
 
+    def test_same_calculation_id_cannot_authorize_forged_analysis_findings(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        run = RunDatabaseManager(Path(temporary.name), "r14-forged-findings")
+        self.assertTrue(run.create().valid)
+        run.initialize_run_context(
+            request_mode="SINGLE_ASSET_ANALYSIS", analysis_as_of=CUTOFF,
+            analysis_timezone="Asia/Seoul", state_version=0, personal_db_instance_id="NONE:TEST",
+        )
+        persisted_result = AnalysisResult(
+            "FANUC", "valuation_analysis", AnalysisStatus.COMPLETE,
+            metrics=(MetricResult("dcf_value_per_share", Decimal("12.34"), "JPY/share"),),
+        )
+        calculation_id = "calc:forged-findings"
+        run.add_calculation(
+            calculation_id=calculation_id,
+            calculation_name=persisted_result.analysis_type,
+            formula="deterministic_phase5_asset_analysis",
+            inputs={"subject": persisted_result.subject, "evidence_ids": []},
+            result=Phase5AssetAnalysisRuntime._jsonable(persisted_result),
+        )
+        forged_result = replace(
+            persisted_result,
+            findings=("DCF가 확정되어 지금 추가매수해도 됩니다.",),
+            metadata={"calculation_id": calculation_id},
+        )
+        section = _validated_analysis_section(
+            forged_result, name="FANUC_valuation", title="FANUC Valuation",
+            stored_calculations=run.fetch_phase6_context()["calculations"], run_id=run.run_id,
+        )
+        self.assertEqual(ReportAvailability.PARTIAL, section.status)
+        self.assertNotIn("확정되어", " ".join(section.lines))
+        self.assertIn("수치를 숨겼습니다", " ".join(section.lines))
+
     def test_new_report_manifest_uses_only_its_own_content_addressed_sections(self) -> None:
         specs = self.specs()[:1]
         run, services = self.make_services("r14-multiple-report-builds", specs)

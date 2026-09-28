@@ -421,8 +421,20 @@ def equity_analysis_services(
             if not fundamental_section.metadata.get("numeric_output_verified"):
                 unverified_outputs.append(f"{outcome.instrument_id}:fundamental")
             sections.append(fundamental_section)
+            valuation_result = outcome.analysis.valuation
+            last_close_note = _persisted_last_valid_close_note(
+                outcome, run_snapshot, run_id=run_db.run_id,
+            )
+            validation_result = valuation_result
+            if last_close_note and valuation_result.findings and valuation_result.findings[-1] == last_close_note:
+                # deep_research appends this separately verifiable market note after
+                # Phase 5 persisted the calculation. Remove only the exact note we
+                # can independently reconstruct from persisted run-local records.
+                validation_result = replace(
+                    valuation_result, findings=valuation_result.findings[:-1],
+                )
             valuation_section = _validated_analysis_section(
-                outcome.analysis.valuation,
+                validation_result,
                 name=f"{outcome.instrument_id}_valuation",
                 title=f"{outcome.instrument_id} Valuation",
                 stored_calculations=run_snapshot["calculations"],
@@ -451,6 +463,8 @@ def equity_analysis_services(
                     "브리핑 제한: 가격·가치 숫자에는 독립 검증 가능한 eligibility receipt와 종목 결속이 없어 최종 판단 브리핑에서 숨깁니다.",
                     f"기준시각: {section_as_of.isoformat()}" if section_as_of else "기준시각: 확인 불가",
                 ]
+                if last_close_note:
+                    valuation_notes.append(last_close_note)
             else:
                 valuation_notes = [
                     "저장 결과 검증 실패: 분석 본문·metric 또는 근거가 run.db와 일치하지 않아 내용을 숨겼습니다."
@@ -751,6 +765,54 @@ def _validated_analysis_section(
         )
     section = section_from_analysis_result(result, name=name, title=title)
     return replace(section, metadata={**section.metadata, "numeric_output_verified": True})
+
+
+def _persisted_last_valid_close_note(outcome, snapshot: Mapping[str, object], *, run_id: str) -> str | None:
+    """Rebuild the non-live close note from selected, persisted run-local records."""
+    selected = outcome.market.selected
+    evidence_id = selected.evidence_id
+    if not isinstance(evidence_id, str) or not evidence_id:
+        return None
+    evidence_rows = [
+        row for row in snapshot.get("evidence", ())
+        if row.get("run_id") == run_id and row.get("evidence_id") == evidence_id
+        and row.get("instrument_id") == outcome.instrument_id
+        and row.get("evidence_type") == "market"
+        and row.get("metric") == "current_price"
+        and row.get("selection_state") == "SELECTED"
+        and row.get("freshness_status") == "LAST_VALID_CLOSE"
+    ]
+    observations = [
+        row for row in snapshot.get("market_observations", ())
+        if row.get("run_id") == run_id and row.get("evidence_id") == evidence_id
+        and row.get("instrument_id") == outcome.instrument_id
+        and row.get("freshness_status") == "LAST_VALID_CLOSE"
+    ]
+    assessments = [
+        row for row in snapshot.get("freshness_assessments", ())
+        if row.get("run_id") == run_id and row.get("evidence_id") == evidence_id
+        and row.get("status") == "LAST_VALID_CLOSE"
+    ]
+    if len(evidence_rows) != 1 or len(observations) != 1 or len(assessments) != 1:
+        return None
+    evidence, observation, assessment = evidence_rows[0], observations[0], assessments[0]
+    try:
+        details = json.loads(str(assessment.get("details_json") or ""))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    session_date = details.get("market_session_date")
+    public_time = details.get("public_available_time")
+    calendar_id = details.get("calendar_id")
+    currency = observation.get("currency") or evidence.get("currency")
+    claimed_time = observation.get("claimed_market_time")
+    if not all(isinstance(value, str) and value for value in (
+        session_date, public_time, calendar_id, currency, claimed_time,
+    )):
+        return None
+    return (
+        f"가격 입력 기준: {session_date} 마지막 유효 거래일 종가 ({currency}); "
+        f"종가 시각 {claimed_time}; 공개시각 {public_time}; 달력 {calendar_id}. 실시간 시세가 아닙니다."
+    )
 
 
 def _default_title(request: ModeRequest) -> str:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 import json
+from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
@@ -19,6 +20,7 @@ from investment_stack.reporting.runtime import section_from_analysis_result
 from investment_stack.asset_analysis import Phase5AssetAnalysisRuntime
 from investment_stack.calculations import BusinessType
 from investment_stack.deep_research import EquityResearchSpec, LiveDeepResearchRuntime
+from investment_stack.execution.analysis_modes import _persisted_last_valid_close_note, _validated_analysis_section
 from investment_stack.materiality import MaterialityConfig, MaterialityEngine
 from investment_stack.web_research.adapter import WebResearchAdapter
 from investment_stack.web_research.models import WebResearchHit, WebResearchResponse
@@ -126,6 +128,20 @@ class WeekendPriceEndToEndTests(unittest.TestCase):
             self.assertIn("실시간 시세가 아닙니다", report_text)
             self.assertIn("공개시각 2026-09-25T20:00:01+00:00", report_text)
             self.assertIn("2026-09-25 마지막 유효 거래일 종가", report_text)
+            valuation_result = outcome.analysis.valuation
+            close_note = _persisted_last_valid_close_note(outcome, phase6, run_id=run.run_id)
+            self.assertIsNotNone(close_note)
+            self.assertEqual(valuation_result.findings[-1], close_note)
+            canonical_result = replace(valuation_result, findings=valuation_result.findings[:-1])
+            guarded_section = _validated_analysis_section(
+                canonical_result, name="valuation", title="Valuation",
+                stored_calculations=phase6["calculations"], run_id=run.run_id,
+            )
+            self.assertTrue(guarded_section.metadata["numeric_output_verified"])
+            self.assertNotIn(close_note, guarded_section.lines)
+            final_lines = (*guarded_section.lines, close_note)
+            self.assertIn("마지막 유효 거래일 종가", " ".join(final_lines))
+            self.assertIn("실시간 시세가 아닙니다", " ".join(final_lines))
 
     def test_krx_close_flows_through_phase4_and_publication_gate(self) -> None:
         default = build_default_provider_executor()
