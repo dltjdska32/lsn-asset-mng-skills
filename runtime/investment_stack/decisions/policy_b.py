@@ -213,6 +213,10 @@ def evaluate_policy_b(inputs: PolicyBInput) -> PolicyBResult:
         stop_reasons.append("investment thesis impaired")
     if headroom == 0:
         stop_reasons.append("8% individual holding cap reached")
+    if cash_available == 0:
+        stop_reasons.append("cash is at or below the 10% investable portfolio floor")
+    if approved == 0:
+        stop_reasons.append("verified host risk budget is zero")
     additions_stopped = bool(stop_reasons)
     if additions_stopped:
         if budget is not None:

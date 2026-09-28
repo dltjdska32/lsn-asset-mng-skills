@@ -51,12 +51,23 @@ class PolicyBTests(unittest.TestCase):
         low_cash = evaluate_policy_b(full(cash=m("9000")))
         self.assertEqual(low_cash.cash_floor, D("10000"))
         self.assertEqual(low_cash.max_total_add_budget, D("0"))
+        self.assertTrue(low_cash.additions_stopped)
+        self.assertTrue(any("at or below" in reason for reason in low_cash.stop_reasons))
+        at_floor = evaluate_policy_b(full(cash=m("10000")))
+        self.assertEqual(at_floor.max_total_add_budget, D("0"))
+        self.assertTrue(at_floor.additions_stopped)
         cash_limited = evaluate_policy_b(full(cash=m("11000")))
         self.assertEqual(cash_limited.max_total_add_budget, D("1000"))
 
     def test_verified_host_risk_budget_can_tighten_policy_cap(self):
         result = evaluate_policy_b(full(approved_risk_budget=m("1000")))
         self.assertEqual(result.max_total_add_budget, D("1000"))
+
+    def test_zero_verified_host_risk_budget_explicitly_stops_additions(self):
+        result = evaluate_policy_b(full(approved_risk_budget=m("0")))
+        self.assertEqual(result.max_total_add_budget, D("0"))
+        self.assertTrue(result.additions_stopped)
+        self.assertTrue(any("risk budget is zero" in reason for reason in result.stop_reasons))
 
     def test_budget_is_capped_by_concentration_and_equal_tranches_sum_to_cap(self):
         result = evaluate_policy_b(full(holding_value=m("7500")))
