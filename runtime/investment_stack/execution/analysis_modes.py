@@ -23,7 +23,6 @@ from investment_stack.contracts.calculation import (
 )
 from investment_stack.contracts.slots import EligibilityDecision, EligibilityStatus, SelectedInputSet
 from investment_stack.decisions.briefing import NonPostingBriefing, generate_briefing
-from investment_stack.decisions.policy_b import Money, PolicyBInput, evaluate_policy_b
 from investment_stack.reporting.technical_section import build_technical_report_section
 from investment_stack.deep_research import EquityResearchOutcome, EquityResearchSpec, LiveDeepResearchRuntime, _observation_metrics
 from investment_stack.evidence import RunDatabaseManager
@@ -409,11 +408,8 @@ def equity_analysis_services(
             section_as_of = None
         sections: list[ReportSectionInput] = []
         unverified_outputs: list[str] = []
-        policy_calculation_refs: list[str] = []
         technical_sections: list[tuple[str, ReportSectionInput]] = []
         technical_sources = request.payload.get("technical_analysis")
-        specs = context[PipelineStep.AUTO_PASS_REQUESTED_ASSETS.value].output["specs"]
-        spec_by_id = {spec.instrument_id: spec for spec in specs}
         for outcome in outcomes:
             fundamental_section = _validated_analysis_section(
                 outcome.analysis.fundamental,
@@ -470,49 +466,9 @@ def equity_analysis_services(
                 ]
                 if last_close_note:
                     valuation_notes.append(last_close_note)
-                spec = spec_by_id[outcome.instrument_id]
-                reference = _policy_b_reference_levels(
-                    validation_result, run_snapshot["evidence"], run_id=run_db.run_id,
-                    instrument_id=outcome.instrument_id, currency=spec.currency,
-                    analysis_as_of=section_as_of,
+                valuation_notes.append(
+                    "B 정책 진입 가격은 대기: DCF 가정값만으로는 기준 적정가·개인 상태·거래 비용을 결속할 수 없습니다."
                 )
-                if reference is None:
-                    valuation_notes.append(
-                        "B 정책 참고 진입가는 계산 불가: 같은 실행의 공개시점이 확인된 기준 DCF 시나리오와 가정 근거가 부족합니다."
-                    )
-                else:
-                    base_value, evidence_refs, levels = reference
-                    policy_calc_id = f"calc:policy-b-reference:{uuid4().hex}"
-                    source_calc_id = str(validation_result.metadata["calculation_id"])
-                    run_db.add_calculation(
-                        calculation_id=policy_calc_id,
-                        calculation_name="policy_b_reference_levels",
-                        formula="D12-B-v1: dcf_scenario_base * (0.80, 0.75, 0.70)",
-                        inputs={"policy_id": "D12-B-2026-09-28", "subject": outcome.instrument_id,
-                                "valuation_calculation_id": source_calc_id,
-                                "base_value": str(base_value), "unit": f"{spec.currency}/share",
-                                "evidence_ids": list(evidence_refs),
-                                "analysis_as_of": section_as_of.isoformat()},
-                        result={"reference_levels": [str(value) for value in levels],
-                                "currency": spec.currency, "status": "REFERENCE_ONLY",
-                                "non_posting": True},
-                    )
-                    policy_calculation_refs.append(policy_calc_id)
-                    valuation_section = replace(
-                        valuation_section,
-                        calculation_ids=(*valuation_section.calculation_ids, policy_calc_id),
-                        metadata={**valuation_section.metadata,
-                                  "policy_b_reference_only": True,
-                                  "policy_b_calculation_id": policy_calc_id},
-                    )
-                    valuation_notes.append(
-                        "B 정책 조건부 참고 진입 상한(확정 매수 권고 아님): "
-                        + ", ".join(
-                            f"{index}차 {value} {spec.currency}/주 이하"
-                            for index, value in enumerate(levels, start=1)
-                        )
-                        + ". 가정·종목 위험 재확인과 현금·비중 검증 후 판단합니다."
-                    )
             else:
                 valuation_notes = [
                     "저장 결과 검증 실패: 분석 본문·metric 또는 근거가 run.db와 일치하지 않아 내용을 숨겼습니다."
@@ -762,7 +718,7 @@ def equity_analysis_services(
             status, output={"report": report, "report_availability": report.availability.value},
             evidence_refs=research.evidence_refs,
             calculation_refs=tuple(dict.fromkeys(
-                (*research.calculation_refs, *policy_calculation_refs,
+                (*research.calculation_refs,
                  *(comparison.calculation_refs if comparison else ()))
             )), report_refs=(report_ref,), missing_inputs=tuple(dict.fromkeys(missing)),
         )
@@ -819,60 +775,6 @@ def _validated_analysis_section(
         )
     section = section_from_analysis_result(result, name=name, title=title)
     return replace(section, metadata={**section.metadata, "numeric_output_verified": True})
-
-
-def _policy_b_reference_levels(
-    result, evidence_rows: tuple[dict[str, object], ...], *, run_id: str,
-    instrument_id: str, currency: str, analysis_as_of: datetime | None,
-) -> tuple[Decimal, tuple[str, ...], tuple[Decimal, Decimal, Decimal]] | None:
-    """Return reference tiers only for a pinned, evidenced base DCF result.
-
-    The caller must first match the whole Phase 5 result to its persisted
-    calculation. This extra gate checks the particular metric's provenance;
-    no personal-state or order eligibility is inferred from it.
-    """
-    if (
-        result.subject != instrument_id or result.status is not AnalysisStatus.COMPLETE
-        or analysis_as_of is None or analysis_as_of.tzinfo is None
-        or not isinstance(currency, str) or not currency.strip()
-    ):
-        return None
-    base_metrics = [metric for metric in result.metrics if metric.name == "dcf_scenario_base"]
-    if len(base_metrics) != 1:
-        return None
-    metric = base_metrics[0]
-    if (
-        metric.status is not AnalysisStatus.COMPLETE
-        or not isinstance(metric.value, Decimal) or not metric.value.is_finite()
-        or metric.value <= 0 or metric.unit != f"{currency}/share"
-        or not metric.evidence_ids or len(set(metric.evidence_ids)) != len(metric.evidence_ids)
-    ):
-        return None
-    for evidence_id in metric.evidence_ids:
-        matches = [row for row in evidence_rows if row.get("run_id") == run_id
-                   and row.get("instrument_id") == instrument_id
-                   and row.get("evidence_id") == evidence_id
-                   and row.get("selection_state") == "SELECTED"]
-        if len(matches) != 1:
-            return None
-        row = matches[0]
-        if not row.get("source_uri"):
-            return None
-        try:
-            published = datetime.fromisoformat(str(row.get("published_at")).replace("Z", "+00:00"))
-            retrieved = datetime.fromisoformat(str(row.get("retrieved_at")).replace("Z", "+00:00"))
-        except (TypeError, ValueError):
-            return None
-        if (published.tzinfo is None or retrieved.tzinfo is None
-                or published > analysis_as_of or retrieved > analysis_as_of):
-            return None
-    policy = evaluate_policy_b(PolicyBInput(
-        evaluation_currency=currency,
-        fair_value_per_share=Money(metric.value, currency, verified=True),
-    ))
-    if len(policy.entry_tiers) != 3 or policy.max_total_add_budget is not None:
-        return None
-    return metric.value, metric.evidence_ids, tuple(tier.price for tier in policy.entry_tiers)
 
 
 def _persisted_last_valid_close_note(outcome, snapshot: Mapping[str, object], *, run_id: str) -> str | None:

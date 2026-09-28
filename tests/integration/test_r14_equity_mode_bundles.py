@@ -27,7 +27,7 @@ from investment_stack.pipelines import FixedPipelinePlanner
 from investment_stack.reporting.runtime import Phase6ReportReviewRuntime
 from investment_stack.reporting.models import Availability as ReportAvailability, ReportSectionInput
 from investment_stack.routing import RequestMode
-from investment_stack.execution.analysis_modes import _policy_b_reference_levels, _validated_analysis_section
+from investment_stack.execution.analysis_modes import _validated_analysis_section
 from investment_stack.web_research import WebResearchAdapter, WebResearchBundleBackend
 from investment_stack.providers import EnvironmentCredentials, ProviderFallbackExecutor, build_default_provider_executor
 from investment_stack.providers.ohlcv import OHLCVParseResult
@@ -38,39 +38,6 @@ CUTOFF = "2026-08-14T10:00:00+09:00"
 
 
 class R14EquityModeBundleIntegrationTests(unittest.TestCase):
-    def test_policy_b_reference_levels_require_pinned_selected_dcf_evidence(self) -> None:
-        cutoff = datetime.fromisoformat(CUTOFF)
-        metric = MetricResult(
-            "dcf_scenario_base", Decimal("100"), "JPY/share",
-            evidence_ids=("ev:assumption",),
-        )
-        result = AnalysisResult(
-            "FANUC", "valuation_analysis", AnalysisStatus.COMPLETE,
-            metrics=(metric,),
-        )
-        evidence = {
-            "run_id": "run-b", "instrument_id": "FANUC", "evidence_id": "ev:assumption",
-            "selection_state": "SELECTED", "source_uri": "https://example.test/filing",
-            "published_at": "2026-08-13T10:00:00+09:00",
-            "retrieved_at": "2026-08-14T09:00:00+09:00",
-        }
-
-        def levels(candidate=result, rows=(evidence,)):
-            return _policy_b_reference_levels(
-                candidate, rows, run_id="run-b", instrument_id="FANUC",
-                currency="JPY", analysis_as_of=cutoff,
-            )
-
-        self.assertEqual((Decimal("80.00"), Decimal("75.00"), Decimal("70.00")), levels()[2])
-        self.assertIsNone(levels(rows=({**evidence, "published_at": "2026-08-15T10:00:00+09:00"},)))
-        self.assertIsNone(levels(rows=({**evidence, "retrieved_at": "2026-08-15T10:00:00+09:00"},)))
-        self.assertIsNone(levels(rows=({**evidence, "selection_state": "REJECTED"},)))
-        self.assertIsNone(levels(rows=({**evidence, "instrument_id": "KEYENCE"},)))
-        self.assertIsNone(levels(rows=(evidence, evidence)))
-        self.assertIsNone(levels(candidate=replace(result, metrics=(replace(metric, unit="USD/share"),))))
-        self.assertIsNone(levels(candidate=replace(result, metrics=(replace(metric, value=Decimal("NaN")),))))
-        self.assertIsNone(levels(candidate=replace(result, metrics=(replace(metric, evidence_ids=()),))))
-
     @staticmethod
     def technical_input():
         cutoff = datetime.fromisoformat(CUTOFF)
@@ -295,6 +262,8 @@ class R14EquityModeBundleIntegrationTests(unittest.TestCase):
         self.assertIn("유효 시나리오가 없어 적정가 범위", rendered_valuation)
         self.assertIn("D12 B 정책 확정", rendered_valuation)
         self.assertIn("실행 가능한 진입가·금액·수량은 계산하지 않습니다", rendered_valuation)
+        self.assertIn("B 정책 진입 가격은 대기", rendered_valuation)
+        self.assertNotIn("1차", rendered_valuation)
         self.assertIn("기준시각: 2026-08-14T10:00:00+09:00", rendered_valuation)
         self.assertNotIn("6,000 JPY/주", rendered_valuation)
         manifest = json.loads(report_manifest["metadata_json"])
