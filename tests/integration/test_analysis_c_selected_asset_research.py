@@ -216,7 +216,7 @@ class SelectedAssetResearchIntegrationTests(unittest.TestCase):
         self.assertIn("phase5_result_binding:FANUC:valuation", section.metadata["missing_inputs"])
         self.assertEqual("PARTIAL", section.status.value)
 
-    def test_verified_last_valid_close_note_survives_full_result_check(self) -> None:
+    def _last_close_runtime(self, session_date: str, *, naive_times: bool = False):
         original_runtime = self.runtime
 
         class LastCloseRuntime:
@@ -229,10 +229,10 @@ class SelectedAssetResearchIntegrationTests(unittest.TestCase):
                 outcome = original_runtime.analyze_equity(spec)
                 evidence_id = "evidence:synthetic-last-close"
                 observation_id = "observation:synthetic-last-close"
-                session_date = "2026-08-13"
-                claimed_time = "2026-08-13T15:00:00+09:00"
+                offset = "" if naive_times else "+09:00"
+                claimed_time = f"{session_date}T15:00:00{offset}"
                 calendar_id = "jpx-synthetic-calendar-v1"
-                public_time = "2026-08-13T15:05:00+09:00"
+                public_time = f"{session_date}T15:05:00{offset}"
                 assessment = FreshnessAssessment(
                     FreshnessStatus.LAST_VALID_CLOSE, claimed_time, 86400,
                     "verified completed exchange session", session_date, "LAST_VALID_CLOSE",
@@ -269,7 +269,8 @@ class SelectedAssetResearchIntegrationTests(unittest.TestCase):
                 original_runtime.analysis.run_db.add_freshness_assessment(
                     freshness_id="freshness:synthetic-last-close", evidence_id=evidence_id,
                     status=FreshnessStatus.LAST_VALID_CLOSE.value,
-                    details={"market_session_date": session_date, "quote_kind": "LAST_VALID_CLOSE",
+                    details={"market_session_date": session_date, "effective_time": claimed_time,
+                             "quote_kind": "LAST_VALID_CLOSE",
                              "calendar_id": calendar_id,
                              "public_available_time": public_time},
                 )
@@ -285,12 +286,33 @@ class SelectedAssetResearchIntegrationTests(unittest.TestCase):
                 return replace(outcome, market=market, analysis=analyzed,
                                evidence_ids=(*outcome.evidence_ids, evidence_id))
 
-        result = LiveSelectedAssetResearch(LastCloseRuntime(), {"FANUC": self.spec})(
+        return LastCloseRuntime()
+
+    def test_verified_last_valid_close_note_survives_full_result_check(self) -> None:
+        result = LiveSelectedAssetResearch(self._last_close_runtime("2026-08-13"), {"FANUC": self.spec})(
             ("FANUC",), ModeRequest(self.run.run_id, RequestMode.PERSONAL_PORTFOLIO_ANALYSIS))
         section = result.sections[0]
         self.assertTrue(any("2026-08-13 마지막 유효 거래일 종가" in line for line in section.lines),
                         (section.lines, dict(section.metadata)))
         self.assertNotIn("phase5_result_binding:FANUC:valuation", section.metadata["missing_inputs"])
+
+    def test_future_last_valid_close_is_rejected_against_pinned_run_clock(self) -> None:
+        result = LiveSelectedAssetResearch(self._last_close_runtime("2026-08-15"), {"FANUC": self.spec})(
+            ("FANUC",), ModeRequest(self.run.run_id, RequestMode.PERSONAL_PORTFOLIO_ANALYSIS))
+        section = result.sections[0]
+        self.assertFalse(any("2026-08-15 마지막 유효 거래일 종가" in line for line in section.lines))
+        self.assertTrue(any("저장된 계산 근거와 일치하지 않아 표시하지 않았습니다" in line
+                            for line in section.lines))
+        self.assertIn("phase5_result_binding:FANUC:valuation", section.metadata["missing_inputs"])
+        self.assertEqual("PARTIAL", section.status.value)
+
+    def test_last_valid_close_with_naive_timestamp_is_rejected(self) -> None:
+        result = LiveSelectedAssetResearch(self._last_close_runtime("2026-08-13", naive_times=True),
+                                           {"FANUC": self.spec})(
+            ("FANUC",), ModeRequest(self.run.run_id, RequestMode.PERSONAL_PORTFOLIO_ANALYSIS))
+        section = result.sections[0]
+        self.assertFalse(any("마지막 유효 거래일 종가" in line for line in section.lines))
+        self.assertIn("phase5_result_binding:FANUC:valuation", section.metadata["missing_inputs"])
 
     def test_portfolio_pipeline_reports_selected_asset_evaluation_section(self) -> None:
         portfolio = PortfolioAnalysisRequest(

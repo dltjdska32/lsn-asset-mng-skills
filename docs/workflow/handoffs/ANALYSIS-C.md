@@ -45,3 +45,10 @@
 - User-facing metric names are Korean labels; internal metric keys are omitted from selected-asset body lines. DCF values retain the conditional-assumption / not-a-buy-price wording.
 - Verification: selected-asset tests 11 passed; weekend-price E2E tests 4 passed; portfolio thesis bundle tests 3 passed; `git diff --check` clean.
 - Verification used system Python 3.14 and workspace-local temporary `.testdeps/tzdata` because the runtime lacks Windows timezone data. Remove `.testdeps` before staging; do not commit it.
+
+## Final-verification future-close follow-up
+
+- LAST_VALID_CLOSE provenance is now rejected unless the pinned run timestamp and every observed, effective, claimed-market, and public-availability timestamp are ISO timezone-aware and no later than the pinned instant. The session date must not exceed the pinned run's local date, and must agree with the selected observation plus same-run observation/freshness rows. Stored market value, unit, provider, observation ID, session, quote kind, calendar, and publication fields must agree with the selected Phase 4 result.
+- Added regression cases for the normal prior close, the reported 2026-08-15 future close against the 2026-08-14 10:00+09:00 pinned clock, and naive timestamps. Future/naive data hides the provenance note and fails valuation-result binding closed; the forged findings/unknowns test remains in the same focused suite.
+- Final verification: selected-asset integration 13 passed; weekend-price E2E 4 passed; portfolio thesis bundle 3 passed; `git diff --check` clean.
+- Test interpreter: system Python 3.14. `tzdata` was installed only under temporary workspace-local `.testdeps` for Windows `zoneinfo`; remove before staging, never commit.

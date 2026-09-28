@@ -8,8 +8,10 @@ orders. Phase 4 evidence and Phase 5 calculations remain in the bound run.db.
 from __future__ import annotations
 
 import json
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Mapping
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from investment_stack.deep_research import EquityResearchSpec, LiveDeepResearchRuntime
 from investment_stack.execution.models import ModeRequest
@@ -261,6 +263,7 @@ class LiveSelectedAssetResearch:
                 or getattr(observation, "evidence_type", None) != "market"
                 or getattr(observation, "instrument_id", None) != spec.instrument_id
                 or getattr(observation, "currency", None) != spec.currency
+                or getattr(observation, "market_session_date", None) != getattr(assessment, "market_session_date", None)
                 or run_evidence[evidence_id].get("instrument_id") != spec.instrument_id
                 or run_evidence[evidence_id].get("selection_state") != "SELECTED"):
             return None
@@ -280,6 +283,27 @@ class LiveSelectedAssetResearch:
         calendar_id = getattr(assessment, "calendar_id", None)
         public_time = getattr(assessment, "public_available_time", None)
         try:
+            pinned = LiveSelectedAssetResearch._parse_aware_time(
+                str(context["run_metadata"]["analysis_as_of"]),
+            )
+            effective = LiveSelectedAssetResearch._parse_aware_time(
+                str(getattr(assessment, "effective_time", None)),
+            )
+            claimed = LiveSelectedAssetResearch._parse_aware_time(str(claimed_time))
+            observed = LiveSelectedAssetResearch._parse_aware_time(str(getattr(observation, "observed_at", None)))
+            published = LiveSelectedAssetResearch._parse_aware_time(str(public_time))
+            stored_observed = LiveSelectedAssetResearch._parse_aware_time(str(market_row.get("observed_at")))
+            run_timezone = ZoneInfo(str(context["run_metadata"]["analysis_timezone"]))
+            session_day = date.fromisoformat(str(session_date))
+        except (KeyError, TypeError, ValueError, ZoneInfoNotFoundError):
+            return None
+        cutoff = pinned.astimezone(timezone.utc)
+        if (any(item > cutoff for item in (effective, claimed, observed, published, stored_observed))
+                or observed != stored_observed
+                or session_day > pinned.astimezone(run_timezone).date()
+                or claimed.date() != session_day):
+            return None
+        try:
             stored_value = Decimal(str(market_row.get("value_numeric")))
             selected_value = Decimal(str(getattr(observation, "value", None)))
         except (InvalidOperation, TypeError, ValueError):
@@ -296,6 +320,7 @@ class LiveSelectedAssetResearch:
                 or freshness_row.get("status") != FreshnessStatus.LAST_VALID_CLOSE.value
                 or not isinstance(details, dict)
                 or details.get("market_session_date") != session_date
+                or details.get("effective_time") != getattr(assessment, "effective_time", None)
                 or details.get("quote_kind") != getattr(assessment, "quote_kind", None)
                 or details.get("calendar_id") != calendar_id
                 or details.get("public_available_time") != public_time
@@ -305,6 +330,18 @@ class LiveSelectedAssetResearch:
             f"가격 입력 기준: {session_date} 마지막 유효 거래일 종가 ({spec.currency}); "
             f"종가 시각 {claimed_time}; 공개시각 {public_time}; 달력 {calendar_id}. 실시간 시세가 아닙니다."
         )
+
+    @staticmethod
+    def _parse_aware_time(value: str) -> datetime:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("timestamp is required")
+        normalized = value.strip()
+        if normalized.endswith("Z"):
+            normalized = normalized[:-1] + "+00:00"
+        parsed = datetime.fromisoformat(normalized)
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise ValueError("timestamp must include a timezone")
+        return parsed
 
     @staticmethod
     def _serialize_analysis_result(result: object) -> dict[str, object]:
