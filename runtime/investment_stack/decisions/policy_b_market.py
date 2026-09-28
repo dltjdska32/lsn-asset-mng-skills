@@ -15,6 +15,9 @@ from typing import Any
 
 from investment_stack.decisions.policy_b import Money
 from investment_stack.calculations.valuation import DcfAssumptions, EquityValuationAnalyzer
+from investment_stack.freshness import FreshnessEngine
+from investment_stack.freshness.calendar import get_pinned_calendar
+from investment_stack.providers import ProviderObservation
 from investment_stack.storage.sqlite import sqlite_readonly_connection
 
 
@@ -173,7 +176,6 @@ def _persisted_dcf_values(
     metrics = result.get("metrics")
     if not isinstance(metrics, list):
         return None, None, "persisted valuation metrics are malformed"
-    output: dict[str, Money] = {}
     for name in ("base", "optimistic"):
         metric_name = f"dcf_scenario_{name}"
         found = [metric for metric in metrics if isinstance(metric, dict) and metric.get("name") == metric_name]
@@ -187,8 +189,85 @@ def _persisted_dcf_values(
         calculated = EquityValuationAnalyzer._dcf_per_share(assumptions[name])
         if reported is None or calculated != reported:
             return None, None, f"persisted {name} fair value does not match its verified assumptions ({calculated} != {reported})"
-        output[name] = Money(reported, currency.upper(), verified=True)
-    return output["base"], output["optimistic"], None
+    # The current evidence schema has no authenticated source-content receipt
+    # contract. Matching selected rows and URLs proves internal consistency,
+    # not that a source actually supports the assumption value.
+    return None, None, (
+        "DCF fair values unavailable: no independently verifiable source-content receipt "
+        "contract is available for assumption evidence"
+    )
+
+
+_QUOTE_UNIT_BY_CURRENCY = {
+    "USD": "USD/share", "EUR": "EUR/share", "JPY": "JPY/share", "GBP": "GBP/share",
+    "CAD": "CAD/share", "AUD": "AUD/share", "CHF": "CHF/share", "CNY": "CNY/share",
+    "HKD": "HKD/share", "KRW": "KRW/share",
+}
+
+
+def _reassess_persisted_quote(row: sqlite3.Row, *, cutoff: datetime) -> tuple[bool, str | None]:
+    """Rebuild freshness from the persisted observation and trusted calendar."""
+    metadata = _json(row["market_metadata"])
+    if metadata is None:
+        return False, "persisted market observation metadata is missing or malformed"
+    try:
+        value = Decimal(str(row["value_text"]))
+        source_tier = int(row["source_tier"] or 0)
+    except (InvalidOperation, TypeError, ValueError):
+        return False, "persisted quote value or source tier is invalid"
+    observation = ProviderObservation(
+        evidence_type="market",
+        source_name=str(row["source_name"] or ""),
+        source_url=row["source_uri"],
+        source_tier=source_tier,
+        provider_id=str(row["provider_id"] or ""),
+        value=value,
+        unit=row["unit"],
+        currency=row["currency"],
+        instrument_id=row["instrument_id"],
+        metric=row["metric"],
+        retrieved_at=row["retrieved_at"],
+        observed_at=row["observed_at"],
+        published_at=row["published_at"],
+        claimed_market_time=row["claimed_market_time"],
+        market_session_date=row["market_session_date"],
+        updated_at=row["updated_at"],
+        event_time=row["event_time"],
+        metadata=metadata,
+    )
+    exchange = str(metadata.get("exchange") or "").upper()
+    aliases = {"NMS": "NASDAQ", "NASDAQGS": "NASDAQ", "NYQ": "NYSE", "KS": "KRX"}
+    exchange = aliases.get(exchange, exchange)
+    calendar = get_pinned_calendar(exchange) if row["freshness_status"] == "LAST_VALID_CLOSE" else None
+    if row["freshness_status"] == "LAST_VALID_CLOSE" and calendar is None:
+        return False, "LAST_VALID_CLOSE has no trusted pinned calendar for its exchange"
+    try:
+        assessed = FreshnessEngine().assess(
+            observation, analysis_as_of=cutoff.isoformat(), calendar=calendar,
+        )
+    except (TypeError, ValueError, OverflowError):
+        return False, "persisted quote cannot be independently reassessed"
+    stored_status = row["freshness_status"]
+    if assessed.status.value != stored_status:
+        return False, (
+            f"persisted freshness label {stored_status} does not match independently assessed "
+            f"{assessed.status.value}"
+        )
+    if stored_status == "LAST_VALID_CLOSE":
+        details = _json(row["assessment_details"])
+        if details is None:
+            return False, "LAST_VALID_CLOSE assessment details are missing"
+        if (
+            details.get("calendar_id") != calendar.schedule_id
+            or assessed.calendar_id != calendar.schedule_id
+            or details.get("market_session_date") != assessed.market_session_date
+            or details.get("quote_kind") != assessed.quote_kind
+            or _dt(details.get("effective_time")) != _dt(assessed.effective_time)
+            or _dt(details.get("public_available_time")) != _dt(assessed.public_available_time)
+            or _dt(row["published_at"]) != _dt(assessed.public_available_time)
+        ):
+            return False, "persisted LAST_VALID_CLOSE fields do not match pinned calendar reassessment"
+    return True, None
 
 
 def load_policy_b_market_evidence(
@@ -228,7 +307,8 @@ def load_policy_b_market_evidence(
                     reasons.append("pinned run metadata does not match run_id/as_of")
                 else:
                     rows = connection.execute(
-                        "SELECT e.*, m.observation_id, m.value_numeric, m.unit AS market_unit, "
+                        "SELECT e.*, m.observation_id, m.instrument_id AS market_instrument_id, "
+                        "m.value_numeric, m.unit AS market_unit, "
                         "m.currency AS market_currency, m.observed_at AS market_observed_at, "
                         "m.claimed_market_time, m.market_session_date, m.provider_id AS market_provider_id, "
                         "m.freshness_status AS market_freshness, m.metadata_json AS market_metadata, "
@@ -251,38 +331,41 @@ def load_policy_b_market_evidence(
                         if status not in {"FRESH", "DELAYED", "LAST_VALID_CLOSE"}:
                             reasons.append(f"quote freshness {status or 'UNKNOWN'} is not eligible")
                         currency = row["currency"]
-                        if not currency or currency != row["market_currency"]:
+                        if not currency or str(currency).upper() != str(row["market_currency"] or "").upper():
                             reasons.append("persisted quote currency is missing or inconsistent")
-                        if row["metric"] != "current_price" or row["unit"] not in {"USD/share", "EUR/share", "JPY/share", "GBP/share", "CAD/share", "AUD/share", "CHF/share", "CNY/share", "HKD/share", "KRW/share"}:
-                            reasons.append("persisted quote unit is not a supported per-share currency unit")
+                        expected_unit = _QUOTE_UNIT_BY_CURRENCY.get(str(currency or "").upper())
+                        if (
+                            row["metric"] != "current_price" or not expected_unit
+                            or row["unit"] != expected_unit or row["market_unit"] != expected_unit
+                        ):
+                            reasons.append("persisted evidence/market units do not match the quote currency per-share unit")
+                        if (
+                            row["instrument_id"] != instrument_id
+                            or row["market_instrument_id"] != instrument_id
+                            or row["market_instrument_id"] != row["instrument_id"]
+                        ):
+                            reasons.append("persisted evidence and market observation instrument IDs do not match")
                         try:
-                            value = Decimal(str(row["value_text"]))
+                            value = _stored_number(row["value_text"])
                             market_value = Decimal(str(row["value_numeric"]))
                         except (InvalidOperation, TypeError, ValueError):
                             value = market_value = Decimal("NaN")
-                        if not value.is_finite() or value <= 0 or market_value != value:
+                        if value is None or not value.is_finite() or value <= 0 or market_value != value:
                             reasons.append("persisted evidence and market quote values do not match as a positive finite number")
                         details = _json(row["assessment_details"])
                         metadata = _json(row["market_metadata"])
                         timestamps = [
-                            _dt(row["observed_at"]), _dt(row["published_at"]),
+                            _dt(row["observed_at"]), _dt(row["published_at"]), _dt(row["retrieved_at"]),
                             _dt(row["market_observed_at"]), _dt(row["claimed_market_time"]),
                         ]
                         if any(item is None for item in timestamps):
                             reasons.append("quote observation/publication timestamps are incomplete")
                         elif any(item > cutoff for item in timestamps if item is not None):
                             reasons.append("future-dated quote evidence is not eligible")
-                        if status == "LAST_VALID_CLOSE":
-                            if details is None or details.get("quote_kind") != "LAST_VALID_CLOSE":
-                                reasons.append("LAST_VALID_CLOSE lacks persisted calendar assessment")
-                            if not details or not details.get("calendar_id") or not details.get("market_session_date"):
-                                reasons.append("LAST_VALID_CLOSE lacks verified calendar/session identity")
-                            if row["market_session_date"] != (details or {}).get("market_session_date"):
-                                reasons.append("LAST_VALID_CLOSE session date does not match its assessment")
-                            if not details or _dt(details.get("effective_time")) is None or _dt(details.get("public_available_time")) is None:
-                                reasons.append("LAST_VALID_CLOSE effective/public timestamps are missing")
-                            elif _dt(details.get("effective_time")) > cutoff or _dt(details.get("public_available_time")) > cutoff:
-                                reasons.append("LAST_VALID_CLOSE assessment contains a future timestamp")
+                        if status in {"FRESH", "DELAYED", "LAST_VALID_CLOSE"}:
+                            verified, freshness_reason = _reassess_persisted_quote(row, cutoff=cutoff)
+                            if not verified and freshness_reason:
+                                reasons.append(freshness_reason)
                         if metadata is None:
                             reasons.append("persisted quote metadata is missing or malformed")
                         if not reasons:

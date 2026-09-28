@@ -14,14 +14,44 @@ from investment_stack.decisions.policy_b_market import load_policy_b_market_evid
 AS_OF = "2026-09-28T12:00:00+00:00"
 
 
-def make_db(path: Path, *, status: str = "FRESH", evidence_value: str = "100", market_value: str = "100", published: str = "2026-09-28T11:00:00+00:00") -> None:
+def make_db(
+    path: Path,
+    *,
+    status: str = "FRESH",
+    evidence_value: str = "100",
+    market_value: str = "100",
+    published: str | None = None,
+    as_of: str = AS_OF,
+    instrument_id: str | None = None,
+    market_instrument_id: str | None = None,
+    evidence_unit: str | None = None,
+    market_unit: str | None = None,
+    market_currency: str = "USD",
+    observed_at: str | None = None,
+    session_date: str | None = None,
+    calendar_id: str | None = None,
+) -> None:
+    is_close = status == "LAST_VALID_CLOSE"
+    instrument_id = instrument_id or ("NASDAQ:ABC" if is_close else "ABC")
+    market_instrument_id = market_instrument_id or instrument_id
+    if is_close:
+        observed_at = observed_at or "2026-09-25T20:00:00+00:00"
+        session_date = session_date or "2026-09-25"
+        published = published or "2026-09-25T20:05:00+00:00"
+        calendar_id = calendar_id or "nasdaq-2026-09-official-snapshot-v1"
+    else:
+        observed_at = observed_at or "2026-09-28T11:55:00+00:00"
+        published = published or observed_at
+    evidence_unit = evidence_unit or "USD/share"
+    market_unit = market_unit or "USD/share"
     connection = sqlite3.connect(path)
     connection.executescript("""
         CREATE TABLE run_metadata(run_id TEXT, analysis_as_of TEXT);
         CREATE TABLE evidence(evidence_id TEXT, run_id TEXT, evidence_type TEXT,
           instrument_id TEXT, metric TEXT, value_text TEXT, unit TEXT, currency TEXT,
           observed_at TEXT, published_at TEXT, freshness_status TEXT, selection_state TEXT,
-          source_uri TEXT, source_name TEXT, retrieved_at TEXT);
+          source_uri TEXT, source_name TEXT, retrieved_at TEXT, source_tier INTEGER,
+          provider_id TEXT, updated_at TEXT, event_time TEXT);
         CREATE TABLE market_observations(observation_id TEXT, run_id TEXT, evidence_id TEXT,
           instrument_id TEXT, observed_at TEXT, value_numeric NUMERIC, unit TEXT,
           metadata_json TEXT, currency TEXT, claimed_market_time TEXT, market_session_date TEXT,
@@ -31,23 +61,23 @@ def make_db(path: Path, *, status: str = "FRESH", evidence_value: str = "100", m
         CREATE TABLE calculations(calculation_id TEXT, run_id TEXT, calculation_name TEXT,
           formula TEXT, inputs_json TEXT, result_json TEXT, created_at TEXT);
     """)
-    connection.execute("INSERT INTO run_metadata VALUES (?, ?)", ("r1", AS_OF))
+    connection.execute("INSERT INTO run_metadata VALUES (?, ?)", ("r1", as_of))
     connection.execute(
-        "INSERT INTO evidence (evidence_id,run_id,evidence_type,instrument_id,metric,value_text,unit,currency,observed_at,published_at,freshness_status,selection_state) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-        ("e1", "r1", "market", "ABC", "current_price", evidence_value, "USD/share", "USD",
-         "2026-09-28T11:00:00+00:00", published, status, "SELECTED"),
+        "INSERT INTO evidence (evidence_id,run_id,evidence_type,instrument_id,metric,value_text,unit,currency,observed_at,published_at,freshness_status,selection_state,retrieved_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        ("e1", "r1", "market", instrument_id, "current_price", evidence_value, evidence_unit, "USD",
+         observed_at, published, status, "SELECTED", published),
     )
     connection.execute(
         "INSERT INTO market_observations VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        ("o1", "r1", "e1", "ABC", "2026-09-28T11:00:00+00:00", market_value, "USD/share",
-         json.dumps({"quote_kind": "REGULAR"}), "USD", "2026-09-28T11:00:00+00:00", "2026-09-28",
+        ("o1", "r1", "e1", market_instrument_id, observed_at, market_value, market_unit,
+         json.dumps({"quote_kind": "LAST_VALID_CLOSE" if is_close else "REGULAR", "exchange": "NASDAQ"}), market_currency, observed_at, session_date,
          "synthetic", status),
     )
-    details = {"quote_kind": status, "effective_time": "2026-09-28T11:00:00+00:00",
-               "public_available_time": published, "market_session_date": "2026-09-28",
-               "calendar_id": "XNYS-v1"} if status == "LAST_VALID_CLOSE" else {}
+    details = {"quote_kind": "LAST_VALID_CLOSE", "effective_time": observed_at,
+               "public_available_time": published, "market_session_date": session_date,
+               "calendar_id": calendar_id} if is_close else {}
     connection.execute("INSERT INTO freshness_assessments VALUES (?,?,?,?,?,?)",
-                       ("f1", "r1", "e1", status, AS_OF, json.dumps(details)))
+                       ("f1", "r1", "e1", status, as_of, json.dumps(details)))
     connection.commit()
     connection.close()
 
@@ -114,8 +144,8 @@ class PolicyBMarketAdapterTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def load(self):
-        return load_policy_b_market_evidence(self.db, run_id="r1", instrument_id="ABC", as_of=AS_OF)
+    def load(self, *, instrument_id="ABC", as_of=AS_OF):
+        return load_policy_b_market_evidence(self.db, run_id="r1", instrument_id=instrument_id, as_of=as_of)
 
     def test_valid_same_run_quote_becomes_verified_money(self):
         make_db(self.db)
@@ -131,11 +161,28 @@ class PolicyBMarketAdapterTests(unittest.TestCase):
         self.assertIsNone(result.quote_per_share)
         self.assertTrue(any("not eligible" in reason for reason in result.unavailable_reasons))
 
-    def test_last_valid_close_requires_persisted_session_calendar_proof(self):
-        make_db(self.db, status="LAST_VALID_CLOSE")
-        result = self.load()
+    def test_weekend_accepts_pinned_prior_completed_exchange_close(self):
+        weekend = "2026-09-27T16:00:00+00:00"
+        make_db(self.db, status="LAST_VALID_CLOSE", as_of=weekend)
+        result = self.load(instrument_id="NASDAQ:ABC", as_of=weekend)
         self.assertIsNotNone(result.quote_per_share)
         self.assertTrue(result.quote_per_share.verified)
+
+    def test_last_close_before_same_day_exchange_open_is_rejected(self):
+        make_db(
+            self.db, status="LAST_VALID_CLOSE", instrument_id="NASDAQ:ABC",
+            observed_at="2026-09-28T11:00:00+00:00", session_date="2026-09-28",
+            published="2026-09-28T11:05:00+00:00",
+        )
+        result = self.load(instrument_id="NASDAQ:ABC")
+        self.assertIsNone(result.quote_per_share)
+        self.assertTrue(any("does not match" in reason or "UNAVAILABLE" in reason for reason in result.unavailable_reasons))
+
+    def test_forged_calendar_id_is_rejected_even_when_other_close_fields_match(self):
+        make_db(self.db, status="LAST_VALID_CLOSE", calendar_id="user-invented-calendar")
+        result = self.load(instrument_id="NASDAQ:ABC")
+        self.assertIsNone(result.quote_per_share)
+        self.assertTrue(any("pinned calendar reassessment" in reason for reason in result.unavailable_reasons))
 
     def test_unproven_last_valid_close_is_rejected(self):
         make_db(self.db, status="LAST_VALID_CLOSE")
@@ -145,15 +192,35 @@ class PolicyBMarketAdapterTests(unittest.TestCase):
             connection.commit()
         finally:
             connection.close()
-        result = self.load()
+        result = self.load(instrument_id="NASDAQ:ABC")
         self.assertIsNone(result.quote_per_share)
-        self.assertTrue(any("calendar" in reason or "timestamps" in reason for reason in result.unavailable_reasons))
+        self.assertTrue(any("pinned calendar reassessment" in reason or "assessment details" in reason for reason in result.unavailable_reasons), result.unavailable_reasons)
 
     def test_future_published_quote_is_rejected(self):
         make_db(self.db, published="2026-09-28T13:00:00+00:00")
         result = self.load()
         self.assertIsNone(result.quote_per_share)
         self.assertTrue(any("future-dated" in reason for reason in result.unavailable_reasons))
+
+    def test_stale_timestamp_cannot_keep_fresh_label(self):
+        make_db(
+            self.db, status="FRESH", observed_at="2026-09-01T11:00:00+00:00",
+            published="2026-09-01T11:00:00+00:00",
+        )
+        result = self.load()
+        self.assertIsNone(result.quote_per_share)
+        self.assertTrue(any("does not match independently assessed STALE" in reason for reason in result.unavailable_reasons))
+
+    def test_observation_instrument_and_currency_units_must_match(self):
+        make_db(self.db, market_instrument_id="OTHER")
+        result = self.load()
+        self.assertIsNone(result.quote_per_share)
+        self.assertTrue(any("instrument IDs do not match" in reason for reason in result.unavailable_reasons))
+        self.db.unlink()
+        make_db(self.db, evidence_unit="USD/share", market_unit="KRW/share", market_currency="KRW")
+        result = self.load()
+        self.assertIsNone(result.quote_per_share)
+        self.assertTrue(any("units do not match" in reason for reason in result.unavailable_reasons))
 
     def test_forged_market_value_mismatch_is_rejected(self):
         make_db(self.db, market_value="999")
@@ -177,17 +244,13 @@ class PolicyBMarketAdapterTests(unittest.TestCase):
         self.assertIsNone(result.optimistic_fair_value_per_share)
         self.assertTrue(any("calculation is missing" in reason or "binding contract" in reason for reason in result.unavailable_reasons))
 
-    def test_complete_value_bound_dcf_scenarios_produce_verified_money(self):
+    def test_complete_bindings_with_self_authored_source_url_do_not_certify_fair_value(self):
         make_db(self.db)
         add_valid_dcf(self.db)
         result = self.load()
-        self.assertIsNotNone(result.fair_value_per_share, result.unavailable_reasons)
-        expected = EquityValuationAnalyzer._dcf_per_share(
-            DcfAssumptions(D("100"), D("0.05"), D("0.10"), D("0.02"), 5, D("10"), D("10"))
-        )
-        self.assertEqual(result.fair_value_per_share.amount, expected)
-        self.assertEqual(result.optimistic_fair_value_per_share.currency, "USD")
-        self.assertTrue(result.optimistic_fair_value_per_share.verified)
+        self.assertIsNone(result.fair_value_per_share)
+        self.assertIsNone(result.optimistic_fair_value_per_share)
+        self.assertTrue(any("no independently verifiable source-content receipt" in reason for reason in result.unavailable_reasons))
 
     def test_forged_missing_or_future_dcf_binding_fails_closed(self):
         for kwargs, expected in (
