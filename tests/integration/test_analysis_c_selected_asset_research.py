@@ -10,14 +10,15 @@ from investment_stack.asset_analysis import Phase5AssetAnalysisRuntime
 from investment_stack.calculations import BusinessType
 from investment_stack.calculations.common import AnalysisResult, AnalysisStatus, MetricResult
 from investment_stack.deep_research import EquityResearchSpec, LiveDeepResearchRuntime
-from investment_stack.evidence import EvidenceResearchStore, RunDatabaseManager
+from investment_stack.evidence import EvidenceResearchStore, RunDatabaseManager, SelectedEvidence
 from investment_stack.execution.models import Availability, ModeRequest
 from investment_stack.execution.dispatcher import execute_mode
 from investment_stack.execution.portfolio_thesis_modes import portfolio_thesis_services
 from investment_stack.execution.selected_asset_research import LiveSelectedAssetResearch
 from investment_stack.materiality import MaterialityConfig, MaterialityEngine
-from investment_stack.providers import EnvironmentCredentials, build_default_provider_executor
-from investment_stack.research import Phase4ResearchRuntime
+from investment_stack.freshness import FreshnessAssessment, FreshnessStatus
+from investment_stack.providers import EnvironmentCredentials, ProviderObservation, build_default_provider_executor
+from investment_stack.research import Phase4ResearchRuntime, ResearchOutcome
 from investment_stack.routing import RequestMode
 from investment_stack.reporting.portfolio_modes import PinnedPortfolioState, PortfolioAnalysisRequest, PortfolioPosition
 from investment_stack.web_research import WebResearchAdapter, WebResearchBundleBackend
@@ -146,14 +147,6 @@ class SelectedAssetResearchIntegrationTests(unittest.TestCase):
                 calculation_id = valuation.metadata["calculation_id"]
                 if persist_metric:
                     calculation_id = "calc:synthetic-dcf-value"
-                    original_runtime.analysis.run_db.add_calculation(
-                        calculation_id=calculation_id, calculation_name="EQUITY_VALUATION",
-                        formula="synthetic explicit assumptions", inputs={"subject": spec.instrument_id,
-                                                                            "evidence_ids": list(outcome.evidence_ids)},
-                        result={"metrics": [{"name": metric.name, "value": str(metric.value),
-                                             "unit": metric.unit, "status": metric.status.value,
-                                             "evidence_ids": list(metric.evidence_ids)}]},
-                    )
                 if wrong_id:
                     calculation_id = "calc:missing-valuation-result"
                 with_dcf = AnalysisResult(
@@ -161,6 +154,13 @@ class SelectedAssetResearchIntegrationTests(unittest.TestCase):
                     (metric,), valuation.findings, valuation.risks, valuation.unknowns,
                     {**valuation.metadata, "calculation_id": calculation_id},
                 )
+                if persist_metric:
+                    original_runtime.analysis.run_db.add_calculation(
+                        calculation_id="calc:synthetic-dcf-value", calculation_name="EQUITY_VALUATION",
+                        formula="synthetic explicit assumptions", inputs={"subject": spec.instrument_id,
+                                                                            "evidence_ids": list(outcome.evidence_ids)},
+                        result=LiveSelectedAssetResearch._serialize_analysis_result(with_dcf),
+                    )
                 return replace(outcome, analysis=replace(outcome.analysis, valuation=with_dcf))
 
         return DcfRuntime()
@@ -170,7 +170,8 @@ class SelectedAssetResearchIntegrationTests(unittest.TestCase):
             ("FANUC",), ModeRequest(self.run.run_id, RequestMode.PERSONAL_PORTFOLIO_ANALYSIS))
         lines = result.sections[0].lines
         self.assertTrue(any("명시 가정에 따른 조건부 평가값, 매수 가격 아님" in line
-                            and "dcf_scenario_base=1234.50 JPY/share" in line for line in lines))
+                            and "DCF 기준 시나리오 주당 평가 참고값=1234.50 JPY/share" in line for line in lines))
+        self.assertFalse(any("dcf_scenario_base" in line for line in lines))
         self.assertFalse(any("현재가:" in line for line in lines))
 
     def test_dcf_value_missing_from_persisted_calculation_is_hidden_and_partial(self) -> None:
@@ -179,7 +180,7 @@ class SelectedAssetResearchIntegrationTests(unittest.TestCase):
         section = result.sections[0]
         self.assertFalse(any("dcf_scenario_base=1234.50" in line for line in section.lines))
         self.assertFalse(any("조건부 평가값" in line for line in section.lines))
-        self.assertIn("valuation_metric_persistence:FANUC", section.metadata["missing_inputs"])
+        self.assertIn("phase5_result_binding:FANUC:valuation", section.metadata["missing_inputs"])
         self.assertEqual("PARTIAL", section.status.value)
 
     def test_dcf_value_with_unresolved_calculation_id_is_hidden(self) -> None:
@@ -187,7 +188,109 @@ class SelectedAssetResearchIntegrationTests(unittest.TestCase):
                                            {"FANUC": self.spec})(
             ("FANUC",), ModeRequest(self.run.run_id, RequestMode.PERSONAL_PORTFOLIO_ANALYSIS))
         self.assertFalse(any("dcf_scenario_base=1234.50" in line for line in result.sections[0].lines))
-        self.assertIn("valuation_metric_persistence:FANUC", result.sections[0].metadata["missing_inputs"])
+        self.assertIn("phase5_result_binding:FANUC:valuation", result.sections[0].metadata["missing_inputs"])
+
+    def test_forged_findings_and_unknowns_are_hidden_without_result_json_match(self) -> None:
+        original_runtime = self.runtime
+
+        class ForgedRuntime:
+            research = original_runtime.research
+            analysis = original_runtime.analysis
+            analysis_as_of = original_runtime.analysis_as_of
+            analysis_timezone = original_runtime.analysis_timezone
+
+            def analyze_equity(self, spec):
+                outcome = original_runtime.analyze_equity(spec)
+                valuation = outcome.analysis.valuation
+                forged = replace(
+                    valuation,
+                    findings=(*valuation.findings, "적정가 999999 JPY/share"),
+                    unknowns=(*valuation.unknowns, "dcf_value_per_share=999999"),
+                )
+                return replace(outcome, analysis=replace(outcome.analysis, valuation=forged))
+
+        result = LiveSelectedAssetResearch(ForgedRuntime(), {"FANUC": self.spec})(
+            ("FANUC",), ModeRequest(self.run.run_id, RequestMode.PERSONAL_PORTFOLIO_ANALYSIS))
+        section = result.sections[0]
+        self.assertFalse(any("999999" in line for line in section.lines))
+        self.assertIn("phase5_result_binding:FANUC:valuation", section.metadata["missing_inputs"])
+        self.assertEqual("PARTIAL", section.status.value)
+
+    def test_verified_last_valid_close_note_survives_full_result_check(self) -> None:
+        original_runtime = self.runtime
+
+        class LastCloseRuntime:
+            research = original_runtime.research
+            analysis = original_runtime.analysis
+            analysis_as_of = original_runtime.analysis_as_of
+            analysis_timezone = original_runtime.analysis_timezone
+
+            def analyze_equity(self, spec):
+                outcome = original_runtime.analyze_equity(spec)
+                evidence_id = "evidence:synthetic-last-close"
+                observation_id = "observation:synthetic-last-close"
+                session_date = "2026-08-13"
+                claimed_time = "2026-08-13T15:00:00+09:00"
+                calendar_id = "jpx-synthetic-calendar-v1"
+                public_time = "2026-08-13T15:05:00+09:00"
+                assessment = FreshnessAssessment(
+                    FreshnessStatus.LAST_VALID_CLOSE, claimed_time, 86400,
+                    "verified completed exchange session", session_date, "LAST_VALID_CLOSE",
+                    calendar_id, public_time,
+                )
+                observation = ProviderObservation(
+                    evidence_type="market", source_name="JPX", source_url="https://example.test/quote",
+                    source_tier=1, provider_id="synthetic", value=Decimal("6000"), unit="JPY/share",
+                    currency="JPY", instrument_id=spec.instrument_id, metric="current_price",
+                    observed_at=claimed_time, claimed_market_time=claimed_time,
+                    market_session_date=session_date,
+                )
+                original_runtime.analysis.run_db.add_phase4_evidence(
+                    evidence_id=evidence_id, evidence_type="market", source_uri=observation.source_url,
+                    retrieved_at=original_runtime.analysis_as_of,
+                    instrument_id=spec.instrument_id, metric="current_price",
+                    value=observation.value, unit=observation.unit, currency=observation.currency,
+                    source_name="JPX", source_tier=1, observed_at=claimed_time,
+                    freshness_status=FreshnessStatus.LAST_VALID_CLOSE.value, provider_id="synthetic",
+                )
+                original_runtime.analysis.run_db.add_market_observation(
+                    observation_id=observation_id, evidence_id=evidence_id, instrument_id=spec.instrument_id,
+                    observed_at=claimed_time, value="6000", unit="JPY/share", currency="JPY",
+                    claimed_market_time=claimed_time, market_session_date=session_date,
+                    provider_id="synthetic", freshness_status=FreshnessStatus.LAST_VALID_CLOSE.value,
+                )
+                original_runtime.analysis.run_db.mark_evidence_selected(
+                    evidence_id=evidence_id, reason="synthetic verified last-close selection",
+                )
+                original_runtime.analysis.run_db.add_observation_selection(
+                    selection_id="selection:synthetic-last-close", observation_id=observation_id,
+                    selection_reason="synthetic verified last-close selection",
+                )
+                original_runtime.analysis.run_db.add_freshness_assessment(
+                    freshness_id="freshness:synthetic-last-close", evidence_id=evidence_id,
+                    status=FreshnessStatus.LAST_VALID_CLOSE.value,
+                    details={"market_session_date": session_date, "quote_kind": "LAST_VALID_CLOSE",
+                             "calendar_id": calendar_id,
+                             "public_available_time": public_time},
+                )
+                note = (f"가격 입력 기준: {session_date} 마지막 유효 거래일 종가 ({spec.currency}); "
+                        f"종가 시각 {claimed_time}; 공개시각 {public_time}; 달력 {calendar_id}. 실시간 시세가 아닙니다.")
+                selected = SelectedEvidence(observation, assessment, evidence_id, observation_id, False,
+                                            "verified", (observation,))
+                market = ResearchOutcome(selected, (), False)
+                valuation = outcome.analysis.valuation
+                analyzed = replace(outcome.analysis, valuation=replace(
+                    valuation, findings=(*valuation.findings, note),
+                ))
+                return replace(outcome, market=market, analysis=analyzed,
+                               evidence_ids=(*outcome.evidence_ids, evidence_id))
+
+        result = LiveSelectedAssetResearch(LastCloseRuntime(), {"FANUC": self.spec})(
+            ("FANUC",), ModeRequest(self.run.run_id, RequestMode.PERSONAL_PORTFOLIO_ANALYSIS))
+        section = result.sections[0]
+        self.assertTrue(any("2026-08-13 마지막 유효 거래일 종가" in line for line in section.lines),
+                        (section.lines, dict(section.metadata)))
+        self.assertNotIn("phase5_result_binding:FANUC:valuation", section.metadata["missing_inputs"])
 
     def test_portfolio_pipeline_reports_selected_asset_evaluation_section(self) -> None:
         portfolio = PortfolioAnalysisRequest(

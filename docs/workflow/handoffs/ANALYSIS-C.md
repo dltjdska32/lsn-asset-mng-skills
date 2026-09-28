@@ -30,3 +30,18 @@
 - Added regression cases for valid persisted DCF display, a fabricated DCF metric that reuses another calculation ID, a nonexistent calculation ID, and invocation from another fixed mode.
 - Verification rerun: selected-asset integration tests 9 passed; existing portfolio thesis bundle tests 3 passed; `git diff --check` clean.
 - Verification environment: system `python` 3.14; `tzdata` installed temporarily to workspace-local `.testdeps` for Windows `zoneinfo`, then `.testdeps` removed. No dependency was added to the repository or committed.
+
+## Independent review follow-up
+
+- Fundamental and valuation `AnalysisResult` values are now rendered only when the full result (subject, analysis type, status, findings, risks, unknowns, metadata, and every metric field) matches the selected run.db calculation's `result_json`. Calculation input subject and complete evidence set must also match, and each evidence row must bind to the selected instrument.
+- Added a regression that mutates findings and unknowns while reusing the original calculation ID; the altered text and value remain hidden and the section becomes PARTIAL. Persisted DCF labels use Korean descriptions in the user section; internal metric keys are not shown there.
+- Verification: selected-asset tests 10 passed; portfolio thesis bundle tests 3 passed; `git diff --check` clean.
+- Environment for this rerun remained system Python 3.14 with temporary workspace-local `.testdeps/tzdata`; `.testdeps` was removed afterward and is not staged.
+
+## P1/P2 independent review follow-up
+
+- Full saved-result equivalence now covers both fundamental and valuation results. Findings, risks, unknowns, metadata, status, and every metric field must match their calculation's `result_json`; subject and the complete evidence set must match the calculation inputs and same-instrument run.db rows. Any mismatch suppresses that analysis block and marks the section PARTIAL.
+- The post-calculation LAST_VALID_CLOSE explanation is treated as a separate provenance note only when the selected quote, same-run market observation, and persisted freshness assessment agree on instrument, currency, value, unit, observation, session date, quote kind, calendar, and publication time. Exactly one derived note may be separated from the returned findings for the stored-result comparison; arbitrary additional findings remain rejected. Covered by a synthetic adapter regression and existing weekend E2E tests.
+- User-facing metric names are Korean labels; internal metric keys are omitted from selected-asset body lines. DCF values retain the conditional-assumption / not-a-buy-price wording.
+- Verification: selected-asset tests 11 passed; weekend-price E2E tests 4 passed; portfolio thesis bundle tests 3 passed; `git diff --check` clean.
+- Verification used system Python 3.14 and workspace-local temporary `.testdeps/tzdata` because the runtime lacks Windows timezone data. Remove `.testdeps` before staging; do not commit it.
