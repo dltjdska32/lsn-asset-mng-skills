@@ -121,6 +121,13 @@ class TestTechnicalReportSection(unittest.TestCase):
             self.assertFalse(section.metadata["indicator_values_withheld"])
             self.assertIn("단순이동평균(SMA): 14.5", "\n".join(section.lines))
             self.assertEqual(section.metadata["run_id"], manager.run_id)
+            detail = section.metadata["calculation_detail"]
+            self.assertEqual(detail["formula_version"], result.formula_version)
+            self.assertEqual(detail["indicator_periods"]["sma"], params.sma_period)
+            self.assertEqual(detail["indicator_periods"]["macd"], {
+                "fast": params.macd_fast, "slow": params.macd_slow,
+                "signal": params.macd_signal,
+            })
 
     def test_different_registered_input_and_run_cutoff_do_not_bind(self):
         parsed = _parse_result()

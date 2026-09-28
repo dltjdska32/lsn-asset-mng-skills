@@ -104,12 +104,29 @@ def build_technical_report_section(
         ],
     }
     if values_eligible:
+        params = analysis.parameters
         metadata.update({
             "instrument_id": context.instrument_id,
             "analysis_as_of": context.analysis_as_of,
             "latest_bar_close_time": context.latest_bar_close_time,
             "validation_receipt_id": context.validation_receipt_id,
             "input_fingerprint": context.input_fingerprint,
+            "calculation_detail": {
+                "formula_version": analysis.formula_version,
+                "indicator_periods": {
+                    "sma": params.sma_period,
+                    "ema": params.ema_period,
+                    "rsi": params.rsi_period,
+                    "macd": {
+                        "fast": params.macd_fast,
+                        "slow": params.macd_slow,
+                        "signal": params.macd_signal,
+                    },
+                    "relative_volume": params.relative_volume_period,
+                    "volatility": params.volatility_period,
+                    "atr": params.atr_period,
+                },
+            },
         })
     return ReportSectionInput(
         name="technical_analysis",
