@@ -40,18 +40,17 @@ class PolicyBBriefingTests(unittest.TestCase):
         self.assertNotIn("80 USD", rendered)
         self.assertEqual((), section.calculation_ids)
 
-    def test_complete_bound_policy_formats_conditional_prices_without_order_quantity(self):
+    def test_caller_reference_strings_cannot_release_action_prices(self):
         section = build_policy_b_section(
             "ABC", CUTOFF, complete_policy(),
             evidence_ids=("ev:quote", "ev:valuation", "ev:state"),
             calculation_ids=("calc:policy",),
         )
         rendered = "\n".join(section.lines)
-        self.assertEqual(Availability.AVAILABLE, section.status)
+        self.assertEqual(Availability.PARTIAL, section.status)
         for value in ("80.00 USD/주", "75.00 USD/주", "70.00 USD/주"):
-            self.assertIn(value, rendered)
-        self.assertIn("거래 수량은", rendered)
-        self.assertIn("자동 실행되지", rendered)
+            self.assertNotIn(value, rendered)
+        self.assertIn("진입 가격·금액·수량 대기", rendered)
         self.assertNotIn("ev:quote", rendered)
 
     def test_missing_binding_or_zero_budget_keeps_action_values_waiting(self):
@@ -68,7 +67,7 @@ class PolicyBBriefingTests(unittest.TestCase):
                 self.assertNotIn("80.00 USD/주", rendered)
                 self.assertNotIn("추가 예산 상한", rendered)
 
-    def test_verified_sizing_can_show_conditional_lot_quantities(self):
+    def test_caller_attested_sizing_cannot_release_lot_quantities(self):
         policy = complete_policy()
         sizing = size_policy_b_tranches(
             policy, TradingRules("USD", D("1"), D("0.01"), D("1"), "synthetic", True),
@@ -79,9 +78,11 @@ class PolicyBBriefingTests(unittest.TestCase):
             calculation_ids=("calc:policy", "calc:sizing"),
         )
         rendered = "\n".join(section.lines)
-        self.assertIn("1차 16주", rendered)
-        self.assertIn("3차 18주", rendered)
-        self.assertIn("주문은 생성하지 않았습니다", rendered)
+        self.assertEqual("ARITHMETIC_ONLY", sizing.status)
+        self.assertEqual(Availability.PARTIAL, section.status)
+        self.assertNotIn("1차 16주", rendered)
+        self.assertNotIn("3차 18주", rendered)
+        self.assertIn("진입 가격·금액·수량 대기", rendered)
 
 
 if __name__ == "__main__":

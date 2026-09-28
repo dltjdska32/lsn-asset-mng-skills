@@ -26,11 +26,12 @@ class PolicyBSizingTests(unittest.TestCase):
     def test_three_tranches_are_lot_rounded_and_stay_within_budget(self):
         policy = complete_policy()
         result = size_policy_b_tranches(policy, TradingRules("USD", D("1"), D("0.01"), D("1"), "synthetic", True))
-        self.assertEqual("CONDITIONAL", result.status)
+        self.assertEqual("ARITHMETIC_ONLY", result.status)
         self.assertEqual([D("80.00"), D("75.00"), D("70.00")], [tier.limit_price for tier in result.tiers])
         self.assertEqual([D("16"), D("17"), D("18")], [tier.quantity for tier in result.tiers])
         self.assertLessEqual(result.total_maximum_cost, policy.max_total_add_budget)
         self.assertFalse(result.orders_posted)
+        self.assertIn("release receipt is unavailable", result.unavailable_reasons[0])
 
     def test_unverified_rules_cross_currency_or_insufficient_lot_wait(self):
         policy = complete_policy()

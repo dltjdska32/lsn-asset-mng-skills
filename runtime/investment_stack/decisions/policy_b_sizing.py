@@ -1,7 +1,7 @@
-"""Pure, non-posting lot and fee arithmetic for a fully bound D12 B result.
+"""Pure, non-posting lot and fee arithmetic for D12 B simulations.
 
-The caller must verify the trading-rule receipt against its source and cutoff.
-This module performs no broker call and never modifies personal state.
+This helper cannot verify a policy's market/personal provenance or a trading
+rule receipt. Its output is arithmetic only, never a released action proposal.
 """
 
 from __future__ import annotations
@@ -84,4 +84,5 @@ def size_policy_b_tranches(policy: PolicyBResult, rules: TradingRules | None) ->
     total = sum((tier.maximum_cost for tier in sized), Decimal(0))
     if total > policy.max_total_add_budget:
         return PolicyBSizingResult("WAIT", (), None, ("rounded tranches exceed policy add budget",))
-    return PolicyBSizingResult("CONDITIONAL", tuple(sized), total, ())
+    return PolicyBSizingResult("ARITHMETIC_ONLY", tuple(sized), total,
+                               ("pinned market/personal/trading rule release receipt is unavailable",))
