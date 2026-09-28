@@ -386,7 +386,10 @@ def load_policy_b_market_evidence(
                         if metadata is None:
                             reasons.append("persisted quote metadata is missing or malformed")
                         if not reasons:
-                            quote = Money(value, str(currency).upper(), verified=True)
+                            reasons.append(
+                                "quote unavailable for D12: source URI/provider fields lack an independently "
+                                "authenticated source-content receipt"
+                            )
                     fair_value, optimistic_fair_value, valuation_reason = _persisted_dcf_values(
                         connection, run_id=run_id, instrument_id=instrument_id, cutoff=cutoff
                     )

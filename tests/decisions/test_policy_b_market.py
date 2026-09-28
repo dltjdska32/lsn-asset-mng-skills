@@ -148,13 +148,15 @@ class PolicyBMarketAdapterTests(unittest.TestCase):
     def load(self, *, instrument_id="ABC", as_of=AS_OF):
         return load_policy_b_market_evidence(self.db, run_id="r1", instrument_id=instrument_id, as_of=as_of)
 
-    def test_valid_same_run_quote_becomes_verified_money(self):
+    def test_internally_valid_quote_is_unavailable_without_authenticated_source_receipt(self):
         make_db(self.db)
         result = self.load()
-        self.assertEqual(result.quote_per_share.amount, 100)
-        self.assertEqual(result.quote_per_share.currency, "USD")
-        self.assertTrue(result.quote_per_share.verified)
-        self.assertEqual(result.quote_evidence_id, "e1")
+        self.assertIsNone(result.quote_per_share)
+        self.assertIsNone(result.quote_evidence_id)
+        self.assertTrue(any("authenticated source-content receipt" in reason
+                            for reason in result.unavailable_reasons))
+        self.assertFalse(any("timestamp" in reason or "freshness" in reason
+                             for reason in result.unavailable_reasons))
 
     def test_stale_quote_is_rejected(self):
         make_db(self.db, status="STALE")
@@ -162,12 +164,58 @@ class PolicyBMarketAdapterTests(unittest.TestCase):
         self.assertIsNone(result.quote_per_share)
         self.assertTrue(any("not eligible" in reason for reason in result.unavailable_reasons))
 
-    def test_weekend_accepts_pinned_prior_completed_exchange_close(self):
+    def test_weekend_close_is_calendar_qualified_but_unavailable_without_source_receipt(self):
         weekend = "2026-09-27T16:00:00+00:00"
         make_db(self.db, status="LAST_VALID_CLOSE", as_of=weekend)
         result = self.load(instrument_id="NASDAQ:ABC", as_of=weekend)
-        self.assertIsNotNone(result.quote_per_share)
-        self.assertTrue(result.quote_per_share.verified)
+        self.assertIsNone(result.quote_per_share)
+        self.assertTrue(any("authenticated source-content receipt" in reason
+                            for reason in result.unavailable_reasons))
+        self.assertFalse(any("pinned calendar reassessment" in reason
+                             for reason in result.unavailable_reasons))
+
+    def test_self_authored_quote_source_and_matching_provider_do_not_verify_money(self):
+        make_db(self.db)
+        connection = sqlite3.connect(self.db)
+        try:
+            connection.execute(
+                "UPDATE evidence SET source_uri=?, source_name=?, provider_id=?",
+                ("https://example.invalid/fabricated-quote", "Fabricated", "made-up"),
+            )
+            connection.execute(
+                "UPDATE market_observations SET provider_id='made-up'"
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        result = self.load()
+        self.assertIsNone(result.quote_per_share)
+        self.assertIn(
+            "quote unavailable for D12: source URI/provider fields lack an independently authenticated source-content receipt",
+            result.unavailable_reasons,
+        )
+
+    def test_self_authored_weekend_close_source_and_matching_provider_do_not_verify_money(self):
+        weekend = "2026-09-27T16:00:00+00:00"
+        make_db(self.db, status="LAST_VALID_CLOSE", as_of=weekend)
+        connection = sqlite3.connect(self.db)
+        try:
+            connection.execute(
+                "UPDATE evidence SET source_uri=?, source_name=?, provider_id=?",
+                ("https://example.invalid/fabricated-quote", "Fabricated", "made-up"),
+            )
+            connection.execute(
+                "UPDATE market_observations SET provider_id='made-up'"
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        result = self.load(instrument_id="NASDAQ:ABC", as_of=weekend)
+        self.assertIsNone(result.quote_per_share)
+        self.assertIn(
+            "quote unavailable for D12: source URI/provider fields lack an independently authenticated source-content receipt",
+            result.unavailable_reasons,
+        )
 
     def test_last_close_before_same_day_exchange_open_is_rejected(self):
         make_db(
@@ -315,7 +363,7 @@ class PolicyBMarketAdapterTests(unittest.TestCase):
         finally:
             connection.close()
         result = self.load()
-        self.assertIsNotNone(result.quote_per_share)
+        self.assertIsNone(result.quote_per_share)
         self.assertIsNone(result.fair_value_per_share)
         self.assertIsNone(result.optimistic_fair_value_per_share)
         self.assertTrue(any("calculation is missing" in reason or "binding contract" in reason for reason in result.unavailable_reasons))
