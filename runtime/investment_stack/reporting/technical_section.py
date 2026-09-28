@@ -81,6 +81,7 @@ def build_technical_report_section(
                 lines.append(f"{label}: {value}")
             else:
                 lines.append(f"{label}: 확인 불가 ({'; '.join(context.reasons) or '값 없음'})")
+        lines.append("자료 한계: 출처 원본의 진위와 수정주가·거래일 증빙은 별도 확인이 필요합니다.")
     lines.append("매매 신호: 확인 불가")
     lines.append(f"자료 상태: {availability.value}")
 

@@ -23,6 +23,7 @@ from investment_stack.contracts.calculation import (
 )
 from investment_stack.contracts.slots import EligibilityDecision, EligibilityStatus, SelectedInputSet
 from investment_stack.decisions.briefing import NonPostingBriefing, generate_briefing
+from investment_stack.reporting.technical_section import build_technical_report_section
 from investment_stack.deep_research import EquityResearchOutcome, EquityResearchSpec, LiveDeepResearchRuntime, _observation_metrics
 from investment_stack.evidence import RunDatabaseManager
 from investment_stack.pipelines import PipelineStep
@@ -407,6 +408,8 @@ def equity_analysis_services(
             section_as_of = None
         sections: list[ReportSectionInput] = []
         unverified_outputs: list[str] = []
+        technical_sections: list[tuple[str, ReportSectionInput]] = []
+        technical_sources = request.payload.get("technical_analysis")
         for outcome in outcomes:
             fundamental_section = _validated_analysis_section(
                 outcome.analysis.fundamental,
@@ -453,6 +456,20 @@ def equity_analysis_services(
                     "저장 결과 검증 실패: 분석 본문·metric 또는 근거가 run.db와 일치하지 않아 내용을 숨겼습니다."
                 ]
             sections.append(replace(valuation_section, lines=(*valuation_section.lines, *valuation_notes)))
+            if isinstance(technical_sources, Mapping) and outcome.instrument_id in technical_sources:
+                supplied = technical_sources[outcome.instrument_id]
+                parsed = supplied.get("parse_result") if isinstance(supplied, Mapping) else None
+                technical_result = supplied.get("analysis") if isinstance(supplied, Mapping) else None
+                technical_section = build_technical_report_section(
+                    parse_result=parsed, analysis=technical_result,
+                    expected_instrument_id=outcome.instrument_id, run_db=run_db,
+                )
+                technical_section = replace(
+                    technical_section, name=f"{outcome.instrument_id}_technical",
+                    title=f"{outcome.instrument_id} 기술적 분석",
+                )
+                sections.append(technical_section)
+                technical_sections.append((outcome.instrument_id, technical_section))
         comparison = context.get(PipelineStep.BUILD_COMPARISON.value)
         if comparison is not None:
             matrix = comparison.output["compatibility_matrix"]
@@ -571,6 +588,16 @@ def equity_analysis_services(
                 ))))
             briefings.append((outcome.instrument_id, briefing))
         briefing = _combine_briefings(tuple(briefings))
+        if technical_sections:
+            technical_core = tuple(
+                f"{instrument_id} 차트: " + (
+                    "검증된 지표를 기술적 분석 섹션에 표시했습니다. 매매 신호나 규모 판단에는 사용하지 않았습니다."
+                    if section.status is not ReportAvailability.UNAVAILABLE else
+                    "자료와 실행 기록의 연결을 확인하지 못해 지표를 표시하지 않았습니다."
+                )
+                for instrument_id, section in technical_sections
+            )
+            briefing = replace(briefing, section_core=(*briefing.section_core, *technical_core))
         report = phase6.report.build(
             title=str(request.payload.get("title") or _default_title(request)),
             sections=tuple(sections), review=review, briefing=briefing,

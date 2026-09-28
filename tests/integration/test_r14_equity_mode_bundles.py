@@ -4,17 +4,22 @@ import tempfile
 import unittest
 import json
 from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
 from investment_stack.asset_analysis import EquityDeepResult, Phase5AssetAnalysisRuntime
 from investment_stack.calculations import AnalysisResult, BusinessType
 from investment_stack.calculations.common import AnalysisStatus, MetricResult
+from investment_stack.calculations.technical import TechnicalParameters, calculate_verified_technical_analysis
+from investment_stack.contracts.context import PublicAvailability
+from investment_stack.contracts.market import AdjustmentMode, Bar, BarSet
 from investment_stack.contracts.calculation import (
     CalculationRecord, CalculationStatus, FormulaRequirement, OutputKind, TypedOutput,
 )
 from investment_stack.contracts.slots import BoundSlotInput, EligibilityDecision, SelectedInputSet
 from investment_stack.deep_research import EquityResearchSpec, LiveDeepResearchRuntime
+from investment_stack.decisions.technical_storage import register_technical_bar_set
 from investment_stack.evidence import EvidenceResearchStore, RunDatabaseManager
 from investment_stack.execution import Availability, ModeRequest, equity_analysis_services, execute_mode
 from investment_stack.materiality import MaterialityConfig, MaterialityEngine
@@ -25,6 +30,7 @@ from investment_stack.routing import RequestMode
 from investment_stack.execution.analysis_modes import _validated_analysis_section
 from investment_stack.web_research import WebResearchAdapter, WebResearchBundleBackend
 from investment_stack.providers import EnvironmentCredentials, ProviderFallbackExecutor, build_default_provider_executor
+from investment_stack.providers.ohlcv import OHLCVParseResult
 from investment_stack.research import Phase4ResearchRuntime
 
 
@@ -32,6 +38,72 @@ CUTOFF = "2026-08-14T10:00:00+09:00"
 
 
 class R14EquityModeBundleIntegrationTests(unittest.TestCase):
+    @staticmethod
+    def technical_input():
+        cutoff = datetime.fromisoformat(CUTOFF)
+        bars = []
+        for index in range(6):
+            opened = datetime(2026, 8, 1, tzinfo=timezone.utc) + timedelta(days=index)
+            closed = opened + timedelta(hours=7)
+            bars.append(Bar(
+                bar_id=f"bar:fanuc:{index}", evidence_id=f"technical:fanuc:{index}",
+                instrument_id="FANUC", interval="1D", session_date=opened.date().isoformat(),
+                open_time=opened, close_time=closed, timezone="UTC",
+                open=Decimal("10"), high=Decimal("20"), low=Decimal("9"),
+                close=Decimal(str(10 + index)), volume=Decimal("100"), currency="JPY",
+                public_availability=PublicAvailability.exact(closed, locator=f"fixture:{index}"),
+                adjustment_mode=AdjustmentMode.SPLIT_ADJUSTED,
+            ))
+        bar_set = BarSet.create("FANUC", "1D", "JPY", AdjustmentMode.SPLIT_ADJUSTED, bars)
+        parsed = OHLCVParseResult(
+            bar_set=bar_set, bars=tuple(bars), adjustment_verified=True,
+            source_url="https://example.test/ohlcv/fanuc",
+            adjustment_receipt="synthetic-adjustment", calendar_receipt="synthetic-calendar",
+            expected_session_dates=tuple(bar.session_date for bar in bars), analysis_as_of=cutoff,
+        )
+        analyzed = calculate_verified_technical_analysis(
+            parsed, TechnicalParameters(2, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2),
+        )
+        return parsed, analyzed
+
+    def test_registered_technical_analysis_reaches_report_and_wait_briefing(self) -> None:
+        specs = self.specs()[:1]
+        run, services = self.make_services("r14-technical-bound", specs)
+        parsed, analyzed = self.technical_input()
+        self.assertEqual(register_technical_bar_set(run, parsed), tuple(bar.evidence_id for bar in parsed.bars))
+        result = execute_mode(ModeRequest(
+            run.run_id, RequestMode.SINGLE_ASSET_ANALYSIS,
+            {"research_specs": specs, "technical_analysis": {
+                "FANUC": {"parse_result": parsed, "analysis": analyzed},
+            }},
+        ), services)
+        report = next(state.result.output["report"] for state in result.step_states
+                      if state.step == "render_partial_aware_report")
+        technical = next(section for section in report.sections if section.name == "FANUC_technical")
+        self.assertEqual(ReportAvailability.PARTIAL, technical.status)
+        self.assertIn("단순이동평균(SMA): 14.5", "\n".join(technical.lines))
+        self.assertEqual(technical.evidence_ids, tuple(bar.evidence_id for bar in parsed.bars))
+        self.assertIn("검증된 지표를 기술적 분석 섹션에 표시", report.briefing)
+        self.assertIn("대기", report.briefing)
+
+    def test_unregistered_technical_analysis_does_not_reach_report_numbers(self) -> None:
+        specs = self.specs()[:1]
+        run, services = self.make_services("r14-technical-unbound", specs)
+        parsed, analyzed = self.technical_input()
+        result = execute_mode(ModeRequest(
+            run.run_id, RequestMode.SINGLE_ASSET_ANALYSIS,
+            {"research_specs": specs, "technical_analysis": {
+                "FANUC": {"parse_result": parsed, "analysis": analyzed},
+            }},
+        ), services)
+        report = next(state.result.output["report"] for state in result.step_states
+                      if state.step == "render_partial_aware_report")
+        technical = next(section for section in report.sections if section.name == "FANUC_technical")
+        self.assertEqual(ReportAvailability.UNAVAILABLE, technical.status)
+        self.assertEqual((), technical.evidence_ids)
+        self.assertNotIn("14.5", "\n".join(technical.lines))
+        self.assertIn("지표를 표시하지 않았습니다", report.briefing)
+
     def specs(self, *, second_currency: str = "JPY", second_type: BusinessType = BusinessType.STABLE_CASH_FLOW) -> tuple[EquityResearchSpec, EquityResearchSpec]:
         return (
             EquityResearchSpec("FANUC", "FANUC", "JAPAN", "JPY", BusinessType.STABLE_CASH_FLOW, ticker="6954"),
