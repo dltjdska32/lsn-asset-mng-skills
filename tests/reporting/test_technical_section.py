@@ -12,6 +12,8 @@ from investment_stack.evidence.manager import RunDatabaseManager
 from investment_stack.providers.ohlcv import OHLCVParseResult
 from investment_stack.reporting.models import Availability
 from investment_stack.reporting.technical_section import build_technical_report_section
+from investment_stack.reporting.builder import InvestmentReportBuilder
+from investment_stack.review.engine import ConditionalReviewEngine
 
 
 def _parse_result() -> OHLCVParseResult:
@@ -100,6 +102,8 @@ class TestTechnicalReportSection(unittest.TestCase):
                     self.assertNotIn("2026-09-06", "\n".join(section.lines))
                     self.assertNotIn("https://example.test/ohlcv", "\n".join(section.lines))
                     self.assertNotIn("370800초", "\n".join(section.lines))
+                    self.assertNotIn("R08-v1", "\n".join(section.lines))
+                    self.assertNotIn("2기간", "\n".join(section.lines))
 
     def test_registered_typed_bars_allow_only_exact_run_bound_values(self):
         parsed = _parse_result()
@@ -128,6 +132,13 @@ class TestTechnicalReportSection(unittest.TestCase):
                 "fast": params.macd_fast, "slow": params.macd_slow,
                 "signal": params.macd_signal,
             })
+            report = InvestmentReportBuilder(manager).build(
+                title="기술 분석 보고서", sections=(section,),
+                review=ConditionalReviewEngine(manager).evaluate(),
+            )
+            self.assertIn("공식 버전 R08-v1", report.markdown)
+            self.assertIn("SMA 2기간", report.markdown)
+            self.assertIn("MACD 빠른선/느린선/시그널 1/2/1기간", report.markdown)
 
     def test_different_registered_input_and_run_cutoff_do_not_bind(self):
         parsed = _parse_result()

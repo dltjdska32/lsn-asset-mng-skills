@@ -81,6 +81,16 @@ def build_technical_report_section(
                 lines.append(f"{label}: {value}")
             else:
                 lines.append(f"{label}: 확인 불가 ({'; '.join(context.reasons) or '값 없음'})")
+        params = analysis.parameters
+        lines.append(
+            "계산 상세 근거: "
+            f"공식 버전 {analysis.formula_version}; "
+            f"SMA {params.sma_period}기간, EMA {params.ema_period}기간, "
+            f"RSI {params.rsi_period}기간, MACD 빠른선/느린선/시그널 "
+            f"{params.macd_fast}/{params.macd_slow}/{params.macd_signal}기간, "
+            f"상대 거래량 {params.relative_volume_period}기간, "
+            f"변동성 {params.volatility_period}기간, ATR {params.atr_period}기간."
+        )
         lines.append("자료 한계: 출처 원본의 진위와 수정주가·거래일 증빙은 별도 확인이 필요합니다.")
     lines.append("매매 신호: 확인 불가")
     lines.append(f"자료 상태: {availability.value}")
