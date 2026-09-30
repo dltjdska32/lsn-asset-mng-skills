@@ -1,0 +1,16 @@
+test_stored_identity_and_conservative_completeness (__main__.RefreshBindingChecks.test_stored_identity_and_conservative_completeness) ... {"check": "valid_complete", "availability": "COMPLETE", "missing_inputs": [], "unsupported_reasons": []}
+{"check": "missing_ref", "availability": "PARTIAL", "missing_inputs": ["verified_report_refresh_inputs_or_runner"], "unsupported_reasons": []}
+{"check": "wrong_run", "availability": "PARTIAL", "missing_inputs": ["verified_report_refresh_inputs_or_runner"], "unsupported_reasons": []}
+{"check": "wrong_mode", "availability": "PARTIAL", "missing_inputs": ["verified_report_refresh_inputs_or_runner"], "unsupported_reasons": []}
+{"check": "wrong_target", "availability": "PARTIAL", "missing_inputs": ["verified_report_refresh_inputs_or_runner"], "unsupported_reasons": []}
+{"check": "wrong_assumptions", "availability": "PARTIAL", "missing_inputs": ["verified_report_refresh_inputs_or_runner"], "unsupported_reasons": []}
+{"check": "wrong_clock", "availability": "PARTIAL", "missing_inputs": ["verified_report_refresh_inputs_or_runner"], "unsupported_reasons": []}
+{"check": "wrong_sections", "availability": "PARTIAL", "missing_inputs": ["verified_report_refresh_inputs_or_runner"], "unsupported_reasons": []}
+{"check": "unavailable_external", "availability": "PARTIAL", "missing_inputs": ["report_refresh_incomplete"], "unsupported_reasons": []}
+{"check": "missing_external", "availability": "PARTIAL", "missing_inputs": ["synthetic_external_missing"], "unsupported_reasons": []}
+ok
+
+----------------------------------------------------------------------
+Ran 1 test in 9.665s
+
+OK

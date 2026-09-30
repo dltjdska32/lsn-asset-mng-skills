@@ -1,0 +1,30 @@
+test_configured_composition_runs_all_seven_modes_with_real_handlers (__main__.FinalReviewProbes.test_configured_composition_runs_all_seven_modes_with_real_handlers) ... ok
+{"probe": "RC10-R1", "baseline_sha": "a1a41b03594e6fa2a9ad141d7029b6f05cb53855", "prior_mode_status": "PARTIAL", "prior_missing_inputs": ["approved_materiality_selector", "selected_assets_for_deep_research"], "replay_manifest_statuses": [null, null, null, null, null, null, "PARTIAL", null], "replay_step_missing_inputs": [[], [], ["approved_materiality_selector"], ["selected_assets_for_deep_research"], [], [], ["approved_materiality_selector", "selected_assets_for_deep_research"]], "refresh_mode_status": "COMPLETE", "refresh_missing_inputs": [], "refresh_report_status": "AVAILABLE"}
+test_rc10_r1_refresh_preserves_partial_replay_status (__main__.FinalReviewProbes.test_rc10_r1_refresh_preserves_partial_replay_status) ... FAIL
+{"probe": "RC11", "baseline_sha": "a1a41b03594e6fa2a9ad141d7029b6f05cb53855", "single_manager_direction": 1, "two_managers_both_increased_direction": null}
+test_rc11_cross_manager_consensus_accepts_two_valid_increases (__main__.FinalReviewProbes.test_rc11_cross_manager_consensus_accepts_two_valid_increases) ... FAIL
+
+======================================================================
+FAIL: test_rc10_r1_refresh_preserves_partial_replay_status (__main__.FinalReviewProbes.test_rc10_r1_refresh_preserves_partial_replay_status)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\lsn\.codex\worktrees\89b8\lsn-asset-mng-skills\workspace\review-a1a41b0\docs\workflow\reviews\review_code_01_final_probes.py", line 192, in test_rc10_r1_refresh_preserves_partial_replay_status
+    self.assertEqual(Availability.PARTIAL, refreshed.availability,
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     "PARTIAL replay became COMPLETE in REPORT_REFRESH")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: <Availability.PARTIAL: 'PARTIAL'> != <Availability.COMPLETE: 'COMPLETE'> : PARTIAL replay became COMPLETE in REPORT_REFRESH
+
+======================================================================
+FAIL: test_rc11_cross_manager_consensus_accepts_two_valid_increases (__main__.FinalReviewProbes.test_rc11_cross_manager_consensus_accepts_two_valid_increases)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\lsn\.codex\worktrees\89b8\lsn-asset-mng-skills\workspace\review-a1a41b0\docs\workflow\reviews\review_code_01_final_probes.py", line 206, in test_rc11_cross_manager_consensus_accepts_two_valid_increases
+    self.assertEqual(1, calculate_consensus_direction(fixture.cusip, (first, second)))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != None
+
+----------------------------------------------------------------------
+Ran 3 tests in 7.593s
+
+FAILED (failures=2)

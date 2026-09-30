@@ -64,6 +64,19 @@ class ProjectionState:
     cashflow: tuple[CashflowItem, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class VerifiedPortfolioSnapshotProjection:
+    """A personal DB snapshot row bound to its exact ledger projection."""
+
+    personal_db_instance_id: str
+    snapshot_id: str
+    state_version: int
+    snapshot_type: str
+    data_as_of: str
+    valuation_status: str | None
+    projection: ProjectionState
+
+
 def compute_projection(
     connection: sqlite3.Connection,
     *,

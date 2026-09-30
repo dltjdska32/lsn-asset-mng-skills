@@ -5,11 +5,13 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Iterable
 
 from investment_stack.evidence.manager import RunDatabaseManager
 from investment_stack.freshness import FreshnessAssessment, FreshnessEngine, FreshnessStatus, observation_time
 from investment_stack.providers.models import ProviderObservation, ProviderResult
+from investment_stack.providers.execution import assess_current_price_observation
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +22,7 @@ class SelectedEvidence:
     observation_id: str | None
     partial: bool
     reason: str
+    selected_observations: tuple[ProviderObservation, ...] = ()
 
 
 def _id(prefix: str) -> str:
@@ -85,7 +88,11 @@ class EvidenceResearchStore:
         for result in results:
             self.record_provider_result(result)
             for observation in result.observations:
-                assessment = self.freshness.assess(observation, analysis_as_of=analysis_as_of)
+                is_current_price = observation.metric == "current_price" or observation.evidence_type == "market" and observation.metadata.get("quote_kind")
+                assessment = (
+                    assess_current_price_observation(observation, analysis_as_of=analysis_as_of, engine=self.freshness)
+                    if is_current_price else self.freshness.assess(observation, analysis_as_of=analysis_as_of)
+                )
                 evidence_id = _id("evidence")
                 self.run_db.add_phase4_evidence(
                     evidence_id=evidence_id,
@@ -120,10 +127,19 @@ class EvidenceResearchStore:
                         "effective_time": assessment.effective_time,
                         "age_seconds": assessment.age_seconds,
                         "reason": assessment.reason,
+                        "market_session_date": assessment.market_session_date,
+                        "quote_kind": assessment.quote_kind,
+                        "calendar_id": assessment.calendar_id,
+                        "public_available_time": assessment.public_available_time,
                     },
                 )
                 observation_id: str | None = None
-                value = observation.value if isinstance(observation.value, (str, int, float)) else None
+                from decimal import Decimal, InvalidOperation
+                if isinstance(observation.value, Decimal):
+                    value = str(observation.value)
+                else:
+                    value = observation.value if isinstance(observation.value, (str, int, float)) else None
+                    
                 if observation.evidence_type == "market":
                     observation_id = _id("market")
                     self.run_db.add_market_observation(
@@ -136,12 +152,17 @@ class EvidenceResearchStore:
                         metadata=observation.metadata,
                     )
                 elif observation.evidence_type == "financial":
+                    financial_metadata = dict(observation.metadata)
+                    if isinstance(observation.value, Decimal):
+                        # SQLite NUMERIC affinity converts decimal strings to binary floats.
+                        # Keep the canonical exact value alongside the numeric projection.
+                        financial_metadata["exact_value_decimal"] = str(observation.value)
                     self.run_db.add_financial_observation(
                         observation_id=_id("financial"), evidence_id=evidence_id,
                         metric_name=observation.metric or "unknown",
                         period_end=observation.metadata.get("period_end"), value=value,
                         unit=observation.unit, currency=observation.currency,
-                        provider_id=observation.provider_id, metadata=observation.metadata,
+                        provider_id=observation.provider_id, metadata=financial_metadata,
                     )
                 elif observation.evidence_type == "macro":
                     self.run_db.add_macro_observation(
@@ -151,9 +172,32 @@ class EvidenceResearchStore:
                         provider_id=observation.provider_id, metadata=observation.metadata,
                     )
                 approved = observation.metadata.get("calculation_input_approved", True) is not False
+                
+                val_ok = True
+                if isinstance(observation.value, bool):
+                    val_ok = False
+                elif isinstance(observation.value, (int, float, Decimal)):
+                    try:
+                        dec_val = Decimal(str(observation.value))
+                        if not dec_val.is_finite():
+                            val_ok = False
+                        elif observation.metric == "current_price" and dec_val <= 0:
+                            val_ok = False
+                    except (ValueError, TypeError, InvalidOperation):
+                        val_ok = False
+                elif observation.metric == "current_price":
+                    try:
+                        dec_val = Decimal(str(observation.value))
+                        if not dec_val.is_finite() or dec_val <= 0:
+                            val_ok = False
+                    except Exception:
+                        val_ok = False
+
                 if (
                     approved
+                    and val_ok
                     and assessment.status is not FreshnessStatus.UNAVAILABLE
+                    and (not is_current_price or assessment.status in {FreshnessStatus.FRESH, FreshnessStatus.LAST_VALID_CLOSE})
                     and observation_time(observation) is not None
                 ):
                     candidates.append((observation, assessment, evidence_id, observation_id))
@@ -193,9 +237,12 @@ class EvidenceResearchStore:
             reverse=True,
         )
         selected = winners[0]
-        is_partial = selected[1].status is FreshnessStatus.STALE
-        reason = "selected stale latest-as-of observation" if is_partial else "selected latest usable observation as of cutoff"
-        return SelectedEvidence(selected[0], selected[1], selected[2], selected[3], is_partial, reason)
+        is_partial = selected[1].status in {FreshnessStatus.STALE, FreshnessStatus.DELAYED, FreshnessStatus.UNKNOWN}
+        reason = "selected latest usable observation as of cutoff"
+        return SelectedEvidence(
+            selected[0], selected[1], selected[2], selected[3], is_partial, reason,
+            tuple(item[0] for item in winners),
+        )
 
     def _record_conflicts(
         self,
@@ -219,7 +266,7 @@ class EvidenceResearchStore:
                             "provider": item.provider_id,
                             "source": item.source_name,
                             "source_tier": item.source_tier,
-                            "value": item.value,
+                            "value": str(item.value) if isinstance(item.value, Decimal) else item.value,
                             "observed_at": item.observed_at,
                             "published_at": item.published_at,
                         }

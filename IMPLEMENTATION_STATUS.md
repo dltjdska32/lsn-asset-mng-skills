@@ -1,6 +1,111 @@
 # Investment Stack — Implementation Status
 
-Last updated: 2026-08-14
+Last updated: 2026-09-29
+
+## 2026 exchange calendars and quote qualification
+
+NASDAQ, NYSE, KRX, and JPX now have 2026 session snapshots built from the published holiday tables. A weekday that is not on that holiday list is a session. Japanese quotes parse from a Yahoo `.T` body. A refresh requested with `refresh_market_bodies` is selected as the current price only after the stored body reparses and the pinned calendar freshness check passes. The body hash is not an exchange signature. Personal amounts are still entered through the ledger, and 13F remains disabled as a trade condition. The full suite after this change is **713 tests OK, 1 skipped**.
+
+## Review-only monitoring — same uncommitted working tree
+
+Drop detection, alerts, news identity, data-center fields, customer concentration, guidance deltas, and a volatility shadow price now exist. They do not replace the 80/75/70 entry prices or quantities. A live US or KR quote body is stored only when execute payload `refresh_market_bodies` is true, and that row stays unselected. Japan listings are not requested. No JPX session calendar and no personal amounts are generated. A stored 13F flag cannot enable 13F as a trade condition.
+
+After `python -m build --outdir dist`, `.venv` ran **713 tests OK, 1 skipped** in 133.099s. The earlier 706 result does not cover this change. No new independent review or final verification has rerun this tree. There is still no commit.
+
+## Source-bound D12 B numbers — working tree on `cursor/usable-r11-binding`
+
+Base commit `feadc133347ddcb40fce83fc2089810f3e78d586`. This binding is not a new commit. One Cursor session implemented it sequentially on that branch. It did not use separate implementation worktrees. The earlier CLOSE-R11 result remains a safe WAIT boundary, not this binding.
+
+Stored quote and DCF bodies become verified money only when a registered parser re-extracts the same instrument, currency, time, and session. A URL or provider name is not proof. A weekend quote that passes the pinned calendar stays `LAST_VALID_CLOSE`, not a live price. Explicit conservative, base, and optimistic DCF excerpts must match the stored calculation. Hidden beta, ERP, terminal, or growth defaults are not created. Fair value is not a market forecast.
+
+The pinned personal ledger supplies posted quantity, cash, and liabilities. Emergency cash, planned spending, and pending-order reserves count only after an explicit coverage statement for that state version. Missing coverage stays WAIT rather than zero. Verified marks and Yahoo FX bodies convert into portfolio value and investable cash. Verified lot, tick, and fee rules then size three conditional tranches. The public report shows entry price, budget, quantity, and reduction conditions only after the briefing module re-reads the databases. Caller-built policy objects do not release numbers. No order is posted and the ledger is not updated.
+
+The seven modes open only when CLI `execute` receives both `--run-workspace` and `--personal-db`. Without those paths the CLI stays on empty services and exits 3. The host refuses live provider fetches. Chart numbers appear in an equity briefing only when a stored bar series recomputes to an available technical section, and they are not order quantities. 13F scores stay disabled as trade conditions. Skill source and `.agents/skills` mirrors match. A fresh wheel and sdist include the new runtime modules.
+
+On this working tree, `.venv` Python ran **704 tests OK, 1 skipped**. The packaging tests passed after rebuilding `dist/`. An earlier full run failed two packaging tests because existing `dist` archives could not be opened; that was an environment permission error, and the clean rerun passed. Synthetic end-to-end coverage is `tests/integration/test_usable_policy_binding.py`: NASDAQ:ABC at 100 USD, base fair value 125, three entries 100.00/93.75/87.50 with quantities 23/24/26, no new ledger transaction, and a document-free run that stays at WAIT. A separate review session recorded [USABLE-R11-REVIEW-01](docs/workflow/reviews/USABLE-R11-REVIEW-01.md): 26 focused tests and 10 synthetic probes, no new P1/P2. A different final-verification session re-ran the full suite itself and recorded **704 OK, 1 skipped** in [USABLE-R11-VERIFY-01](docs/workflow/reviews/USABLE-R11-VERIFY-01.md). Neither session edited runtime code. There is still no commit for this binding.
+
+Live vendor authenticity, a real personal ledger, exchange calendars outside the pinned September 2026 sessions, and out-of-period 13F validation remain WAIT. No API key or personal amount was entered.
+
+## CLOSE-R11 D12 data binding — independently reviewed code `9fa62bd`
+
+The B policy now has a read-only adapter for the pinned personal ledger projection and a read-only market/DCF adapter. Portfolio analysis renders a five-part D12 section. Independent review found and returned stale/fake close labels, divergent instrument/time/provider/unit records, self-authored DCF/quote source strings, and fake reference flags releasing action numbers. The fixes reassess bounded NASDAQ/KRX sessions and timestamps, keep source-content-unproven DCF and D12 quote values unavailable, and withhold entry prices, budgets, and quantities in the public report. Pure lot/fee arithmetic is labeled `ARITHMETIC_ONLY` and cannot release a report action. The ordinary Phase 4 → 5 Sunday prior-session close path remains tested.
+
+Two GPT-6 Luna Medium implementation sessions worked in separate `codex/close-a` and `codex/close-b` branches/worktrees; the coordinator owned integration/report files. At code source `9fa62bd30fc5214b2ee275748e28515babe8f15f`, a fresh wheel/sdist build, 67 focused tests, and **698 full tests OK (1 skipped)** passed. A separate Codex reviewer re-ran the adversarial probes and 63 focused tests and found no remaining P1/P2 in the implemented safety boundary. A **different Codex final verifier** inspected exact HEAD `f711337ea1cfa56b22aa4f1a58347d76488486b7` in an isolated archive, checked 526/526 tracked blobs, rebuilt wheel/sdist, and passed 38 focused and 11 adversarial checks. Its first full run had one `.git`-boundary archive-environment failure; after initializing an independent Git boundary in that archive, the same full suite passed **698 OK (1 skipped)**. See [review](docs/workflow/reviews/CLOSE-R11-REVIEW-01.md), [independent final verification](docs/workflow/reviews/CLOSE-R11-VERIFY-01.md), [handoff](docs/workflow/handoffs/CLOSE-R11.md), and [task memory](docs/workflow/tasks.md).
+
+This does **not** complete live R11 investment recommendations. Authenticated market and DCF source-content receipts, marked personal holdings/FX, emergency and planned-spending reserves, pending-order reservations, and verified fee/lot rules have no complete production binding. User-specific add/reduce prices, budgets, and quantities remain `WAIT`; no real personal DB or order was used. Calendar coverage is limited to the pinned September 2026 sessions and the default CLI still needs host injection.
+
+## D12 B selected policy — independently verified exact source `61fd2eb`
+
+The user selected B: three equal-budget entry tiers at 80%/75%/70% of a verified base fair value, an 8% individual-equity cap, a 10% investable-cash floor after separate reserves, concentration reduction review strictly above 10% toward 8%, review of a one-third reduction at or above 1.2 times verified optimistic fair value, and a stop/review on thesis impairment. A pure non-posting policy evaluator implements these rules. It returns no numeric entry tiers or add budget without complete typed values and trusted-host readiness attestations. The generic equity report records that B was selected but leaves actionable entry prices, amounts, and quantity at WAIT; DCF scenario values alone cannot clear its provenance gate. No order or ledger post is performed.
+
+The separate Luna Medium implementation used `codex/d12-b`/`workspace/cache/d12-b`; source `c473915`, corrections `dcbd6aa`, `afe7156`, `386296d` were integrated as `ba3ef0a`, `10bf46d`, `dd0e793`, `61fd2eb`. An independent Codex review found one P1 numeric-entry leakage and two P2 arithmetic/reduction issues at `91adaa2`; after fixes it re-reviewed exact `61fd2eb`, passed focused **39/39**, and found no new P1/P2. The coordinator rebuilt wheel/sdist and passed the full **671 OK (1 skipped)** at that source. A different Codex session then verified the same exact source in an isolated temporary archive: 512/512 tracked blobs, fresh wheel/sdist, full **671 OK (1 skipped)**, installed-wheel policy boundary probes, and DCF-only WAIT reporting, with no order or ledger write. See [review](docs/workflow/reviews/D12-B-REVIEW-01.md), [separate final verification](docs/workflow/reviews/D12-B-VERIFY-01.md), [task memory](docs/workflow/tasks.md), and [handoff](docs/workflow/handoffs/D12-B.md).
+
+The readiness bundle contains trusted-host attestations but cannot prove persisted personal records by itself. There is no production host currently binding personal state, reserve exclusions, current quote, valuation assumptions, FX, fees, and trade units to it; user-specific entry/reduction amounts and quantities remain WAIT. The earlier sections below are historical checkpoints, not the current D12 decision state.
+
+## ANALYSIS-FIRST integration — independently verified source `9e781ec`
+
+Three GPT-6 Luna Medium implementation agents worked in separate branches/worktrees and handed off A/B/C changes. The integrated equity single/comparison modes now check Phase 5 result content against same-run persisted calculations, expose conditional valuation findings and a WAIT briefing, and render a registered/recomputed technical section with its formula version and periods in the actual report. The portfolio materiality-selected equity adapter executes Phase 4 → 5 and displays only complete persisted results, with Korean metric labels. Dated weekend closes remain explicitly `LAST_VALID_CLOSE`, not intraday quotes. No personal DB or automatic order was used.
+
+An independent Codex reviewer found forged selected-asset findings (P1) and dated-close, technical-detail, and body-label regressions (P2); after fixes, its second pass found that the technical detail was only in metadata and a selected-market mismatch was possible. These were returned to B/A and fixed. A different Codex final verifier found a future selected-asset close accepted on `3214f6a`; C fixed that on `9e781ecf92288b1d95731837dec50e12bc81755d`. The coordinator rebuilt wheel/sdist and ran **648 tests OK, 1 skipped** plus **47/47 focused** on this exact source. The different Codex verifier repeated an isolated fresh build and full **648 OK, 1 skipped** after checking 507/507 tracked blobs, and passed the forged/future/valid close, technical markdown, DCF, and WAIT probes with no new P1/P2 in the changed scope. See [review](docs/workflow/reviews/ANALYSIS-FIRST-REVIEW-01.md), [independent final verification](docs/workflow/reviews/ANALYSIS-FIRST-VERIFY-01.md), and [task memory](docs/workflow/tasks.md).
+
+At this historical checkpoint D12 policy candidates had been presented but none was chosen. Provider authenticity, broad calendar coverage, 13F out-of-sample adoption, and default CLI host setup retain their documented limits.
+
+## FINISH Integration — Independently Re-reviewed Source `53b6be0`
+
+Three GPT-6 Luna Medium implementation agents used separate branches/worktrees. Their integrated additions cover a fail-closed persisted-numeric equality helper, a provenance-checked technical briefing context, and clearer Korean report/review text with immutable content-addressed report sections. The coordinator rebuilt wheel/sdist and ran the full suite at source `53b6be01f45ad5b57e8d0718b270f4a14fe01649`: **622 OK, 1 skipped**. A separate Codex review reproduced a pinned-cutoff bypass, forged technical-parameter exception, obscured review reasons, and old-manifest section collisions. Fixes were re-reviewed on the exact final source; focused **44/44**, full **622 OK, 1 skipped**, and no new P1/P2 in the changed scope. See [FINISH-REVIEW-01](docs/workflow/reviews/FINISH-REVIEW-01.md). A different Codex agent independently verified the exact source via 496/496 archive blob matches, a fresh wheel/sdist build, full **622 OK, 1 skipped**, and cutoff, forgery, immutable-section, equity-manifest, and CLI-boundary probes. See [FINISH-VERIFY-01](docs/workflow/reviews/FINISH-VERIFY-01.md).
+
+These helpers are not yet called by the fixed analysis modes. The final equity briefing still passes `eligibility_decisions=None` and `has_policy=False`, so it does not expose unbound numeric claims or authorize an investment size. R08 chart and 13F context are not bound into that briefing, and R13 out-of-sample validation plus user-approved D12 safety-margin/risk/sizing policy remain open. The September 2026 NASDAQ/KRX pinned calendar, vendor coverage, and default CLI host wiring retain the limits described below. This integration is not completion of all R01–R17 requirements.
+
+## Independently Reviewed Integration — `4e55a56` (2026-09-28)
+
+An independent Codex review directly checked commit `4e55a560b4245ad5fb63cf4de8a2ce9813a2752a` in a separate worktree and passed the implemented code scope. Root and reviewer each rebuilt wheel/sdist and ran the full suite: **600 tests OK, 1 skipped**. The reviewer also passed 20/20 preserved independent probes, 10/10 refresh-manifest boundary checks, two briefing roundtrip/refresh checks, and 11/11 clean installed-wheel packaging checks. See [the review](docs/workflow/reviews/REVIEW-CODE-01.md).
+
+A **different Codex task** then directly verified exact checkout `2a078da91ddfd761a1785ee482f3cd23eb1acaf7` (no runtime changes after `4e55a56`) and passed the documented implementation scope. It rebuilt wheel/sdist, ran source **600 OK/skip1** and clean installed-wheel **600 OK/skip0**, plus independent 20/20, manifest 10/10, briefing roundtrip 2/2, clean R15 11/11, unpacked sdist 11 OK/skip1, and fresh synthetic ledger/dated-close probes. See [VERIFY-01](docs/workflow/reviews/VERIFY-01.md). This does not certify the unfinished policy, sizing, general calendar, provider, or default CLI host wiring described below.
+
+A second separate Codex task independently repeated the exact-SHA build in an isolated Git clone, source and installed-wheel full suites (**600 OK/skip1** and **600 OK/skip0**), the preserved 20/20 + 10/10 + 2/2 checks, packaging/skills and artifact byte comparison. See [VERIFY-02](docs/workflow/reviews/VERIFY-02.md). It used the fixed 2026-09-27 market-data fixtures rather than making a new live public-quote claim.
+
+Refresh now carries the replay's stored PARTIAL state and missing inputs through internal and external fixed runners. Multi-manager 13F direction uses validated per-manager period chains. Equity reports render a five-part Korean **WAIT** briefing, persist both its rendered and typed forms under an immutable content reference, and include its fingerprint in the report reference and refresh delta. No buy/sell quantity or automatic order is authorized. Verified chart/13F evidence is not yet bound into the complete action briefing; the approval policy, sizing criteria, general market-calendar coverage, live vendor breadth, and default CLI host wiring remain outside this checked scope.
+
+## R15 PACKAGE-01 — 2026-09-27 checkpoint
+
+- Work is isolated on `codex/luna-r15-package-01` from root base `fd4355e5d4ed13f4aeacd34eacb7e40e74431342`.
+- The authoritative source tree and `.agents/skills` mirror contain exactly the same eight skill names and the same two allowlisted files (`SKILL.md`, `agents/openai.yaml`) byte-for-byte. `review` is unchanged; D08 remains unresolved.
+- Distribution/runtime `0.1.0` is distinct from architecture `v1.3`, contract `0.2`, personal/run schema migration numbers `3`/`2`, and per-file config versions. No version mapping or schema upgrade is implied.
+- Python metadata allows `>=3.11`; this task verified Windows Python 3.14.6 only. Using an existing build venv (`build==1.6.1`, `setuptools==84.0.0`), wheel and sdist built with `--no-isolation`. A fresh target venv reused the locally installed `tzdata==2026.4` and `truststore==0.10.4` payloads without downloads, then installed the wheel offline through its own `Scripts/python.exe`; `pip check`, both IANA zone loads, and `investment_stack.__version__ == 0.1.0` passed.
+- The same target interpreter ran **10/10** R15 packaging/sync tests, `investment-stack check` (11 invariants), a `THESIS_REVIEW` plan smoke, a synthetic `REPORT_REFRESH` execute preflight smoke, config loads from `sys.prefix/config`, and `scripts/sync_agent_skills.py --check`. No full repository suite, live provider call, account credential, personal DB, or Codex UI auto-discovery from the venv prefix was tested.
+- The exact deployment path allowlist is `docs/workflow/deployment-allowlist.md`. The installed wheel's skill payload is verified under `sys.prefix/skills` and `sys.prefix/.agents/skills`; automatic Codex UI discovery from an arbitrary virtual-environment prefix is not established.
+
+## Current Integrated Checkpoint (`a1a41b0`)
+
+As of **2026-09-27**, the integration includes the A/C changes and B's R15 source-distribution repair. These figures and results are an integration checkpoint before the final independent review and any subsequent verification or fixes; they are not a release sign-off.
+
+- **Tests and review:** root unittest reported **595 OK, 1 skip**. The independent fixed review reported **13/13 PASS**. These totals do not replace final independent review or later checks.
+- **R02–05 / R09:** the SEC facts and period-aware evidence-consumption slices are integrated; they are no longer waiting on initial A integration. Provider coverage remains bounded by the registered adapters and their live verification.
+- **Seven request modes:** all seven fixed plans have configured service handlers through [`compose_seven_mode_services`](runtime/investment_stack/execution/service_composition.py), including the Phase 4 → Phase 5 selected-equity path and the portfolio/thesis bundles. See the [composition handoff](docs/workflow/handoffs/LUNA-R14-SEVEN-MODE-COMPOSITION-01.md). Composition requires a host to inject a valid pinned `run.db`, a `PersonalLedgerService`, equity and portfolio/thesis services, credentials/providers, and typed personal-state loaders/callbacks. It does not create or select those dependencies.
+- **Configured-mode E2E scope:** PASS confirms the exercised fixed service compositions and mode flows under injected dependencies. It does not certify R10/R11/R17 as complete or mean that a final investment judgment or completed five-section briefing is wired end-to-end.
+- **Briefing integration gap:** [`analysis_modes.render_report`](runtime/investment_stack/execution/analysis_modes.py) currently passes fundamentals, valuation, comparison, and review sections to Phase 6; it does not pass `NonPostingBriefing` to [`InvestmentReportBuilder`](runtime/investment_stack/reporting/builder.py). R08 chart evidence and 13F context are not yet bound into the five-section briefing. A is working on the safe WAIT-briefing connection; C's RC10-R1/RC11 work is in progress. Treat this as current/in-progress, not complete.
+- **CLI boundary:** [`investment-stack execute`](runtime/investment_stack/cli.py) has no configured runtime handlers by default. Without `runtime_services`, it executes against empty `RuntimeServices()` and returns `UNSUPPORTED`; the CLI does not bootstrap providers, credentials, databases, or personal loaders.
+- **Market close qualification:** the [default provider factory](runtime/investment_stack/providers/factory.py) wires pinned calendars for NASDAQ and KRX (see [calendar registry](runtime/investment_stack/freshness/calendar.py)) and can select a verified dated close as `LAST_VALID_CLOSE`. The bundled snapshots cover only their explicitly pinned September 2026 sessions. They do not provide general weekend or exchange-calendar coverage; unsupported exchanges/dates fail closed for stale-close qualification. A `LAST_VALID_CLOSE` remains a dated close, not an intraday/current live quote.
+- **Live evidence limits:** a 2026-09-27 public-source integration query carried Yahoo's 2026-09-25 close and Naver's 2026-09-23 close through Phase 4 evidence persistence into Phase 5 valuation, labeled `LAST_VALID_CLOSE` (see [R01 integration handoff](docs/workflow/handoffs/R01-WEEKEND-PRICE-01.md)). This verifies that path for those requests at that time, not ongoing vendor availability or broad provider coverage. Investing.com direct page requests returned HTTP 403 in the recorded probe. OpenDART credentialed access requires the host to supply `OPENDART_API_KEY` through the credential interface.
+- **Data and packaging boundaries:** the service host must inject the personal loader/ledger; integration checks used synthetic or temporary run data, not the user's personal DB. Wheel payload paths are verified, but Codex automatic skill UI discovery from an arbitrary venv prefix remains unconfirmed.
+- **Still pending:** R10/R11/R17 completion, safe WAIT-briefing/report integration including R08 chart and 13F context binding, final independent review, another final verification pass, any resulting fixes, and reassessment of counts at the resulting root commit. R17 number-combination logic remains open.
+
+## Historical B Follow-up Verification — 2026-09-27
+
+The B-only statements below describe the earlier provider-integration stage. Later R01 integration superseded the earlier conclusions that freshness evaluation was unwired and that Naver could not qualify for a current-price calculation. Current behavior and bounded calendar coverage are summarized in the integrated checkpoint above.
+
+This update belongs to `codex/luna-b-transfer-02`, based on `0ed93d8e100494a350f5ecde160c72ffafaf26a1`. It is a B-scope check, not root integration or full-stack verification.
+
+- The B quote, OHLCV, and technical fixture suite passes **45 tests** in a Windows venv containing the declared `truststore` and `tzdata` dependencies. These are synthetic fixture tests, not live-source evidence.
+- Root integration at `83dfb27` connected a scoped `truststore.SSLContext` to the default `providers/http.py` transport. Public probes through that default transport returned HTTP 200 for the Naver Samsung quote and daily-price APIs, the Naver stock page, Yahoo Finance AAPL chart API, and Coinbase BTC-USD ticker API. The B adapters parsed Naver, Yahoo, and Coinbase quote responses; Yahoo daily OHLCV produced 22 parsed bars. This confirms connectivity and parsing only, not data freshness, adjustment validity, or session completeness.
+- The earlier B-only probe observed the Naver close at **2026-09-23 15:30 KST** when retrieved on 2026-09-27. At that stage the provider result was only `AVAILABLE` because the R01 evaluator was not supplied. Later root integration wired the evaluator and pinned KRX schedule through the default factory; the same dated close can then be qualified as `LAST_VALID_CLOSE`, not as an intraday quote.
+- Naver's `/price` endpoint returned a top-level list with no ticker field and comma-grouped numeric strings. The parser now binds the payload to the matching canonical Naver request route, parses grouped numbers, preserves five raw bars in the live probe, and returns `UNAVAILABLE` without adjustment verification. Route binding is request provenance, not an identity echoed in the response.
+- Direct Investing.com US and Korea page requests returned HTTP 403. Those entries remain fixture-only and are not used as live quote sources.
+- Historical note: before the A integration at `83dfb27`, the default `providers/http.py` transport failed TLS verification in this Windows environment (`CERTIFICATE_VERIFY_FAILED`). That issue was resolved by the scoped TLS integration; this B follow-up does not edit the A-owned transport.
+- The adjustment receipt remains a caller-supplied marker rather than a validated corporate-action record. No split-adjusted Naver OHLCV result is claimed from the live probe. The later R01 work adds bounded pinned-schedule close qualification; it does not create general calendar coverage. R08's pure functions also accept `Sequence[Bar]`, which carries no source provenance; callers must not feed raw diagnostics into production calculations.
+- The wheel-installed Codex UI auto-discovery path was not proven by repo-local skill discovery. Current build/install checks must be read as package file-layout checks only.
+
+---
 
 ## Architecture
 
@@ -9,7 +114,7 @@ Last updated: 2026-08-14
 - Authoritative document: `ARCHITECTURE.md`
 - Do not redesign the architecture without an explicit approved change decision.
 
-## Current Status
+## Historical Status (As of 2026-08-14)
 
 - Phase 1 — Repository / Skeleton: COMPLETE
 - Phase 2 — Storage Safety: COMPLETE
@@ -18,7 +123,7 @@ Last updated: 2026-08-14
 - Phase 5 — Asset Analysis: IMPLEMENTED
 - Phase 6 — Report & Review: IMPLEMENTED
 - Phase 7 — Acceptance: COMPLETE
-- Phase 8 — Final Integration / Hardening: IMPLEMENTED, READY FOR FINAL PRE-COMMIT REVIEW
+- Phase 8 — Final Integration / Hardening: *(Historically marked as READY FOR FINAL PRE-COMMIT REVIEW; currently superseded by the 2026-09-27 integration effort above)*
 
 ## Phase 4 Implemented
 
@@ -128,15 +233,14 @@ Last updated: 2026-08-14
 - `scripts/run_live_equity_research.py` provides a reproducible runtime entry point for structured external research.
 - Screenshot prices remain non-authoritative portfolio snapshot evidence.
 
-## Current Test Baseline
+## Earlier Phase-Specific Test Records
 
 - Phase 4 targeted tests: 26/26 PASS
 - Phase 5 targeted tests: 35/35 PASS
 - Phase 6 targeted tests: 25/25 PASS
 - Phase 7 focused acceptance/integration/adversarial tests: 16/16 PASS
 - Phase 8 focused final-integration/hardening tests: 10/10 PASS
-- Final full unittest: 272/272 PASS on this Linux validation host (2 platform-conditional skips)
-- Installed-wheel unittest: 272/272 PASS (same 2 platform-conditional skips)
+- These phase-specific totals and older 272-test full-suite runs are historical and are superseded by the `a1a41b0` root checkpoint above (595 OK, 1 skip).
 - Architecture invariant: 9/9 PASS
 - Phase 8 delta whitespace check: PASS; run `git diff --check` once more in the real user Git working tree
 
@@ -186,4 +290,4 @@ The wheel should also be built and installed into a clean virtual environment be
 
 ## Next
 
-Run the final Phase 8 release gate, then perform one independent pre-commit review on the real Git working tree. If Critical/High remain 0, commit/tag the v1.3 MVP. AWS/MCP/web/mobile connectivity remains post-v1.3.
+Complete the final independent review and other verification against the then-current integrated root, address any findings, and update this checkpoint's counts. The current checkpoint does not certify broad vendor live coverage or default CLI bootstrapping. AWS/MCP/web/mobile connectivity remains post-v1.3.

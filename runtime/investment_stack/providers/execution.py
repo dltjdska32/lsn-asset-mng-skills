@@ -8,6 +8,44 @@ from investment_stack.providers.adapters import ProviderAdapter
 from investment_stack.providers.models import ProviderRequest, ProviderResult, ProviderStatus
 
 
+def assess_current_price_observation(observation, *, analysis_as_of: str, engine=None):
+    """Apply the shared pinned-calendar rule for equity closes and age rule for crypto."""
+    from investment_stack.freshness import FreshnessEngine
+    from investment_stack.freshness.calendar import get_pinned_calendar
+    from investment_stack.freshness.models import FreshnessStatus
+
+    engine = engine or FreshnessEngine()
+    iid = (observation.instrument_id or "").upper()
+    prefix = iid.partition(":")[0]
+    aliases = {"KS": "KRX", "NMS": "NASDAQ", "NASDAQGS": "NASDAQ"}
+    exchange = aliases.get(prefix, prefix)
+    if prefix == "CRYPTO":
+        calendar = None
+    elif exchange in {"NASDAQ", "KRX", "NYSE"}:
+        calendar = get_pinned_calendar(exchange)
+        if calendar is None:
+            from investment_stack.freshness import FreshnessAssessment
+            return FreshnessAssessment(FreshnessStatus.UNAVAILABLE, None, None, "pinned exchange calendar required")
+    elif observation.market_session_date or observation.metadata.get("quote_kind"):
+        # A dated equity close without a recognized exchange calendar is never inferred.
+        from investment_stack.freshness import FreshnessAssessment
+        return FreshnessAssessment(FreshnessStatus.UNAVAILABLE, None, None, "pinned exchange calendar required")
+    else:
+        return engine.assess(observation, analysis_as_of=analysis_as_of)
+
+    if calendar is not None:
+        expected = {"NASDAQ": "USD", "KRX": "KRW", "NYSE": "USD"}[exchange]
+        if (observation.currency or "").upper() != expected:
+            from investment_stack.freshness import FreshnessAssessment
+            return FreshnessAssessment(FreshnessStatus.UNAVAILABLE, None, None, "quote currency does not match exchange")
+        declared = str(observation.metadata.get("exchange", "")).upper()
+        declared = {"NMS": "NASDAQ", "NASDAQGS": "NASDAQ", "KS": "KRX"}.get(declared, declared)
+        if declared != exchange:
+            from investment_stack.freshness import FreshnessAssessment
+            return FreshnessAssessment(FreshnessStatus.UNAVAILABLE, None, None, "quote exchange does not match instrument")
+    return engine.assess(observation, analysis_as_of=analysis_as_of, calendar=calendar)
+
+
 @dataclass(frozen=True, slots=True)
 class FallbackResult:
     results: tuple[ProviderResult, ...]
@@ -19,8 +57,123 @@ class FallbackResult:
 
 
 class ProviderFallbackExecutor:
-    def __init__(self, adapters: list[ProviderAdapter] | tuple[ProviderAdapter, ...]) -> None:
+    def __init__(self, adapters: list[ProviderAdapter] | tuple[ProviderAdapter, ...], *, freshness_engine=None) -> None:
         self._adapters = tuple(adapters)
+        self.freshness_engine = freshness_engine
+
+    def _is_eligible_for_purpose(self, request: ProviderRequest, result: ProviderResult) -> bool:
+        if not result.usable:
+            return False
+
+        from investment_stack.providers.registry import ProviderCapability
+        
+        if request.capability == ProviderCapability.CURRENT_PRICE:
+            from investment_stack.freshness.models import FreshnessStatus
+            from decimal import Decimal, InvalidOperation
+
+            has_eligible = False
+            for obs in result.observations:
+                try:
+                    assessment = assess_current_price_observation(obs, analysis_as_of=request.analysis_as_of, engine=self.freshness_engine)
+                except ValueError:
+                    return False
+                if assessment.status not in {FreshnessStatus.FRESH, FreshnessStatus.LAST_VALID_CLOSE}:
+                    return False
+                if request.instrument_id and obs.instrument_id != request.instrument_id:
+                    return False
+                expected_currency = request.parameters.get("quote_currency")
+                if expected_currency and obs.currency != expected_currency:
+                    return False
+                
+                if isinstance(obs.value, bool):
+                    return False
+                try:
+                    val = Decimal(str(obs.value))
+                    if not val.is_finite() or val <= 0:
+                        return False
+                except (ValueError, TypeError, InvalidOperation):
+                    return False
+                has_eligible = True
+            return has_eligible
+
+        elif request.capability == ProviderCapability.FUNDAMENTALS:
+            from investment_stack.freshness.engine import parse_timestamp, observation_time
+            from decimal import Decimal, InvalidOperation
+            
+            try:
+                cutoff = parse_timestamp(request.analysis_as_of)
+            except ValueError:
+                return False
+            if not cutoff:
+                return False
+
+            required_metrics = request.parameters.get("required_metrics")
+            req_set = set()
+            if required_metrics is not None:
+                if not isinstance(required_metrics, (list, tuple, set)):
+                    return False
+                if not all(isinstance(m, str) and m.strip() for m in required_metrics):
+                    return False
+                req_set = set(m.strip() for m in required_metrics)
+
+            found_metrics_by_group: dict[tuple, set[str]] = {}
+            has_approved_numeric = False
+
+            for obs in result.observations:
+                if not obs.metadata.get("calculation_input_approved", True):
+                    continue
+                
+                if request.instrument_id and obs.instrument_id != request.instrument_id:
+                    continue
+                
+                try:
+                    eff = observation_time(obs)
+                except ValueError:
+                    continue
+                    
+                if not eff or eff > cutoff:
+                    continue
+                
+                if isinstance(obs.value, bool):
+                    continue
+                try:
+                    val = Decimal(str(obs.value))
+                    if not val.is_finite():
+                        continue
+                except (ValueError, TypeError, InvalidOperation):
+                    continue
+                
+                has_approved_numeric = True
+                if obs.metric:
+                    group_key = (
+                        str(obs.metadata.get("period_end", "")),
+                        str(obs.metadata.get("start", "")),
+                        str(obs.currency or ""),
+                        str(obs.metadata.get("reporting_frequency", "")),
+                        str(obs.metadata.get("accounting_standard", "")),
+                        str(obs.metadata.get("consolidation", "")),
+                        str(obs.metadata.get("adjustment_basis", ""))
+                    )
+                    found_metrics_by_group.setdefault(group_key, set()).add(obs.metric)
+
+            if not has_approved_numeric:
+                return False
+
+            if req_set:
+                satisfies_requirements = False
+                for group_key, group_metrics in found_metrics_by_group.items():
+                    period_end = group_key[0]
+                    if not period_end:
+                        continue
+                    if req_set.issubset(group_metrics):
+                        satisfies_requirements = True
+                        break
+                if not satisfies_requirements:
+                    return False
+
+            return True
+
+        return True
 
     def execute(self, request: ProviderRequest) -> FallbackResult:
         results: list[ProviderResult] = []
@@ -33,7 +186,7 @@ class ProviderFallbackExecutor:
             except Exception as exc:  # adapter boundary: normalize unexpected provider failure
                 result = ProviderResult(adapter.name, request.capability, ProviderStatus.ERROR, reason=f"provider adapter failed: {type(exc).__name__}")
             results.append(result)
-            if result.usable:
+            if self._is_eligible_for_purpose(request, result):
                 selected = result
                 break
         return FallbackResult(tuple(results), selected)

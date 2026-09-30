@@ -6,6 +6,7 @@ from decimal import Decimal
 from investment_stack.calculations import (
     BusinessType,
     DcfAssumptions,
+    DcfScenario,
     EconomicUnderlying,
     EquityFundamentalAnalyzer,
     EquityFundamentalInput,
@@ -74,6 +75,28 @@ class Phase5EquityValuationTests(unittest.TestCase):
                     dcf=DcfAssumptions(D("10"), D("0.03"), D("0.02"), D("0.03"), 5, D("0"), D("1")),
                 )
             )
+
+    def test_dcf_explicit_scenarios_and_sensitivity_keep_assumption_lineage(self):
+        base = DcfAssumptions(D("100"), D("0.04"), D("0.10"), D("0.02"), 5, D("20"), D("10"))
+        conservative = DcfAssumptions(D("100"), D("0.02"), D("0.11"), D("0.01"), 5, D("20"), D("10"))
+        result = EquityValuationAnalyzer().analyze(EquityValuationInput(
+            "X", BusinessType.STABLE_CASH_FLOW,
+            dcf=base,
+            dcf_scenarios=(
+                DcfScenario("conservative", conservative, ("evidence:assumptions-1",)),
+                DcfScenario("base", base, ("evidence:assumptions-2",)),
+            ),
+            dcf_sensitivity_rates=((D("0.10"), D("0.02")), (D("0.02"), D("0.03"))),
+        ))
+        metrics = {metric.name: metric for metric in result.metrics}
+        self.assertIsNotNone(metrics["dcf_scenario_conservative"].value)
+        self.assertEqual(metrics["dcf_scenario_conservative"].evidence_ids, ("evidence:assumptions-1",))
+        self.assertIsNotNone(metrics["dcf_scenario_base"].value)
+        self.assertIsNone(metrics["dcf_scenario_optimistic"].value)
+        self.assertIsNotNone(metrics["dcf_sensitivity_0"].value)
+        self.assertIsNone(metrics["dcf_sensitivity_1"].value)  # terminal growth exceeds discount rate
+        self.assertIn("growth=0.02", metrics["dcf_scenario_conservative"].formula)
+        self.assertEqual(result.status.value, "PARTIAL")
 
 
     def test_high_growth_valuation_requires_explicit_scenarios(self):

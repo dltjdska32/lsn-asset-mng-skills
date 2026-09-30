@@ -40,11 +40,11 @@ class Phase4ProviderTests(unittest.TestCase):
         self.assertNotIn("super-secret", repr(result))
         self.assertNotIn("super-secret", result.observations[0].source_url or "")
 
-    def test_sec_companyfacts_is_keyless_and_normalized(self) -> None:
+    def test_sec_companyfacts_empty_tag_is_unavailable(self) -> None:
         adapter = SecCompanyFactsAdapter(transport=transport_json({"facts": {"us-gaap": {"Revenue": {}}}}))
         result = adapter.fetch(self.request(ProviderCapability.FUNDAMENTALS, cik="320193"))
-        self.assertEqual(result.status, ProviderStatus.AVAILABLE)
-        self.assertEqual(result.observations[0].source_tier, 1)
+        self.assertEqual(result.status, ProviderStatus.UNAVAILABLE)
+        self.assertEqual(result.observations, ())
 
     def test_kraken_uses_venue_trade_time_not_retrieval_time(self) -> None:
         adapter = KrakenTickerAdapter(transport=transport_json({"error": [], "result": {"XXBTZUSD": [["123.45", "1", 1786701540.0, "b", "m", ""]], "last": "1"}}))

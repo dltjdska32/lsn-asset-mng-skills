@@ -43,10 +43,19 @@ from investment_stack.personal.intent import (
 from investment_stack.personal.manager import PersonalDatabaseManager, StorageNotWritableError
 from investment_stack.personal.projection import (
     ProjectionState,
+    VerifiedPortfolioSnapshotProjection,
     compute_projection,
     replace_projection,
 )
-from investment_stack.personal.validation import validate_personal_database
+from investment_stack.personal.reserves import (
+    RESERVATION_KINDS,
+    CashReservation,
+    CashReservationDraft,
+)
+from investment_stack.personal.validation import (
+    validate_personal_connection,
+    validate_personal_database,
+)
 from investment_stack.storage.sqlite import sqlite_readonly_connection
 
 
@@ -937,6 +946,150 @@ class PersonalLedgerService:
             raise
         except (OSError, sqlite3.Error, ValueError) as exc:
             raise ProjectionError(f"projection query failed: {exc}") from exc
+
+    def get_verified_portfolio_snapshot_projection(
+        self,
+        *,
+        expected_personal_db_instance_id: str,
+        expected_state_version: int,
+        expected_snapshot_id: str,
+        expected_data_as_of: str,
+    ) -> VerifiedPortfolioSnapshotProjection:
+        """Read and bind the referenced snapshot row to its ledger projection.
+
+        The snapshot's JSON payload and valuation status are returned only as
+        descriptive metadata; neither is used as proof of marked values.
+        Projection quantities, cash, and liabilities are recomputed solely from
+        posted entries through the pinned state version.
+        """
+        if (
+            not isinstance(expected_state_version, int)
+            or isinstance(expected_state_version, bool)
+            or expected_state_version < 0
+        ):
+            raise ProjectionError("pinned state_version must be a non-negative integer")
+        if not all((expected_personal_db_instance_id, expected_snapshot_id, expected_data_as_of)):
+            raise ProjectionError("personal DB instance, snapshot ID, and data-as-of pin are required")
+        try:
+            database_path = self.manager._operational_database_path()
+            with sqlite_readonly_connection(database_path) as connection:
+                connection.execute("BEGIN")
+                report = validate_personal_connection(
+                    connection, path=database_path, require_current=True,
+                    migrations=self.manager.migrations,
+                )
+                if not report.valid or not report.instance_id:
+                    raise ProjectionError("personal database failed read-only validation")
+                if report.instance_id != expected_personal_db_instance_id:
+                    raise ProjectionError("personal DB instance does not match run pin")
+                row = connection.execute(
+                    "SELECT snapshot_id, state_version, snapshot_type, as_of, valuation_status "
+                    "FROM portfolio_snapshots WHERE snapshot_id = ?",
+                    (expected_snapshot_id,),
+                ).fetchone()
+                if row is None:
+                    raise ProjectionError("pinned portfolio snapshot row is missing")
+                if (
+                    row["state_version"] != expected_state_version
+                    or row["as_of"] != expected_data_as_of
+                ):
+                    raise ProjectionError("portfolio snapshot row does not match pinned version/as-of")
+                projection = compute_projection(
+                    connection, target_state_version=expected_state_version
+                )
+                if projection.state_version != expected_state_version:
+                    raise ProjectionError("computed personal projection does not match pinned version")
+                return VerifiedPortfolioSnapshotProjection(
+                    personal_db_instance_id=report.instance_id,
+                    snapshot_id=str(row["snapshot_id"]),
+                    state_version=int(row["state_version"]),
+                    snapshot_type=str(row["snapshot_type"]),
+                    data_as_of=str(row["as_of"]),
+                    valuation_status=row["valuation_status"],
+                    projection=projection,
+                )
+        except (OSError, sqlite3.Error, ValueError, StorageNotWritableError) as exc:
+            if isinstance(exc, ProjectionError):
+                raise
+            raise ProjectionError(f"pinned snapshot read failed: {exc}") from exc
+
+    def declare_cash_reservations(
+        self,
+        *,
+        expected_state_version: int,
+        reservations: tuple[CashReservationDraft, ...] = (),
+    ) -> None:
+        """Record a complete reservation set without posting an order or transaction.
+
+        An empty set is an explicit statement that this state version has no
+        emergency, planned-spending, or pending-order reserve. It does not
+        invent amounts for a later state version.
+        """
+        if isinstance(expected_state_version, bool) or not isinstance(expected_state_version, int):
+            raise PostingError("reservation state_version must be an integer")
+        if not isinstance(reservations, tuple):
+            raise PostingError("reservations must be a tuple")
+        normalized: list[tuple[str, str, Decimal, str | None]] = []
+        for draft in reservations:
+            if not isinstance(draft, CashReservationDraft) or draft.kind not in RESERVATION_KINDS:
+                raise PostingError("reservation kind is unsupported")
+            if not isinstance(draft.currency, str) or len(draft.currency.strip()) != 3:
+                raise PostingError("reservation currency must be a three-letter code")
+            amount = exact_decimal(draft.amount, field="reservation amount")
+            if amount is None or amount < 0:
+                raise PostingError("reservation amount must be zero or positive")
+            instrument_id = draft.instrument_id
+            if instrument_id is not None and (not isinstance(instrument_id, str) or not instrument_id.strip()):
+                raise PostingError("pending-order reservation instrument is invalid")
+            normalized.append((draft.kind, draft.currency.strip().upper(), amount, instrument_id))
+        try:
+            with self.manager.guarded_write_transaction() as connection:
+                current = self._current_state_version(connection)
+                if current != expected_state_version:
+                    raise PostingError("reservation state_version does not match the ledger")
+                if connection.execute(
+                    "SELECT 1 FROM reservation_coverage WHERE state_version = ?", (current,)
+                ).fetchone():
+                    raise PostingError("reservation coverage is already declared for this state version")
+                created_at = _now()
+                connection.execute(
+                    "INSERT INTO reservation_coverage (state_version, statement, created_at) VALUES (?, 'COMPLETE', ?)",
+                    (current, created_at),
+                )
+                for kind, currency, amount, instrument_id in normalized:
+                    connection.execute(
+                        "INSERT INTO cash_reservations "
+                        "(reservation_id, state_version, kind, currency, amount_decimal, instrument_id, created_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (uuid4().hex, current, kind, currency, encode_decimal(amount), instrument_id, created_at),
+                    )
+        except PostingError:
+            raise
+        except (OSError, sqlite3.Error, StorageNotWritableError, ValueError) as exc:
+            raise PostingError(f"reservation declaration failed: {exc}") from exc
+
+    def list_cash_reservations(self, state_version: int) -> tuple[bool, tuple[CashReservation, ...]]:
+        """Return whether coverage was declared and the rows stored at that version."""
+        if isinstance(state_version, bool) or not isinstance(state_version, int) or state_version < 0:
+            raise ProjectionError("reservation state_version must be a non-negative integer")
+        coverage = self._read(
+            "SELECT statement FROM reservation_coverage WHERE state_version = ?", (state_version,)
+        )
+        if len(coverage) != 1 or coverage[0].get("statement") != "COMPLETE":
+            return False, ()
+        rows = self._read(
+            "SELECT * FROM cash_reservations WHERE state_version = ? ORDER BY reservation_id",
+            (state_version,),
+        )
+        reservations = tuple(
+            CashReservation(
+                str(row["reservation_id"]), int(row["state_version"]), str(row["kind"]),
+                str(row["currency"]), decode_decimal(row["amount_decimal"]) or ZERO,
+                row["instrument_id"],
+            )
+            for row in rows
+        )
+        return True, reservations
 
     def get_positions(self):
         return self.get_projection_as_of_state_version(self.get_current_state_version()).positions

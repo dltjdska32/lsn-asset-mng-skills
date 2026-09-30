@@ -37,7 +37,14 @@ class Phase6IntegrationTests(unittest.TestCase, Phase6RunFixture):
         raw = sqlite3.connect(self.manager.database_path)
         try:
             self.assertEqual(raw.execute("SELECT COUNT(*) FROM report_sections").fetchone()[0], 4)
-            metadata_json = raw.execute("SELECT metadata_json FROM report_sections WHERE section_id='section:price'").fetchone()[0]
+            price_ref = next(ref for ref in result.report.persisted_section_refs if ref[0] == "price")
+            stored = raw.execute(
+                "SELECT content_reference, metadata_json FROM report_sections WHERE section_id=?",
+                (price_ref[1],),
+            ).fetchone()
+            self.assertIsNotNone(stored)
+            self.assertEqual(price_ref[2], stored[0])
+            metadata_json = stored[1]
         finally:
             raw.close()
         metadata = json.loads(metadata_json)

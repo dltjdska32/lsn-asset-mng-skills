@@ -64,3 +64,5 @@ class InvestmentReport:
     review_triggers: tuple[str, ...]
     unknowns: tuple[str, ...]
     markdown: str
+    briefing: str | None = None
+    persisted_section_refs: tuple[tuple[str, str, str], ...] = ()
