@@ -19,6 +19,7 @@ _OFFICIAL_HOSTS = {
     "NASDAQ": {"nasdaqtrader.com", "www.nasdaq.com"},
     "NYSE": {"www.nyse.com", "tv.nyse.com"},
     "KRX": {"global.krx.co.kr", "trn.krx.co.kr", "www.mois.go.kr"},
+    "JPX": {"www.jpx.co.jp"},
 }
 
 
@@ -100,9 +101,50 @@ def _session(day: str, timezone: str, opens: str, closes: str) -> ExchangeSessio
     )
 
 
-# Bounded, pinned snapshots used by the Sep 2026 qualification path. Any date
-# outside these windows needs a new officially sourced/pinned schedule release.
-_nasdaq_sources = ("https://nasdaqtrader.com/Trader.aspx?id=Calendar",)
+def _year_sessions(
+    year: int, timezone: str, opens: str, closes: str, closed: frozenset[date],
+    early_close: Mapping[date, str] | None = None,
+) -> tuple[ExchangeSession, ...]:
+    """Weekday sessions minus an official holiday table. Early closes keep the official close time."""
+    overrides = early_close or {}
+    sessions: list[ExchangeSession] = []
+    day = date(year, 1, 1)
+    last = date(year, 12, 31)
+    while day <= last:
+        if day.weekday() < 5 and day not in closed:
+            sessions.append(_session(day.isoformat(), timezone, opens, overrides.get(day, closes)))
+        day += timedelta(days=1)
+    return tuple(sessions)
+
+
+# Official 2026 full closures and early closes. Weekdays outside this table are
+# sessions. A later emergency halt is not in the published holiday table.
+_NASDAQ_CLOSED_2026 = frozenset({
+    date(2026, 1, 1), date(2026, 1, 19), date(2026, 2, 16), date(2026, 4, 3),
+    date(2026, 5, 25), date(2026, 6, 19), date(2026, 7, 3), date(2026, 9, 7),
+    date(2026, 11, 26), date(2026, 12, 25),
+})
+_NASDAQ_EARLY_2026 = {date(2026, 11, 27): "13:00:00", date(2026, 12, 24): "13:00:00"}
+_KRX_CLOSED_2026 = frozenset({
+    date(2026, 1, 1), date(2026, 2, 16), date(2026, 2, 17), date(2026, 2, 18),
+    date(2026, 3, 2), date(2026, 5, 1), date(2026, 5, 5), date(2026, 5, 25),
+    date(2026, 8, 17), date(2026, 9, 24), date(2026, 9, 25), date(2026, 10, 5),
+    date(2026, 10, 9), date(2026, 12, 25), date(2026, 12, 31),
+})
+_JPX_CLOSED_2026 = frozenset({
+    date(2026, 1, 1), date(2026, 1, 2), date(2026, 1, 12), date(2026, 2, 11),
+    date(2026, 2, 23), date(2026, 3, 20), date(2026, 4, 29), date(2026, 5, 4),
+    date(2026, 5, 5), date(2026, 5, 6), date(2026, 7, 20), date(2026, 8, 11),
+    date(2026, 9, 21), date(2026, 9, 22), date(2026, 9, 23), date(2026, 10, 12),
+    date(2026, 11, 3), date(2026, 11, 23), date(2026, 12, 31),
+})
+
+# Bounded, pinned snapshots. The 2026 schedules are the official holiday tables
+# plus weekday sessions. The September snapshots stay for exact historical ids.
+_nasdaq_sources = (
+    "https://nasdaqtrader.com/Trader.aspx?id=Calendar",
+    "https://www.nasdaq.com/market-activity/stock-market-holiday-schedule",
+)
 _krx_sources = (
     "https://global.krx.co.kr/contents/GLB/06/0602/0602010201/GLB0602010201T1.jsp",
     "https://www.mois.go.kr/frt/bbs/type010/commonSelectBoardArticle.do?bbsId=BBSMSTR_000000000008&nttId=129490",
@@ -125,9 +167,38 @@ PINNED_CALENDARS: Mapping[tuple[str, str], ExchangeCalendarSchedule] = MappingPr
          _session("2026-09-28", "Asia/Seoul", "09:00:00", "15:30:00")),
         timedelta(seconds=0),
     ),
+    ("NASDAQ", "nasdaq-2026-official-snapshot-v1"): ExchangeCalendarSchedule(
+        "NASDAQ", "USD", "America/New_York", "nasdaq-2026-official-snapshot-v1", _nasdaq_sources,
+        date(2026, 1, 1), date(2026, 12, 31),
+        _year_sessions(2026, "America/New_York", "09:30:00", "16:00:00", _NASDAQ_CLOSED_2026, _NASDAQ_EARLY_2026),
+        timedelta(seconds=1),
+    ),
+    ("NYSE", "nyse-2026-official-snapshot-v1"): ExchangeCalendarSchedule(
+        "NYSE", "USD", "America/New_York", "nyse-2026-official-snapshot-v1",
+        ("https://www.nyse.com/trade/hours-calendars",),
+        date(2026, 1, 1), date(2026, 12, 31),
+        _year_sessions(2026, "America/New_York", "09:30:00", "16:00:00", _NASDAQ_CLOSED_2026, _NASDAQ_EARLY_2026),
+        timedelta(seconds=1),
+    ),
+    ("KRX", "krx-2026-official-snapshot-v1"): ExchangeCalendarSchedule(
+        "KRX", "KRW", "Asia/Seoul", "krx-2026-official-snapshot-v1", _krx_sources,
+        date(2026, 1, 1), date(2026, 12, 31),
+        _year_sessions(2026, "Asia/Seoul", "09:00:00", "15:30:00", _KRX_CLOSED_2026),
+        timedelta(seconds=0),
+    ),
+    ("JPX", "jpx-2026-official-snapshot-v1"): ExchangeCalendarSchedule(
+        "JPX", "JPY", "Asia/Tokyo", "jpx-2026-official-snapshot-v1",
+        ("https://www.jpx.co.jp/english/corporate/about-jpx/calendar/index.html",),
+        date(2026, 1, 1), date(2026, 12, 31),
+        _year_sessions(2026, "Asia/Tokyo", "09:00:00", "15:30:00", _JPX_CLOSED_2026),
+        timedelta(seconds=1),
+    ),
 })
 
 
 def get_pinned_calendar(exchange: str) -> ExchangeCalendarSchedule | None:
-    """Return the bounded official snapshot bundled with this runtime, if any."""
-    return next((value for (key, _), value in PINNED_CALENDARS.items() if key == exchange.upper()), None)
+    """Return the widest official snapshot bundled for this exchange, if any."""
+    matches = [value for (key, _), value in PINNED_CALENDARS.items() if key == exchange.upper()]
+    if not matches:
+        return None
+    return max(matches, key=lambda item: item.coverage_end)

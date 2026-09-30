@@ -22,7 +22,12 @@ from investment_stack.contracts.calculation import (
     OutputKind,
 )
 from investment_stack.contracts.slots import EligibilityDecision, EligibilityStatus, SelectedInputSet
-from investment_stack.decisions.briefing import NonPostingBriefing, generate_briefing
+from investment_stack.decisions.briefing import (
+    InstitutionalBriefingContext,
+    NonPostingBriefing,
+    generate_briefing,
+)
+from investment_stack.reporting.auxiliary_context import build_auxiliary_context_section
 from investment_stack.reporting.technical_section import build_technical_report_section
 from investment_stack.deep_research import EquityResearchOutcome, EquityResearchSpec, LiveDeepResearchRuntime, _observation_metrics
 from investment_stack.evidence import RunDatabaseManager
@@ -488,6 +493,9 @@ def equity_analysis_services(
                 )
                 sections.append(technical_section)
                 technical_sections.append((outcome.instrument_id, technical_section))
+            sections.append(build_auxiliary_context_section(
+                request.mode.value, outcome.instrument_id, run_db,
+            ))
         comparison = context.get(PipelineStep.BUILD_COMPARISON.value)
         if comparison is not None:
             matrix = comparison.output["compatibility_matrix"]
@@ -571,6 +579,15 @@ def equity_analysis_services(
                 )
                 calculations, eligibility, registered_gates = {}, {}, ()
                 has_price = has_personal_snapshot = False
+            chart_lines = tuple(
+                line for _, section in technical_sections
+                if section.name.startswith(f"{outcome.instrument_id}_")
+                and section.status is ReportAvailability.AVAILABLE
+                for line in section.lines[:2]
+            )
+            if chart_lines:
+                chart_lines = ("차트 지표는 저장된 봉과 재계산이 일치할 때만 표시하며 매매 수량이 아닙니다.", *chart_lines)
+            institutional = source.get("institutional_context") if isinstance(source, Mapping) else None
             briefing = generate_briefing(
                 selected_inputs, calculations, has_price=has_price,
                 # D12 B is user-selected, but policy adoption does not verify
@@ -581,6 +598,8 @@ def equity_analysis_services(
                 # cannot authorize a user-visible number in the final report.
                 eligibility_decisions=None, analysis_as_of=briefing_as_of,
                 registered_gates=registered_gates,
+                institutional_context=institutional if isinstance(institutional, InstitutionalBriefingContext) else None,
+                chart_lines=chart_lines,
             )
             # Incomplete analysis must leave the user with an explicit safe wait.
             if briefing.decision is not InvestmentDecision.WAIT:

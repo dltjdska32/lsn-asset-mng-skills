@@ -126,7 +126,7 @@ class CalendarLastValidCloseTests(unittest.TestCase):
                          FreshnessStatus.UNAVAILABLE)
 
     def test_missing_coverage_or_old_quote_fails_closed(self) -> None:
-        obs = observation(market_date="2026-09-02", claimed="2026-09-02T16:00:00-04:00",
+        obs = observation(market_date="2025-09-02", claimed="2025-09-02T16:00:00-04:00",
                           exchange="NASDAQ", currency="USD", instrument="NASDAQ:AAPL")
         result = self.assess(obs, "2026-09-27T12:00:00-04:00", nasdaq_calendar())
         self.assertEqual(result.status, FreshnessStatus.UNAVAILABLE)

@@ -156,6 +156,7 @@ def asset_update_services(
                 "state_version": version,
                 "positions_count": len(projection.positions),
                 "cash_balances_count": len(projection.cash_balances),
+                "trade_context": "13F scores are not order conditions",
             },
         )
 

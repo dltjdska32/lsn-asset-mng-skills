@@ -1,6 +1,30 @@
 # Investment Stack — Implementation Status
 
-Last updated: 2026-09-28
+Last updated: 2026-09-29
+
+## 2026 exchange calendars and quote qualification
+
+NASDAQ, NYSE, KRX, and JPX now have 2026 session snapshots built from the published holiday tables. A weekday that is not on that holiday list is a session. Japanese quotes parse from a Yahoo `.T` body. A refresh requested with `refresh_market_bodies` is selected as the current price only after the stored body reparses and the pinned calendar freshness check passes. The body hash is not an exchange signature. Personal amounts are still entered through the ledger, and 13F remains disabled as a trade condition. The full suite after this change is **713 tests OK, 1 skipped**.
+
+## Review-only monitoring — same uncommitted working tree
+
+Drop detection, alerts, news identity, data-center fields, customer concentration, guidance deltas, and a volatility shadow price now exist. They do not replace the 80/75/70 entry prices or quantities. A live US or KR quote body is stored only when execute payload `refresh_market_bodies` is true, and that row stays unselected. Japan listings are not requested. No JPX session calendar and no personal amounts are generated. A stored 13F flag cannot enable 13F as a trade condition.
+
+After `python -m build --outdir dist`, `.venv` ran **713 tests OK, 1 skipped** in 133.099s. The earlier 706 result does not cover this change. No new independent review or final verification has rerun this tree. There is still no commit.
+
+## Source-bound D12 B numbers — working tree on `cursor/usable-r11-binding`
+
+Base commit `feadc133347ddcb40fce83fc2089810f3e78d586`. This binding is not a new commit. One Cursor session implemented it sequentially on that branch. It did not use separate implementation worktrees. The earlier CLOSE-R11 result remains a safe WAIT boundary, not this binding.
+
+Stored quote and DCF bodies become verified money only when a registered parser re-extracts the same instrument, currency, time, and session. A URL or provider name is not proof. A weekend quote that passes the pinned calendar stays `LAST_VALID_CLOSE`, not a live price. Explicit conservative, base, and optimistic DCF excerpts must match the stored calculation. Hidden beta, ERP, terminal, or growth defaults are not created. Fair value is not a market forecast.
+
+The pinned personal ledger supplies posted quantity, cash, and liabilities. Emergency cash, planned spending, and pending-order reserves count only after an explicit coverage statement for that state version. Missing coverage stays WAIT rather than zero. Verified marks and Yahoo FX bodies convert into portfolio value and investable cash. Verified lot, tick, and fee rules then size three conditional tranches. The public report shows entry price, budget, quantity, and reduction conditions only after the briefing module re-reads the databases. Caller-built policy objects do not release numbers. No order is posted and the ledger is not updated.
+
+The seven modes open only when CLI `execute` receives both `--run-workspace` and `--personal-db`. Without those paths the CLI stays on empty services and exits 3. The host refuses live provider fetches. Chart numbers appear in an equity briefing only when a stored bar series recomputes to an available technical section, and they are not order quantities. 13F scores stay disabled as trade conditions. Skill source and `.agents/skills` mirrors match. A fresh wheel and sdist include the new runtime modules.
+
+On this working tree, `.venv` Python ran **704 tests OK, 1 skipped**. The packaging tests passed after rebuilding `dist/`. An earlier full run failed two packaging tests because existing `dist` archives could not be opened; that was an environment permission error, and the clean rerun passed. Synthetic end-to-end coverage is `tests/integration/test_usable_policy_binding.py`: NASDAQ:ABC at 100 USD, base fair value 125, three entries 100.00/93.75/87.50 with quantities 23/24/26, no new ledger transaction, and a document-free run that stays at WAIT. A separate review session recorded [USABLE-R11-REVIEW-01](docs/workflow/reviews/USABLE-R11-REVIEW-01.md): 26 focused tests and 10 synthetic probes, no new P1/P2. A different final-verification session re-ran the full suite itself and recorded **704 OK, 1 skipped** in [USABLE-R11-VERIFY-01](docs/workflow/reviews/USABLE-R11-VERIFY-01.md). Neither session edited runtime code. There is still no commit for this binding.
+
+Live vendor authenticity, a real personal ledger, exchange calendars outside the pinned September 2026 sessions, and out-of-period 13F validation remain WAIT. No API key or personal amount was entered.
 
 ## CLOSE-R11 D12 data binding — independently reviewed code `9fa62bd`
 

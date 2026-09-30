@@ -388,8 +388,10 @@ class LiveSelectedAssetResearch:
     @staticmethod
     def _display_metric_name(metric_name: str) -> str:
         labels = {
-            "current_ratio": "유동비율", "free_cash_flow": "잉여현금흐름",
-            "free_cash_flow_margin": "잉여현금흐름률", "revenue_growth": "매출 성장률",
+            "current_ratio": "유동비율",
+            "free_cash_flow": "영업현금흐름에서 자본적지출을 뺀 값",
+            "free_cash_flow_margin": "영업현금흐름-자본적지출 마진",
+            "revenue_growth": "매출 성장률",
             "roe": "자기자본이익률", "roic": "투하자본이익률", "dcf_value_per_share": "DCF 주당 평가 참고값",
             "ev_to_ebitda": "기업가치 대비 EBITDA", "pb": "주가순자산비율",
             "pe": "주가수익비율", "price_to_sales": "매출 대비 시가총액",

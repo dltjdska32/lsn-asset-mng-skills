@@ -53,7 +53,11 @@ class EquityFundamentalAnalyzer:
         free_cash_flow = None
         if data.cash_from_operations is not None and data.capex is not None:
             free_cash_flow = data.cash_from_operations - data.capex
-            metrics.append(MetricResult("free_cash_flow", free_cash_flow, data.currency, "cash_from_operations - capex", evidence_ids=data.evidence_ids))
+            metrics.append(MetricResult(
+                "free_cash_flow", free_cash_flow, data.currency,
+                "cash_from_operations - capex; not an FCFF or FCFE bridge",
+                evidence_ids=data.evidence_ids,
+            ))
         else:
             unknowns.append("free_cash_flow")
             metrics.append(MetricResult("free_cash_flow", None, data.currency, "cash_from_operations - capex", AnalysisStatus.UNAVAILABLE, "required input unavailable", data.evidence_ids))
@@ -75,6 +79,12 @@ class EquityFundamentalAnalyzer:
             findings.append(f"reported period: {data.reported_period}")
         if data.basis:
             findings.append(f"accounting basis: {data.basis}")
+        if free_cash_flow is not None:
+            findings.append(
+                "free cash flow here is operating cash flow minus capex only; "
+                "stock-based compensation, working capital, interest, leases, and debt maturity "
+                "are not inferred"
+            )
         if data.guidance:
             findings.append("official guidance supplied; interpretation remains separate from reported results")
         return AnalysisResult(

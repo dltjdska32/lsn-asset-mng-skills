@@ -31,9 +31,9 @@ class WeekendPriceEndToEndTests(unittest.TestCase):
         recent = "2026-09-25T20:00:00+00:00"
         unsupported = ProviderObservation(
             evidence_type="market", source_name="feed", source_url=None, source_tier=1,
-            provider_id="feed", value="10", currency="USD", instrument_id="NYSE:XYZ",
+            provider_id="feed", value="10", currency="USD", instrument_id="LSE:XYZ",
             observed_at=recent, published_at=recent, claimed_market_time=recent,
-            market_session_date="2026-09-25", metadata={"exchange": "NYSE", "quote_kind": "LAST_VALID_CLOSE"},
+            market_session_date="2026-09-25", metadata={"exchange": "LSE", "quote_kind": "LAST_VALID_CLOSE"},
         )
         self.assertEqual(
             assess_current_price_observation(unsupported, analysis_as_of="2026-09-25T20:01:00+00:00").status,
@@ -111,7 +111,7 @@ class WeekendPriceEndToEndTests(unittest.TestCase):
 
             self.assertEqual(outcome.market.selected.observation.value, Decimal("341.07"))
             self.assertEqual(outcome.market.selected.freshness.status, FreshnessStatus.LAST_VALID_CLOSE)
-            self.assertEqual(outcome.market.selected.freshness.calendar_id, "nasdaq-2026-09-official-snapshot-v1")
+            self.assertEqual(outcome.market.selected.freshness.calendar_id, "nasdaq-2026-official-snapshot-v1")
             self.assertEqual(outcome.market.selected.freshness.market_session_date, "2026-09-25")
             self.assertEqual(captured_prices, [Decimal("341.07")])
             phase6 = run.fetch_phase6_context()
@@ -119,7 +119,7 @@ class WeekendPriceEndToEndTests(unittest.TestCase):
             self.assertEqual(market["market_session_date"], "2026-09-25")
             self.assertEqual(Decimal(str(market["value_numeric"])), Decimal("341.07"))
             freshness = json.loads(phase6["freshness_assessments"][0]["details_json"])
-            self.assertEqual(freshness["calendar_id"], "nasdaq-2026-09-official-snapshot-v1")
+            self.assertEqual(freshness["calendar_id"], "nasdaq-2026-official-snapshot-v1")
             self.assertEqual(freshness["public_available_time"], "2026-09-25T20:00:01+00:00")
 
             section = section_from_analysis_result(outcome.analysis.valuation, name="valuation")
@@ -207,7 +207,7 @@ class WeekendPriceEndToEndTests(unittest.TestCase):
             assessment = outcome.market.selected.freshness
             self.assertEqual(assessment.status, FreshnessStatus.LAST_VALID_CLOSE)
             self.assertEqual(assessment.market_session_date, "2026-09-23")
-            self.assertEqual(assessment.calendar_id, "krx-2026-chuseok-official-snapshot-v1")
+            self.assertEqual(assessment.calendar_id, "krx-2026-official-snapshot-v1")
             self.assertEqual(assessment.public_available_time, "2026-09-23T07:30:00+00:00")
             self.assertEqual(captured_prices, [Decimal("286500")])
             section = section_from_analysis_result(outcome.analysis.valuation, name="valuation")

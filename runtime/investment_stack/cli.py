@@ -5,13 +5,41 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import sqlite3
 import sys
 from typing import Any, Sequence
 
 from investment_stack.execution import Availability, ModeRequest, RuntimeServices, execute_mode
+from investment_stack.execution.host import open_configured_host
 from investment_stack.invariants import validate_runtime_invariants
 from investment_stack.pipelines import FixedPipelinePlanner
 from investment_stack.routing import RequestMode, RequestRouter, RoutingError
+
+
+def _persisted_report_sections(workspace: Path, run_id: str) -> list[dict[str, Any]]:
+    """Return stored report lines. CLI output does not recompute prices."""
+    from investment_stack.execution.host import open_run_database
+
+    try:
+        rows = open_run_database(workspace, run_id).fetch_phase6_context()["report_sections"]
+    except (OSError, KeyError, ValueError, sqlite3.Error):
+        return []
+    sections: list[dict[str, Any]] = []
+    for row in rows:
+        try:
+            metadata = json.loads(row["metadata_json"])
+        except (KeyError, TypeError, json.JSONDecodeError):
+            continue
+        if not isinstance(metadata, dict):
+            continue
+        lines = metadata.get("lines")
+        sections.append({
+            "section_name": row["section_name"],
+            "section_status": row["section_status"],
+            "title": metadata.get("title"),
+            "lines": list(lines) if isinstance(lines, list) else [],
+        })
+    return sections
 
 
 def _emit(payload: Any, *, as_json: bool) -> None:
@@ -50,6 +78,8 @@ def build_parser() -> argparse.ArgumentParser:
     execute.add_argument("--mode", required=True, choices=[mode.value for mode in RequestMode])
     execute.add_argument("--run-id", required=True)
     execute.add_argument("--refresh-replay", action="store_true")
+    execute.add_argument("--run-workspace", type=Path)
+    execute.add_argument("--personal-db", type=Path)
     execute.add_argument("--json", action="store_true")
 
     return parser
@@ -85,8 +115,21 @@ def main(argv: Sequence[str] | None = None, *, runtime_services: RuntimeServices
             if not isinstance(payload, dict):
                 parser.error("execute input on stdin must be a JSON object")
             request = ModeRequest(args.run_id, RequestMode.parse(args.mode), payload, refresh_replay=args.refresh_replay)
-            result = execute_mode(request, runtime_services or RuntimeServices())
-            _emit(result.as_dict(), as_json=args.json)
+            if payload.get("refresh_market_bodies") is True and args.run_workspace is not None and args.personal_db is not None:
+                from investment_stack.execution.host import open_run_database
+                from investment_stack.execution.quote_refresh import refresh_requested_quotes
+
+                refresh_requested_quotes(open_run_database(args.run_workspace, args.run_id), payload)
+            services = runtime_services
+            if services is None and (args.run_workspace or args.personal_db):
+                if args.run_workspace is None or args.personal_db is None:
+                    parser.error("configured execute host requires both --run-workspace and --personal-db")
+                services = open_configured_host(args.run_workspace, args.run_id, args.personal_db)
+            result = execute_mode(request, services or RuntimeServices())
+            payload_out = result.as_dict()
+            if args.run_workspace is not None and args.personal_db is not None:
+                payload_out["report_sections"] = _persisted_report_sections(args.run_workspace, args.run_id)
+            _emit(payload_out, as_json=args.json)
             return 0 if result.availability in {Availability.COMPLETE, Availability.PARTIAL} else 3
     except (RoutingError, ValueError) as exc:
         parser.error(str(exc))

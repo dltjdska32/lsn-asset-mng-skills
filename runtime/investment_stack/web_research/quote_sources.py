@@ -272,6 +272,13 @@ def execute_quote_fallback_sequence(
         if "CURRENT_PRICE" not in spec.capabilities:
             continue
         started = now()
+        if spec.verification_status is not VerificationStatus.VERIFIED_LIVE_CAPTURED:
+            url = spec.url_template
+            attempts.append(FallbackAttemptRecord(
+                spec.source_id, spec.priority, url, started, now(), False, None,
+                "UNVERIFIED_SOURCE_NOT_SELECTED",
+            ))
+            continue
         url = spec.url_template.replace("{code}", ticker)
         url = url.replace("{symbol}", ticker).replace("{pair}", "XBTUSD").replace("{slug}", ticker.lower())
 

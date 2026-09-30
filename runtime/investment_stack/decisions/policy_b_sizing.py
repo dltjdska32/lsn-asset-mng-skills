@@ -40,7 +40,9 @@ class PolicyBSizingResult:
     orders_posted: bool = False
 
 
-def size_policy_b_tranches(policy: PolicyBResult, rules: TradingRules | None) -> PolicyBSizingResult:
+def size_policy_b_tranches(
+    policy: PolicyBResult, rules: TradingRules | None, *, receipt_bound: bool = False,
+) -> PolicyBSizingResult:
     """Lot-round three entry budgets without authorizing or placing an order."""
     reasons: list[str] = []
     if not isinstance(policy, PolicyBResult) or policy.status != "CONDITIONAL":
@@ -84,5 +86,7 @@ def size_policy_b_tranches(policy: PolicyBResult, rules: TradingRules | None) ->
     total = sum((tier.maximum_cost for tier in sized), Decimal(0))
     if total > policy.max_total_add_budget:
         return PolicyBSizingResult("WAIT", (), None, ("rounded tranches exceed policy add budget",))
+    if receipt_bound:
+        return PolicyBSizingResult("CONDITIONAL_NON_POSTING", tuple(sized), total, ())
     return PolicyBSizingResult("ARITHMETIC_ONLY", tuple(sized), total,
                                ("pinned market/personal/trading rule release receipt is unavailable",))

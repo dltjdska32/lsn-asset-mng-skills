@@ -741,8 +741,12 @@ def parse_yahoo_quote(
             quote=None, observation=None, error_reasons=("MISSING_SYMBOL_IN_YAHOO_META",)
         )
 
+    requested_prefix = instrument_id.split(":", 1)[0].upper() if ":" in instrument_id else ""
     expected_ticker = instrument_id.split(":")[-1].strip().upper()
-    if symbol != expected_ticker:
+    acceptable_symbols = {expected_ticker}
+    if requested_prefix in {"JPX", "TSE"}:
+        acceptable_symbols.add(f"{expected_ticker}.T")
+    if symbol not in acceptable_symbols:
         return MarketQuoteParseResult(
             quote=None,
             observation=None,
@@ -770,16 +774,23 @@ def parse_yahoo_quote(
 
     currency = str(meta.get("currency", "")).strip().upper()
     exchange_name = str(meta.get("exchangeName", "")).strip()
-    requested_prefix = instrument_id.split(":", 1)[0].upper() if ":" in instrument_id else ""
-    exchange_alias = {"NMS": "NASDAQ", "NASDAQGS": "NASDAQ", "NYQ": "NYSE", "NYSE": "NYSE"}
+    exchange_alias = {
+        "NMS": "NASDAQ", "NASDAQGS": "NASDAQ", "NYQ": "NYSE", "NYSE": "NYSE",
+        "TSE": "JPX", "TYO": "JPX", "JPX": "JPX",
+    }
     normalized_exchange = exchange_alias.get(exchange_name.upper(), exchange_name.upper())
     expected_us = {"NASDAQ": ("NASDAQ", "USD"), "NYSE": ("NYSE", "USD")}.get(requested_prefix)
+    expected_jp = {"JPX": ("JPX", "JPY"), "TSE": ("JPX", "JPY")}.get(requested_prefix)
     if not currency or not exchange_name:
         return MarketQuoteParseResult(quote=None, observation=None, error_reasons=("MISSING_EXCHANGE_OR_CURRENCY",))
     if expected_us and (normalized_exchange != expected_us[0] or currency != expected_us[1]):
         return MarketQuoteParseResult(quote=None, observation=None,
             error_reasons=(f"MARKET_METADATA_MISMATCH: expected {expected_us[0]}/{expected_us[1]}, got {normalized_exchange}/{currency}",))
-    tz_name = str(meta.get("exchangeTimezoneName", "America/New_York")).strip()
+    if expected_jp and (normalized_exchange != expected_jp[0] or currency != expected_jp[1]):
+        return MarketQuoteParseResult(quote=None, observation=None,
+            error_reasons=(f"MARKET_METADATA_MISMATCH: expected {expected_jp[0]}/{expected_jp[1]}, got {normalized_exchange}/{currency}",))
+    default_zone = "Asia/Tokyo" if expected_jp else "America/New_York"
+    tz_name = str(meta.get("exchangeTimezoneName", default_zone)).strip()
 
     epoch_time = meta.get("regularMarketTime")
     claimed_market_time: datetime | None = None

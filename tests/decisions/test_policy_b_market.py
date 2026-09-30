@@ -38,7 +38,7 @@ def make_db(
         observed_at = observed_at or "2026-09-25T20:00:00+00:00"
         session_date = session_date or "2026-09-25"
         published = published or "2026-09-25T20:05:00+00:00"
-        calendar_id = calendar_id or "nasdaq-2026-09-official-snapshot-v1"
+        calendar_id = calendar_id or "nasdaq-2026-official-snapshot-v1"
     else:
         observed_at = observed_at or "2026-09-28T11:55:00+00:00"
         published = published or observed_at
@@ -392,6 +392,71 @@ class PolicyBMarketAdapterTests(unittest.TestCase):
                 result = self.load()
                 self.assertIsNone(result.fair_value_per_share)
                 self.assertTrue(any(expected in reason for reason in result.unavailable_reasons))
+
+
+def _yahoo_payload(symbol: str, price: str, observed_at: str) -> str:
+    observed = __import__("datetime").datetime.fromisoformat(observed_at)
+    return json.dumps({
+        "chart": {"result": [{"meta": {
+            "symbol": symbol, "regularMarketPrice": price, "currency": "USD",
+            "exchangeName": "NMS", "exchangeTimezoneName": "America/New_York",
+            "regularMarketTime": int(observed.timestamp()),
+        }}], "error": None},
+    }, separators=(",", ":"))
+
+
+class PolicyBSourceReceiptTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.db = Path(self.temp.name) / "run.db"
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_matching_yahoo_body_verifies_quote_and_weekend_close_stays_non_realtime(self):
+        weekend = "2026-09-27T16:00:00+00:00"
+        observed = "2026-09-25T20:00:00+00:00"
+        make_db(self.db, status="LAST_VALID_CLOSE", as_of=weekend)
+        payload = _yahoo_payload("ABC", "100", observed)
+        digest = __import__("hashlib").sha256(payload.encode()).hexdigest()
+        connection = sqlite3.connect(self.db)
+        connection.execute(
+            "CREATE TABLE source_documents (document_id TEXT, run_id TEXT, evidence_id TEXT, "
+            "parser_id TEXT, content_sha256 TEXT, payload_text TEXT)"
+        )
+        connection.execute(
+            "INSERT INTO source_documents VALUES (?,?,?,?,?,?)",
+            ("doc-quote", "r1", "e1", "yahoo_chart_v1", digest, payload),
+        )
+        connection.commit()
+        connection.close()
+        result = load_policy_b_market_evidence(
+            self.db, run_id="r1", instrument_id="NASDAQ:ABC", as_of=weekend,
+        )
+        self.assertIsNotNone(result.quote_per_share)
+        self.assertEqual(D("100"), result.quote_per_share.amount)
+        self.assertTrue(result.quote_per_share.verified)
+        self.assertEqual("LAST_VALID_CLOSE", result.quote_kind)
+
+    def test_yahoo_body_for_a_different_symbol_does_not_verify(self):
+        make_db(self.db)
+        payload = _yahoo_payload("ZZZ", "100", "2026-09-28T11:55:00+00:00")
+        digest = __import__("hashlib").sha256(payload.encode()).hexdigest()
+        connection = sqlite3.connect(self.db)
+        connection.execute(
+            "CREATE TABLE source_documents (document_id TEXT, run_id TEXT, evidence_id TEXT, "
+            "parser_id TEXT, content_sha256 TEXT, payload_text TEXT)"
+        )
+        connection.execute(
+            "INSERT INTO source_documents VALUES (?,?,?,?,?,?)",
+            ("doc-quote", "r1", "e1", "yahoo_chart_v1", digest, payload),
+        )
+        connection.commit()
+        connection.close()
+        result = load_policy_b_market_evidence(self.db, run_id="r1", instrument_id="ABC", as_of=AS_OF)
+        self.assertIsNone(result.quote_per_share)
+        self.assertTrue(any("re-extracted" in reason or "could not be re-extracted" in reason
+                            for reason in result.unavailable_reasons))
 
 
 if __name__ == "__main__":

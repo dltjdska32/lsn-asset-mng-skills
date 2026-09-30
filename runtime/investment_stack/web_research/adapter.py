@@ -7,6 +7,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 
 from investment_stack.freshness import FreshnessEngine, FreshnessStatus
+from investment_stack.monitoring.review import news_identity
 from investment_stack.providers.models import ProviderObservation, ProviderResult, ProviderStatus
 from investment_stack.providers.registry import ProviderCapability
 from investment_stack.providers.execution import assess_current_price_observation
@@ -81,7 +82,7 @@ class WebResearchAdapter:
         seen: set[str] = set()
         observations: list[ProviderObservation] = []
         for hit in response.hits:
-            cluster = hit.event_cluster_id or f"{hit.source_url}|{hit.title.casefold()}"
+            cluster = hit.event_cluster_id or news_identity(hit.source_url, hit.title)
             if cluster in seen:
                 continue
             seen.add(cluster)

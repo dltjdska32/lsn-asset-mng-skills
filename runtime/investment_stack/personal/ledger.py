@@ -47,6 +47,11 @@ from investment_stack.personal.projection import (
     compute_projection,
     replace_projection,
 )
+from investment_stack.personal.reserves import (
+    RESERVATION_KINDS,
+    CashReservation,
+    CashReservationDraft,
+)
 from investment_stack.personal.validation import (
     validate_personal_connection,
     validate_personal_database,
@@ -1007,6 +1012,84 @@ class PersonalLedgerService:
             if isinstance(exc, ProjectionError):
                 raise
             raise ProjectionError(f"pinned snapshot read failed: {exc}") from exc
+
+    def declare_cash_reservations(
+        self,
+        *,
+        expected_state_version: int,
+        reservations: tuple[CashReservationDraft, ...] = (),
+    ) -> None:
+        """Record a complete reservation set without posting an order or transaction.
+
+        An empty set is an explicit statement that this state version has no
+        emergency, planned-spending, or pending-order reserve. It does not
+        invent amounts for a later state version.
+        """
+        if isinstance(expected_state_version, bool) or not isinstance(expected_state_version, int):
+            raise PostingError("reservation state_version must be an integer")
+        if not isinstance(reservations, tuple):
+            raise PostingError("reservations must be a tuple")
+        normalized: list[tuple[str, str, Decimal, str | None]] = []
+        for draft in reservations:
+            if not isinstance(draft, CashReservationDraft) or draft.kind not in RESERVATION_KINDS:
+                raise PostingError("reservation kind is unsupported")
+            if not isinstance(draft.currency, str) or len(draft.currency.strip()) != 3:
+                raise PostingError("reservation currency must be a three-letter code")
+            amount = exact_decimal(draft.amount, field="reservation amount")
+            if amount is None or amount < 0:
+                raise PostingError("reservation amount must be zero or positive")
+            instrument_id = draft.instrument_id
+            if instrument_id is not None and (not isinstance(instrument_id, str) or not instrument_id.strip()):
+                raise PostingError("pending-order reservation instrument is invalid")
+            normalized.append((draft.kind, draft.currency.strip().upper(), amount, instrument_id))
+        try:
+            with self.manager.guarded_write_transaction() as connection:
+                current = self._current_state_version(connection)
+                if current != expected_state_version:
+                    raise PostingError("reservation state_version does not match the ledger")
+                if connection.execute(
+                    "SELECT 1 FROM reservation_coverage WHERE state_version = ?", (current,)
+                ).fetchone():
+                    raise PostingError("reservation coverage is already declared for this state version")
+                created_at = _now()
+                connection.execute(
+                    "INSERT INTO reservation_coverage (state_version, statement, created_at) VALUES (?, 'COMPLETE', ?)",
+                    (current, created_at),
+                )
+                for kind, currency, amount, instrument_id in normalized:
+                    connection.execute(
+                        "INSERT INTO cash_reservations "
+                        "(reservation_id, state_version, kind, currency, amount_decimal, instrument_id, created_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (uuid4().hex, current, kind, currency, encode_decimal(amount), instrument_id, created_at),
+                    )
+        except PostingError:
+            raise
+        except (OSError, sqlite3.Error, StorageNotWritableError, ValueError) as exc:
+            raise PostingError(f"reservation declaration failed: {exc}") from exc
+
+    def list_cash_reservations(self, state_version: int) -> tuple[bool, tuple[CashReservation, ...]]:
+        """Return whether coverage was declared and the rows stored at that version."""
+        if isinstance(state_version, bool) or not isinstance(state_version, int) or state_version < 0:
+            raise ProjectionError("reservation state_version must be a non-negative integer")
+        coverage = self._read(
+            "SELECT statement FROM reservation_coverage WHERE state_version = ?", (state_version,)
+        )
+        if len(coverage) != 1 or coverage[0].get("statement") != "COMPLETE":
+            return False, ()
+        rows = self._read(
+            "SELECT * FROM cash_reservations WHERE state_version = ? ORDER BY reservation_id",
+            (state_version,),
+        )
+        reservations = tuple(
+            CashReservation(
+                str(row["reservation_id"]), int(row["state_version"]), str(row["kind"]),
+                str(row["currency"]), decode_decimal(row["amount_decimal"]) or ZERO,
+                row["instrument_id"],
+            )
+            for row in rows
+        )
+        return True, reservations
 
     def get_positions(self):
         return self.get_projection_as_of_state_version(self.get_current_state_version()).positions

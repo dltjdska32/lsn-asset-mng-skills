@@ -16,6 +16,13 @@ from urllib.parse import urlparse
 
 from investment_stack.decisions.policy_b import Money
 from investment_stack.calculations.valuation import DcfAssumptions, EquityValuationAnalyzer
+from investment_stack.evidence.source_receipt import (
+    load_source_payload,
+    read_cash_flow_basis,
+    source_table_available,
+    verify_dcf_assumption_body,
+    verify_quote_body,
+)
 from investment_stack.freshness import FreshnessEngine
 from investment_stack.freshness.calendar import get_pinned_calendar
 from investment_stack.providers import ProviderObservation
@@ -31,6 +38,10 @@ class PolicyBMarketEvidence:
     quote_evidence_id: str | None
     fair_value_per_share: Money | None = None
     optimistic_fair_value_per_share: Money | None = None
+    conservative_fair_value_per_share: Money | None = None
+    quote_kind: str | None = None
+    quote_source_count: int = 0
+    cash_flow_basis: str | None = None
     unavailable_reasons: tuple[str, ...] = ()
 
 
@@ -80,7 +91,8 @@ def _stored_number(value: object) -> Decimal | None:
 
 def _persisted_dcf_values(
     connection: sqlite3.Connection, *, run_id: str, instrument_id: str, cutoff: datetime,
-) -> tuple[Money | None, Money | None, str | None]:
+    basis_out: list[str] | None = None,
+) -> tuple[Money | None, Money | None, Money | None, str | None]:
     """Verify complete persisted base/optimistic assumption-value receipts."""
     calculation_rows = connection.execute(
         "SELECT * FROM calculations WHERE run_id=? AND calculation_name='EQUITY_VALUATION'",
@@ -92,41 +104,42 @@ def _persisted_dcf_values(
         if inputs and result and inputs.get("subject") == instrument_id and result.get("subject") == instrument_id:
             matching.append((calc, inputs, result))
     if len(matching) != 1:
-        return None, None, "persisted valuation calculation is missing or ambiguous for this run/instrument"
+        return None, None, None, "persisted valuation calculation is missing or ambiguous for this run/instrument"
     _, inputs, result = matching[0]
     metadata = result.get("metadata")
     if result.get("analysis_type") != "EQUITY_VALUATION" or not isinstance(metadata, dict):
-        return None, None, "persisted valuation result is malformed"
+        return None, None, None, "persisted valuation result is malformed"
     records = metadata.get("dcf_assumption_value_bindings")
     if not isinstance(records, list) or inputs.get("dcf_assumption_value_bindings") != records:
-        return None, None, "persisted DCF assumption value binding contract is missing or inconsistent"
+        return None, None, None, "persisted DCF assumption value binding contract is missing or inconsistent"
     scenarios: dict[str, dict[str, Any]] = {}
     for record in records:
         if not isinstance(record, dict) or not isinstance(record.get("scenario"), str):
-            return None, None, "persisted DCF assumption binding record is malformed"
+            return None, None, None, "persisted DCF assumption binding record is malformed"
         name = record["scenario"].casefold()
         if name in scenarios:
-            return None, None, "duplicate persisted DCF scenario binding"
+            return None, None, None, "duplicate persisted DCF scenario binding"
         scenarios[name] = record
     if not {"base", "optimistic"}.issubset(scenarios):
-        return None, None, "base/optimistic DCF assumption value bindings are missing"
+        return None, None, None, "base/optimistic DCF assumption value bindings are missing"
     currency = metadata.get("currency")
     if not isinstance(currency, str) or not currency.strip():
-        return None, None, "persisted valuation currency is missing"
+        return None, None, None, "persisted valuation currency is missing"
     all_ids: set[str] = set()
     assumptions: dict[str, DcfAssumptions] = {}
-    for scenario_name in ("base", "optimistic"):
+    scenario_order = ("base", "optimistic") + (("conservative",) if "conservative" in scenarios else ())
+    for scenario_name in scenario_order:
         record = scenarios[scenario_name]
         values = record.get("values")
         bindings = record.get("evidence")
         if not isinstance(values, dict) or not isinstance(bindings, dict) or set(values) != set(_DCF_FIELDS) or set(bindings) != set(_DCF_FIELDS):
-            return None, None, f"{scenario_name} DCF scenario lacks complete assumption values/evidence bindings"
+            return None, None, None, f"{scenario_name} DCF scenario lacks complete assumption values/evidence bindings"
         parsed: dict[str, Decimal] = {}
         for field in _DCF_FIELDS:
             value = _stored_number(values[field])
             evidence_id = bindings[field]
             if value is None or not isinstance(evidence_id, str) or not evidence_id or evidence_id in all_ids:
-                return None, None, f"{scenario_name} DCF assumption {field} has invalid or duplicate binding"
+                return None, None, None, f"{scenario_name} DCF assumption {field} has invalid or duplicate binding"
             all_ids.add(evidence_id)
             evidence_rows = connection.execute(
                 "SELECT * FROM evidence WHERE run_id=? AND evidence_id=? AND instrument_id=? "
@@ -139,33 +152,33 @@ def _persisted_dcf_values(
                 (run_id, instrument_id, f"dcf_assumption:{scenario_name}:{field}"),
             ).fetchall()
             if len(evidence_rows) != 1 or len(competitors) != 1:
-                return None, None, f"{scenario_name} DCF assumption {field} evidence is missing, duplicate, or conflicting"
+                return None, None, None, f"{scenario_name} DCF assumption {field} evidence is missing, duplicate, or conflicting"
             evidence = evidence_rows[0]
             if evidence["evidence_type"] != "assumption":
-                return None, None, f"{scenario_name} DCF assumption {field} is not a persisted assumption receipt"
+                return None, None, None, f"{scenario_name} DCF assumption {field} is not a persisted assumption receipt"
             expected_unit = "currency" if field in {"starting_fcf", "net_debt"} else "ratio"
             if field == "years":
                 expected_unit = "years"
             elif field == "shares_outstanding":
                 expected_unit = "shares"
             if evidence["unit"] != expected_unit:
-                return None, None, f"{scenario_name} DCF assumption {field} evidence unit mismatch"
+                return None, None, None, f"{scenario_name} DCF assumption {field} evidence unit mismatch"
             if field in {"starting_fcf", "net_debt"}:
                 if str(evidence["currency"] or "").upper() != currency.upper():
-                    return None, None, f"{scenario_name} DCF assumption {field} evidence currency mismatch"
+                    return None, None, None, f"{scenario_name} DCF assumption {field} evidence currency mismatch"
             elif evidence["currency"] not in (None, ""):
-                return None, None, f"{scenario_name} DCF assumption {field} unexpectedly carries currency"
+                return None, None, None, f"{scenario_name} DCF assumption {field} unexpectedly carries currency"
             if not evidence["source_uri"] or not evidence["source_name"]:
-                return None, None, f"{scenario_name} DCF assumption {field} lacks a source receipt locator"
+                return None, None, None, f"{scenario_name} DCF assumption {field} lacks a source receipt locator"
             retrieved, published = _dt(evidence["retrieved_at"]), _dt(evidence["published_at"])
             if retrieved is None or published is None or retrieved > cutoff or published > cutoff:
-                return None, None, f"{scenario_name} DCF assumption {field} has missing or future provenance time"
+                return None, None, None, f"{scenario_name} DCF assumption {field} has missing or future provenance time"
             persisted_value = _stored_number(evidence["value_text"])
             if persisted_value != value:
-                return None, None, f"{scenario_name} DCF assumption {field} does not equal persisted evidence value"
+                return None, None, None, f"{scenario_name} DCF assumption {field} does not equal persisted evidence value"
             parsed[field] = value
         if parsed["years"] != parsed["years"].to_integral_value() or parsed["years"] <= 0:
-            return None, None, f"{scenario_name} DCF years must be a positive integer"
+            return None, None, None, f"{scenario_name} DCF years must be a positive integer"
         try:
             assumptions[scenario_name] = DcfAssumptions(
                 starting_fcf=parsed["starting_fcf"], annual_growth_rate=parsed["annual_growth_rate"],
@@ -173,30 +186,78 @@ def _persisted_dcf_values(
                 years=int(parsed["years"]), net_debt=parsed["net_debt"], shares_outstanding=parsed["shares_outstanding"],
             )
         except (ValueError, TypeError):
-            return None, None, f"{scenario_name} DCF assumptions are invalid"
+            return None, None, None, f"{scenario_name} DCF assumptions are invalid"
     metrics = result.get("metrics")
     if not isinstance(metrics, list):
-        return None, None, "persisted valuation metrics are malformed"
-    for name in ("base", "optimistic"):
+        return None, None, None, "persisted valuation metrics are malformed"
+    for name in assumptions:
         metric_name = f"dcf_scenario_{name}"
         found = [metric for metric in metrics if isinstance(metric, dict) and metric.get("name") == metric_name]
         if len(found) != 1 or not isinstance(found[0].get("evidence_ids"), list):
-            return None, None, f"persisted {name} fair-value metric is missing or ambiguous"
+            return None, None, None, f"persisted {name} fair-value metric is missing or ambiguous"
         metric = found[0]
         bound_ids = set(scenarios[name]["evidence"].values())
         if set(metric["evidence_ids"]) != bound_ids:
-            return None, None, f"persisted {name} fair-value metric does not bind all assumption evidence"
+            return None, None, None, f"persisted {name} fair-value metric does not bind all assumption evidence"
         reported = _stored_number(metric.get("value"))
         calculated = EquityValuationAnalyzer._dcf_per_share(assumptions[name])
         if reported is None or calculated != reported:
-            return None, None, f"persisted {name} fair value does not match its verified assumptions ({calculated} != {reported})"
-    # The current evidence schema has no authenticated source-content receipt
-    # contract. Matching selected rows and URLs proves internal consistency,
-    # not that a source actually supports the assumption value.
-    return None, None, (
-        "DCF fair values unavailable: no independently verifiable source-content receipt "
-        "contract is available for assumption evidence"
-    )
+            return None, None, None, f"persisted {name} fair value does not match its verified assumptions ({calculated} != {reported})"
+    missing_document = False
+    saw_document = False
+    cash_flow_bases: dict[str, str] = {}
+    if source_table_available(connection):
+        for scenario_name, assumption_values in assumptions.items():
+            for field in _DCF_FIELDS:
+                evidence_id = scenarios[scenario_name]["evidence"][field]
+                loaded = load_source_payload(connection, run_id=run_id, evidence_id=evidence_id)
+                if loaded is None:
+                    missing_document = True
+                    continue
+                saw_document = True
+                payload, parser_id = loaded
+                if parser_id != "explicit_dcf_assumption_v1":
+                    return None, None, None, f"{scenario_name} DCF assumption {field} uses an unregistered source parser"
+                expected_unit = "currency" if field in {"starting_fcf", "net_debt"} else "ratio"
+                field_currency = currency if field in {"starting_fcf", "net_debt"} else None
+                if field == "years":
+                    expected_unit = "years"
+                elif field == "shares_outstanding":
+                    expected_unit = "shares"
+                receipt_reason = verify_dcf_assumption_body(
+                    payload, scenario=scenario_name, field=field,
+                    value=getattr(assumption_values, field) if field != "years" else Decimal(assumption_values.years),
+                    unit=expected_unit, currency=field_currency, cutoff=cutoff,
+                )
+                if receipt_reason:
+                    return None, None, None, receipt_reason
+                if field == "starting_fcf":
+                    basis = read_cash_flow_basis(payload)
+                    if basis is None:
+                        return None, None, None, f"{scenario_name} DCF starting cash flow basis is not explicit FCFF or FCFE"
+                    cash_flow_bases[scenario_name] = basis
+    if not saw_document:
+        return None, None, None, (
+            "DCF fair values unavailable: no independently verifiable source-content receipt "
+            "contract is available for assumption evidence"
+        )
+    if missing_document or "conservative" not in assumptions:
+        return None, None, None, (
+            "DCF fair values unavailable: conservative/base/optimistic source-content receipts are incomplete"
+        )
+    if set(cash_flow_bases) != set(assumptions) or len(set(cash_flow_bases.values())) != 1:
+        return None, None, None, "DCF scenarios do not share one explicit FCFF or FCFE basis"
+    agreed_basis = next(iter(set(cash_flow_bases.values())))
+    if agreed_basis == "FCFE" and any(item.net_debt != 0 for item in assumptions.values()):
+        return None, None, None, "FCFE per share cannot also subtract net debt"
+    if basis_out is not None:
+        basis_out.append(agreed_basis)
+    code = currency.upper()
+    values = {
+        name: Money(EquityValuationAnalyzer._dcf_per_share(item), code, True)
+        for name, item in assumptions.items()
+    }
+    return values["conservative"], values["base"], values["optimistic"], None
 
 
 _QUOTE_UNIT_BY_CURRENCY = {
@@ -211,10 +272,12 @@ def _reassess_persisted_quote(row: sqlite3.Row, *, cutoff: datetime) -> tuple[bo
     metadata = _json(row["market_metadata"])
     if metadata is None:
         return False, "persisted market observation metadata is missing or malformed"
+    value = _stored_number(row["value_text"])
     try:
-        value = Decimal(str(row["value_text"]))
         source_tier = int(row["source_tier"] or 0)
-    except (InvalidOperation, TypeError, ValueError):
+    except (TypeError, ValueError):
+        source_tier = None
+    if value is None or source_tier is None:
         return False, "persisted quote value or source tier is invalid"
     observation = ProviderObservation(
         evidence_type="market",
@@ -291,8 +354,12 @@ def load_policy_b_market_evidence(
     if cutoff is None:
         reasons.append("analysis as_of must be an ISO timestamp with timezone")
     quote: Money | None = None
+    quote_kind: str | None = None
+    quote_source_count = 0
+    cash_flow_basis: str | None = None
     fair_value: Money | None = None
     optimistic_fair_value: Money | None = None
+    conservative_fair_value: Money | None = None
     valuation_reason: str | None = None
     evidence_id: str | None = None
     if not run_id or not instrument_id:
@@ -321,8 +388,16 @@ def load_policy_b_market_evidence(
                         "AND e.metric='current_price' AND e.selection_state='SELECTED'",
                         (run_id, instrument_id),
                     ).fetchall()
-                    if len(rows) != 1:
+                    quote_signatures = {
+                        (str(item["value_numeric"]), str(item["currency"] or "").upper(), item["freshness_status"])
+                        for item in rows
+                    }
+                    if not rows:
                         reasons.append("selected persisted market quote is missing or ambiguous")
+                    elif len(quote_signatures) != 1:
+                        reasons.append(
+                            "selected quote sources disagree; current price and action numbers stay withheld"
+                        )
                     else:
                         row = rows[0]
                         evidence_id = row["evidence_id"]
@@ -386,13 +461,71 @@ def load_policy_b_market_evidence(
                         if metadata is None:
                             reasons.append("persisted quote metadata is missing or malformed")
                         if not reasons:
-                            reasons.append(
-                                "quote unavailable for D12: source URI/provider fields lack an independently "
-                                "authenticated source-content receipt"
+                            loaded = load_source_payload(
+                                connection, run_id=run_id, evidence_id=str(row["evidence_id"]),
                             )
-                    fair_value, optimistic_fair_value, valuation_reason = _persisted_dcf_values(
-                        connection, run_id=run_id, instrument_id=instrument_id, cutoff=cutoff
+                            if loaded is None:
+                                reasons.append(
+                                    "quote unavailable for D12: source URI/provider fields lack an independently "
+                                    "authenticated source-content receipt"
+                                )
+                            else:
+                                payload, parser_id = loaded
+                                exchange = str((metadata or {}).get("exchange") or "")
+                                session_date = row["market_session_date"] if status == "LAST_VALID_CLOSE" else None
+                                retrieved = _dt(row["retrieved_at"])
+                                verified, receipt_reason = verify_quote_body(
+                                    payload, parser_id, instrument_id=instrument_id, currency=str(currency),
+                                    price=value, observed_at=evidence_observed, exchange=exchange,
+                                    session_date=session_date, retrieved_at=retrieved or cutoff,
+                                ) if evidence_observed is not None and value is not None else (False, "quote source body could not be re-extracted")
+                                if not verified:
+                                    reasons.append(receipt_reason or "quote source body could not be re-extracted")
+                                else:
+                                    session_kind = str((metadata or {}).get("quote_kind") or "").upper()
+                                    if status in {"FRESH", "DELAYED"} and session_kind != "REGULAR":
+                                        reasons.append(
+                                            "quote session is not REGULAR; premarket and after-hours prices "
+                                            "are not used as the current price"
+                                        )
+                                    elif status == "LAST_VALID_CLOSE" and session_kind != "LAST_VALID_CLOSE":
+                                        reasons.append("last valid close is not labeled as a non-realtime close")
+                                    else:
+                                        for extra in rows[1:]:
+                                            extra_loaded = load_source_payload(
+                                                connection, run_id=run_id, evidence_id=str(extra["evidence_id"]),
+                                            )
+                                            extra_meta = _json(extra["market_metadata"]) or {}
+                                            extra_value = _stored_number(extra["value_text"])
+                                            extra_observed = _dt(extra["observed_at"])
+                                            extra_session = (
+                                                extra["market_session_date"] if status == "LAST_VALID_CLOSE" else None
+                                            )
+                                            extra_ok, extra_reason = verify_quote_body(
+                                                extra_loaded[0], extra_loaded[1],
+                                                instrument_id=instrument_id, currency=str(currency),
+                                                price=value, observed_at=extra_observed,
+                                                exchange=str(extra_meta.get("exchange") or ""),
+                                                session_date=extra_session,
+                                                retrieved_at=_dt(extra["retrieved_at"]) or cutoff,
+                                            ) if extra_loaded is not None and extra_observed is not None and extra_value == value else (
+                                                False, "selected quote sources disagree; current price and action numbers stay withheld",
+                                            )
+                                            if not extra_ok or str(extra_meta.get("quote_kind") or "").upper() != session_kind:
+                                                reasons.append(extra_reason or "selected quote sources disagree")
+                                                break
+                                        else:
+                                            quote = Money(value, str(currency).upper(), verified=True)
+                                            quote_kind = status
+                                            evidence_id = row["evidence_id"]
+                                            quote_source_count = len(rows)
+                    basis_out: list[str] = []
+                    conservative_fair_value, fair_value, optimistic_fair_value, valuation_reason = _persisted_dcf_values(
+                        connection, run_id=run_id, instrument_id=instrument_id, cutoff=cutoff,
+                        basis_out=basis_out,
                     )
+                    if basis_out:
+                        cash_flow_basis = basis_out[0]
         except (sqlite3.Error, OSError, ValueError) as exc:
             reasons.append(f"run database could not be read safely: {type(exc).__name__}")
     if valuation_reason:
@@ -402,5 +535,9 @@ def load_policy_b_market_evidence(
         quote_per_share=quote, quote_evidence_id=evidence_id if quote else None,
         fair_value_per_share=fair_value,
         optimistic_fair_value_per_share=optimistic_fair_value,
+        conservative_fair_value_per_share=conservative_fair_value,
+        quote_kind=quote_kind if quote else None,
+        quote_source_count=quote_source_count if quote else 0,
+        cash_flow_basis=cash_flow_basis if fair_value else None,
         unavailable_reasons=tuple(dict.fromkeys(reasons)),
     )

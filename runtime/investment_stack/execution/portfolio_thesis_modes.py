@@ -24,6 +24,7 @@ from investment_stack.decisions.policy_b_personal import bind_personal_snapshot
 from investment_stack.personal.ledger import PersonalLedgerService
 from investment_stack.pipelines import PipelineStep
 from investment_stack.reporting.models import Availability as ReportAvailability, ReportSectionInput
+from investment_stack.reporting.auxiliary_context import build_auxiliary_context_section
 from investment_stack.reporting.policy_b_briefing import build_policy_b_section
 from investment_stack.reporting.portfolio_modes import (
     FxEvidence,
@@ -613,6 +614,7 @@ def portfolio_thesis_services(
             for child in step_result.output.get("sections", ()):
                 if isinstance(child, ReportSectionInput):
                     sections.append(child)
+        sections.append(build_auxiliary_context_section(request.mode.value, None, run_db))
         if request.mode is RequestMode.PERSONAL_PORTFOLIO_ANALYSIS:
             selected_step = context.get(PipelineStep.APPLY_MATERIALITY_GATE.value)
             selected_ids = (selected_step.output.get("selected_instrument_ids", ())
@@ -649,9 +651,14 @@ def portfolio_thesis_services(
                 ))
                 sections.append(build_policy_b_section(
                     instrument_id, policy_as_of, policy,
+                    run_db=run_db, personal_ledger=personal_ledger,
+                    evaluation_currency=evaluation_currency or None,
                     missing_inputs=tuple(dict.fromkeys((
                         *market.unavailable_reasons, *personal.unavailable_reasons,
                     ))),
+                ))
+                sections.append(build_auxiliary_context_section(
+                    request.mode.value, instrument_id, run_db,
                 ))
         incomplete_steps = tuple(sorted(
             name for name, item in context.items() if item.availability is Availability.PARTIAL

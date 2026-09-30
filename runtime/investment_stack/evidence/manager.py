@@ -665,6 +665,21 @@ class RunDatabaseManager:
             if cursor.rowcount != 1:
                 raise RuntimeError("evidence selection did not affect exactly one row")
 
+    def add_source_document(
+        self, *, document_id: str, evidence_id: str, parser_id: str, payload_text: str,
+    ) -> None:
+        """Store a provider body or excerpt that later checks must re-parse."""
+        from investment_stack.evidence.source_receipt import payload_sha256
+
+        digest = payload_sha256(payload_text)
+        with self._mutation_connection() as connection:
+            connection.execute(
+                "INSERT INTO source_documents "
+                "(document_id, run_id, evidence_id, parser_id, content_sha256, payload_text) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (document_id, self.run_id, evidence_id, parser_id, digest, payload_text),
+            )
+
     def add_observation_selection(
         self,
         *,

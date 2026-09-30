@@ -283,6 +283,7 @@ def generate_briefing(
     eligibility_decisions: Mapping[str, EligibilityDecision] | None = None,
     analysis_as_of: datetime | None = None,
     registered_gates: tuple[GateDecision, ...] = (),
+    chart_lines: tuple[str, ...] = (),
 ) -> NonPostingBriefing:
     """Generate a 5-section Korean briefing without posting any trades."""
     reasons = []
@@ -384,7 +385,8 @@ def generate_briefing(
     # They do not authorize any action or sizing policy.
     reasons.append("안전마진·개인 위험·축소 정책 provenance가 확인되지 않아 행동 판단과 규모 산출을 보류합니다.")
     core_lines = [
-        "13F 자료는 공개 지연이 있는 보조 근거이며, UNVALIDATED 점수는 판단 가중치나 거래 신호로 쓰지 않습니다."
+        "13F 자료는 공개 지연이 있는 보조 근거이며, UNVALIDATED 점수는 판단 가중치나 거래 신호로 쓰지 않습니다.",
+        *chart_lines,
     ]
     detail_lines = list(reasons)
     table = {
