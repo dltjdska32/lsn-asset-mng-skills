@@ -74,3 +74,32 @@ proxy를 전체 공분산·승인 risk limit로 격상하지 않는다.
 현재 FX로 평단을 환산해 실제 원화손익이라고 하지 않는다. 예약금은 중복 차감하지
 않으며 계좌·통화별 예수금/결제현금/매수가능/출금가능/담보를 분리한다.
 스냅샷과 장부가 일치하지 않거나 결제·예약 커버리지가 없으면 매수가능금액은 보류한다.
+
+## Automatic portfolio research conversion
+
+PERSONAL_PORTFOLIO_ANALYSIS converts selected, fresh, same-run persisted
+EQUITY_FUNDAMENTAL/EQUITY_VALUATION (or FUND) results into typed
+CapitalCompetitionPolicyInputs inside the existing allocation stage. A request
+need not inject capital_competition_policy_inputs. Every eligible held instrument
+is processed, without a six-asset limit. Explicit overrides still require their
+original evidence and approval receipts.
+
+The bridge consumes documented normalized <dimension>_score research metrics.
+Evidence score observations require assessment_rationale. Where explicit scores
+are absent, revenue_growth, earnings yield (1/pe), roe, industry_growth_rate and
+inverse debt_to_equity order the complete research cohort by midrank percentile.
+Business quality needs a documented business_quality_score; industry growth
+needs its own research observation and is never inferred from company revenue.
+Missing/conflicting/unselected/stale/future evidence leaves an asset unranked.
+These numeric comparisons are relative research priorities, not a complete moat,
+financial-distress or downside model. Relative scores never themselves assign
+REDUCE/EXIT/CORE or a budget. Source calculations, all normalization peer evidence
+and cohort identities are persisted for reproducibility.
+
+Missing explicit forecast scenarios does not suppress an evidenced research
+ranking. It leaves 5Y CAGR and rotation benefit unavailable, keeps the report
+PARTIAL and cannot authorize concentration or additional purchases. No forecast
+or approval is fabricated. Legacy Policy B has no fixed 8% position cap or
+10%-to-8% reduction trigger. Its cash floor and evidenced valuation/thesis checks
+remain; a purchase budget requires a verified allocation risk budget and the
+existing review/release checks.

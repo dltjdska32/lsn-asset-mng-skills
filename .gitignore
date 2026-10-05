@@ -1,3 +1,5 @@
+workspace/
+artifacts/
 __pycache__/
 **/__pycache__/
 *.py[cod]
@@ -39,17 +41,6 @@ exports/
 tests/tmp/
 tests/temp/
 
-# Keep all local runs, publication staging and private artifacts out of Git.
-workspace/
-*.zip
-*.whl
-*.tar.gz
-*.pem
-*.key
-*.p12
-*.pfx
 *.log
-
-# Public source excludes development tests, fixtures and probes.
-tests/
-scripts/workflow/
+validation/
+artifacts/

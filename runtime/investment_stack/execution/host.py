@@ -167,6 +167,9 @@ def compose_configured_host(run: RunDatabaseManager, ledger: PersonalLedgerServi
     resolver = InstrumentResolver.from_database(ledger.manager.database_path,
         registry_path=instrument_registry, transport=chosen_transport)
     held_ids = tuple(p.instrument_id for p in verified.projection.positions if p.quantity != 0)
+    if previous_run_db is not None:
+        from investment_stack.execution.capital_baseline import import_prior_research
+        import_prior_research(run, previous_run_db, held_ids)
     resolved = resolver.portfolio(held_ids) if metadata["request_mode"] in {"PERSONAL_PORTFOLIO_ANALYSIS","THESIS_REVIEW","PORTFOLIO_SCENARIO"} else {}
     listings = {iid: asset.listing_id for iid, asset in resolved.items()}
     providers = build_default_provider_executor(

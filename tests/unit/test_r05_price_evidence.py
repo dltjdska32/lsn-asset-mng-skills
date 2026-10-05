@@ -1,0 +1,77 @@
+"""Test price evidence selection constraints in Phase 4."""
+
+import os
+import sqlite3
+from contextlib import closing
+import tempfile
+import unittest
+from datetime import datetime, timezone, timedelta
+from decimal import Decimal
+
+from investment_stack.evidence.manager import RunDatabaseManager
+from investment_stack.evidence.research import EvidenceResearchStore
+from investment_stack.freshness.engine import FreshnessEngine
+from investment_stack.providers.models import ProviderObservation, ProviderResult, ProviderCapability, ProviderStatus
+
+class PriceEvidenceTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.run_db = RunDatabaseManager(self.temp_dir.name, "r05-price-test")
+        report = self.run_db.create()
+        self.assertTrue(report.valid, report.errors)
+        self.store = EvidenceResearchStore(self.run_db, freshness=FreshnessEngine())
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_current_price_rejects_invalid_values(self):
+        base_time = datetime(2024, 4, 1, 10, 0, tzinfo=timezone.utc)
+        analysis_as_of = base_time.isoformat()
+        
+        # 1. Invalid values for current_price (should be rejected from selection)
+        invalid_vals = [0, -10, Decimal("-5.5"), float("nan"), float("inf"), True, False]
+        
+        obs_invalid = [
+            ProviderObservation(
+                evidence_type="market",
+                source_name="test",
+                source_url="http://test",
+                source_tier=1,
+                provider_id="test",
+                value=val,
+                metric="current_price",
+                observed_at=(base_time - timedelta(minutes=5)).isoformat(), # Very fresh
+                metadata={"calculation_input_approved": True}
+            ) for val in invalid_vals
+        ]
+        
+        # 2. Valid stale value (retained as evidence, never selected as price input)
+        obs_stale = ProviderObservation(
+            evidence_type="market",
+            source_name="test",
+            source_url="http://test",
+            source_tier=1,
+            provider_id="test",
+            value=150.0,
+            metric="current_price",
+            observed_at=(base_time - timedelta(days=2)).isoformat(), # Stale
+            metadata={"calculation_input_approved": True}
+        )
+        
+        result = ProviderResult("test_provider", ProviderCapability.CURRENT_PRICE, ProviderStatus.AVAILABLE, tuple(obs_invalid + [obs_stale]))
+        
+        selected = self.store.persist_and_select([result], analysis_as_of=analysis_as_of)
+        
+        # No current-price observation is selected when only stale data exists.
+        self.assertIsNone(selected.observation)
+        self.assertTrue(selected.partial)
+        
+        # Verify invalid values are still recorded in DB (not totally dropped from storage)
+        with closing(sqlite3.connect(self.run_db.database_path)) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM market_observations WHERE run_id = ?", (self.run_db.run_id,))
+            count = cursor.fetchone()[0]
+            self.assertEqual(count, len(invalid_vals) + 1)
+
+if __name__ == "__main__":
+    unittest.main()

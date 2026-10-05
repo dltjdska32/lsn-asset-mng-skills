@@ -1,6 +1,7 @@
 """Concrete single-asset and asset-comparison bundles over Phase 4/5/6 runtimes."""
 
 from __future__ import annotations
+from investment_stack.calculations.position_policy import POLICY_B_GUIDANCE
 
 from dataclasses import asdict, replace
 from decimal import Decimal
@@ -495,7 +496,7 @@ def equity_analysis_services(
                         if has_scenario_value else
                         "DCF 가정 또는 근거가 연결된 유효 시나리오가 없어 적정가 범위를 산출하지 않았습니다."
                     ),
-                    "D12 B 정책 확정: 검증된 기준 적정가의 80%·75%·70%에서 3회 분할 검토, 개별 주식 8% 한도와 투자현금 10% 하한을 적용합니다.",
+                    POLICY_B_GUIDANCE,
                     "적용 제한: 같은 시점의 개인 상태·적격 현재가·통화·거래 비용이 없으면 실행 가능한 진입가·금액·수량은 계산하지 않습니다.",
                     "브리핑 제한: 가격·가치 숫자에는 독립 검증 가능한 eligibility receipt와 종목 결속이 없어 최종 판단 브리핑에서 숨깁니다.",
                     f"기준시각: {section_as_of.isoformat()}" if section_as_of else "기준시각: 확인 불가",
@@ -644,7 +645,7 @@ def equity_analysis_services(
                 )
             briefing = replace(briefing, section_details=tuple(dict.fromkeys((
                 *briefing.section_details,
-                "사용자 선택 정책: D12 B (3회 80%·75%·70%, 종목 8%, 투자현금 하한 10%, 비중 10% 초과 또는 낙관 가치 1.2배에서 축소 검토). 정책 자체는 거래 승인이나 수치 근거가 아닙니다.",
+                POLICY_B_GUIDANCE,
             ))))
             if not source_bound:
                 briefing = replace(briefing, section_details=tuple(dict.fromkeys((

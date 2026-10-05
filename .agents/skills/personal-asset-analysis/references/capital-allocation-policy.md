@@ -74,3 +74,47 @@ proxy를 전체 공분산·승인 risk limit로 격상하지 않는다.
 현재 FX로 평단을 환산해 실제 원화손익이라고 하지 않는다. 예약금은 중복 차감하지
 않으며 계좌·통화별 예수금/결제현금/매수가능/출금가능/담보를 분리한다.
 스냅샷과 장부가 일치하지 않거나 결제·예약 커버리지가 없으면 매수가능금액은 보류한다.
+
+## Automatic portfolio research conversion
+
+Materiality limits costly Deep Research, not the final holding universe. Persist
+PORTFOLIO_LIGHTWEIGHT for every holding before the gate; enrich only selected
+assets, then derive CapitalCompetitionPolicyInputs automatically over all holdings.
+There is no fixed six-asset limit and no manual input injection requirement.
+
+Per dimension, prefer current-run Deep Research/Fundamental/Valuation, then
+current-run lightweight observations, then VALIDATED_PRIOR_RESEARCH. Prior imports
+require the same personal database identity and mode, an earlier clock, selected
+confirmed instrument-bound sources, and an explicit research_valid_until covering
+the current cutoff. Preserve original source run/IDs/times and mint new current-run
+receipts. Old FRESH labels and newer retrieval dates cannot extend source validity.
+Without an explicit prior validity contract, withhold the prior input.
+
+Use evidenced normalized scores or dimension-specific cohort midranks of growth,
+earnings yield, ROE, industry growth and inverse leverage. Normalize each dimension
+against all holdings with compatible valid facts for that dimension; persist the
+whole universe and actual per-dimension peers. Business quality requires its own
+rationalized assessment. Never infer a moat or industry growth from company growth.
+Conflict at the highest applicable source priority remains UNKNOWN. Partial scores
+use available-weight coverage normalization with LOW confidence and WATCH, never
+fabricated neutral scores. Relative cohort scores cannot alone classify impairment.
+
+CAPITAL_COMPETITION.ranking is the complete structured final table. Every holding
+has rank, instrument/ticker, weight, role, score, six dimension scores, Bear/Base/
+Bull 5Y CAGR, concentration/size status, thesis/ranking confidence, data quality,
+latest evidence time, coverage and per-score source/calculation provenance. Unknown
+rows stay in the table with null score and UNKNOWN_PRESENTATION_ORDER: their display
+number is not an economic superiority assertion. ranked/unranked are legacy score-
+availability partitions; neither partition is the complete final table.
+
+Missing scenario CAGR does not suppress a score-supported rotation comparison.
+Show UNKNOWN expected-return differences and evidenced valuation/risk differences,
+confidence and required review. Do not infer net benefit without scenarios and
+verified tax/fees/FX/slippage. Unknown-score holdings are not fabricated weakest
+holdings. Tiny positions require impact, scale intent, alternative opportunity and
+optionality review, never automatic liquidation. All outputs are non-posting.
+
+Central position thresholds live in calculations/position_policy.py: single >25%
+review, >30% high review, top two >50% review. Concentration is never an automatic
+sell trigger. Policy B keeps its cash floor and validated allocation budget; there
+is no legacy fixed stock cap or concentration-only sell target.

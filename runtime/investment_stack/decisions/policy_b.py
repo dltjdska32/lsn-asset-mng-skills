@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Optional
+from investment_stack.calculations.position_policy import CASH_FLOOR
 
 
 @dataclass(frozen=True)
@@ -196,23 +197,25 @@ def evaluate_policy_b(inputs: PolicyBInput) -> PolicyBResult:
     if fv is not None and base_verified and currency and base_currency == currency and not reasons:
         entry_tiers = tuple(EntryTier(fv * factor, factor, _D(0)) for factor in _TIER_FRACTIONS)
 
-    floor = portfolio * _D("0.10") if verified_matches.get("portfolio value") and portfolio is not None else None
+    floor = portfolio * CASH_FLOOR if verified_matches.get("portfolio value") and portfolio is not None else None
     cash_available = max(cash - floor, _D(0)) if cash is not None and floor is not None else None
-    headroom = max(portfolio * _D("0.08") - holding, _D(0)) if verified_matches.get("portfolio value") and verified_matches.get("holding value") and portfolio is not None and holding is not None else None
+    # v7 concentration is reviewed in capital competition; no fixed position cap.
+    headroom = None
     budget: Optional[Decimal] = None
-    if not reasons and cash_available is not None and headroom is not None:
-        budget = min(max(cash_available, _D(0)), headroom, approved if approved is not None else headroom)
+    if not reasons and cash_available is not None and approved is not None:
+        budget = min(max(cash_available, _D(0)), approved)
         tranche = budget / _D(3)
         tranche_budgets = (tranche, tranche, budget - tranche * _D(2))
         entry_tiers = tuple(EntryTier(t.price, t.fraction_of_fair_value, tranche_budgets[i]) for i, t in enumerate(entry_tiers))
+
+    if approved is None:
+        reasons.append("verified allocation risk budget unavailable; v7 concentration review required")
 
     stop_reasons: list[str] = []
     if reasons:
         stop_reasons.append("required inputs unavailable")
     if inputs.thesis_impaired:
         stop_reasons.append("investment thesis impaired")
-    if headroom == 0:
-        stop_reasons.append("8% individual holding cap reached")
     if cash_available == 0:
         stop_reasons.append("cash is at or below the 10% investable portfolio floor")
     if approved == 0:
@@ -227,8 +230,6 @@ def evaluate_policy_b(inputs: PolicyBInput) -> PolicyBResult:
     candidate_fraction: Optional[Decimal] = None
     candidate_units: Optional[Decimal] = None
     candidate_value: Optional[Decimal] = None
-    if not inconsistent_portfolio_state and verified_matches.get("portfolio value") and verified_matches.get("holding value") and portfolio is not None and holding is not None and holding > portfolio * _D("0.10"):
-        reduction.append("holding concentration strictly above 10%; review reduction to 8% target")
     if inputs.thesis_impaired is True:
         reduction.append("investment thesis impaired; review reduction")
     if (

@@ -924,7 +924,7 @@ In-kind Transfer Request
 
 사용자가 다음과 같이 말할 경우:
 
-“가상종목를 다른 계좌로 옮겼어”
+“FANUC를 다른 계좌로 옮겼어”
 “주식을 ISA로 옮겼어”
 “BTC를 다른 거래소로 옮겼어”
 
@@ -1085,7 +1085,7 @@ Net Worth 영향 모호
 
 사용자가 다음과 같이 입력해도 자동 POST하지 않는다.
 
-“가상종목 2주 6400엔에 샀어”
+“FANUC 2주 6400엔에 샀어”
 
 날짜가 없으면:
 
@@ -1541,6 +1541,7 @@ investment-stack/
 │  ├─ personal/
 │  └─ run/
 │
+├─ tests/
 │  ├─ unit/
 │  ├─ integration/
 │  ├─ acceptance/
@@ -1560,6 +1561,72 @@ investment-stack/
    │  └─ personal.db
    ├─ backups/
    └─ exports/
+47. Test Plan
+Transfer Regression
+Cash Account A → B: Net Worth 변화 0
+Cash Transfer에서 Income 0
+Cash Transfer에서 Expense 0
+Cash Transfer에서 Realized P&L 0
+“FANUC를 다른 계좌로 옮겼어”: Auto SELL/BUY 금지
+Security In-kind Transfer: Ledger POST 금지
+In-kind Request: ASSET_ADJUSTMENT 우회 금지
+BTC Exchange 간 이동: Pending/Unsupported
+occurred_at Regression
+“FANUC 2주 6400엔에 샀어”, 날짜 없음: Auto POST 금지
+사용자 날짜 제공: 해당 값을 occurred_at으로 사용
+analysis_as_of 자동 복사 금지
+현재 시스템시각 자동 사용 금지
+posted_at과 occurred_at 별도 기록
+Timezone 우선순위 검증
+Timezone 불명: Confirm/Draft
+High-impact Transaction
+ASSET_ADJUSTMENT: Always Confirm
+OPENING_BALANCE: Always Confirm
+INITIAL_POSITION: Always Confirm
+Basis 없는 Initial Position: 확인 후 UNAVAILABLE
+임의 Cost Basis 생성 금지
+큰 Deposit: Config Threshold 초과 시 Confirm
+사용자 불명확 발화를 Adjustment로 우회하지 않음
+Correction
+REVERSAL + Complete Replacement 생성
+CORRECTION Economic Entry 생성 금지
+Original UPDATE/DELETE 금지
+Supplement Entry 금지
+Correction Bundle은 정확히 하나의 State Version
+Backup/Migration
+Source Integrity 실패: Migration 시작 금지
+Backup 실패: Migration 시작 금지
+Backup Validation 실패: Migration 시작 금지
+Migration 오류: Rollback
+기존 Schema Version 유지
+Post-migration Integrity 실패: DB Invalid
+Foreign Key Corruption: Startup/Posting 차단
+Backup Integrity 실패: Successful Backup으로 기록 금지
+Restore
+Corrupt Restore File 거부
+Schema Version 불일치 거부
+State Version Sanity 실패 거부
+Transaction/Entry Sanity 실패 거부
+검증 전 Active DB 교체 금지
+정상 Backup 복원 후 Integrity 재검증
+Net Worth
+Cash Transfer: 변화 0
+In-kind Transfer 미지원: Position/Net Worth 변화 없음
+Opening Balance: 확인 없이 변경 금지
+Adjustment: 자동 Net Worth 변경 금지
+Pending Transaction: Confirmed/Valued Net Worth 제외
+기존 필수 Regression
+Materiality Gate 순서
+Stale Price 차단
+News 가격 Current 사용 차단
+News Deduplication
+Provider Fallback
+Credential Redaction
+Bitcoin/Gold Corporate Valuation 차단
+Generic DAG 생성 차단
+personal.db/run.db 분리
+Outbox 부재
+Transaction Snapshot 부재
 48. Implementation Phases
 
 아래 단계는 동결된 구현 범위와 순서를 설명하며, 완료 상태를 표시하지 않는다. 실제 구현 상태와 검증 결과는 [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)에서 관리한다.
@@ -1702,6 +1769,7 @@ Bootstrap/Repair Transaction Always Confirm
 Migration, Backup, Restore Fail-closed
 CORRECTION을 Relation-only로 확정
 Request DAG 문구를 Mode-scoped Pipeline으로 명확화
+관련 Regression Test 추가
 상태를 ARCHITECTURE FROZEN으로 변경
 
 TRANSFER 최종 정책
@@ -1726,6 +1794,7 @@ CORRECTION 최종 의미
 
 CORRECTION은 독립 Economic Transaction이 아니다. 실제 수정은 Atomic REVERSAL + Complete Replacement이며 Correction은 관계 Metadata 또는 Bundle ID다. Original Update/Delete, Supplement Entry, Partial Patch, Correction Economic Entry는 금지한다.
 
+추가 Regression Test
 Cash Transfer Net Worth 0
 In-kind Transfer 자동 SELL/BUY 금지
 날짜 없는 거래 Auto-post 금지

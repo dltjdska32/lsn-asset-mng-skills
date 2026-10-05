@@ -61,6 +61,16 @@ class PortfolioEvidence:
                 self.lines.append(f'{iid}: {obs.value} {obs.currency}; quote_time={obs.observed_at}; retrieved={obs.retrieved_at}; freshness={selected.freshness.status.value}; delay={obs.metadata.get("delay_status","UNKNOWN")}; source={obs.source_url}. 실시간으로 보장하지 않습니다.')
             else:
                 self.missing.append(f'{iid}:verified_quote'); self.lines.append(f'{iid}: 검증된 가격 없음; snapshot 가격을 현재가격으로 대체하지 않음.')
+            # One compact snapshot per holding supplies the lightweight baseline.
+            # This does not invoke Deep Research/Fundamental/Valuation engines.
+            # Providers may return no supported score facts; those stay UNKNOWN.
+            compact = self.collect(ProviderCapability.FUNDAMENTALS, iid, 'capital_lightweight',
+                                   f'{iid} compact timestamped capital allocation metrics')
+            context = self.run.fetch_phase6_context()
+            from investment_stack.execution.capital_baseline import METRICS
+            self.refs.extend(e['evidence_id'] for e in context['evidence']
+                             if e.get('instrument_id') == iid and e.get('metric') in METRICS
+                             and e.get('selection_state') == 'SELECTED')
             # Recent Event Discovery runs before Materiality Gate, across every equity.
             if self.instruments[iid]['asset_class']=='EQUITY':
                 news=self.collect(ProviderCapability.NEWS,iid,'latest_relevant_news',f'{iid} recent material events')
@@ -130,9 +140,6 @@ class PortfolioEvidence:
                 Decimal('1') if position.market_value is None else Decimal('0'),
                 strategic_relevance=bool(self.events.get(position.instrument_id)), user_specified=self.research_all_held)
             decision=self.analysis.materiality.evaluate(light)
-            # Research requests in this run explicitly require all held funds/equities.
-            if self.instruments[position.instrument_id]['asset_class']=='FUND':
-                decision=self.analysis.materiality.evaluate(replace(light,user_specified=True))
             self.analysis._persist_materiality(decision)
             if decision.decision is not MaterialityDecision.FAIL:selected.append(position.instrument_id)
         return tuple(selected)

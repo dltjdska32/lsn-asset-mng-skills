@@ -19,5 +19,9 @@ description: Analyze confirmed personal portfolio state, cash, liabilities, expo
 
 Apply [the capital allocation policy](references/capital-allocation-policy.md).
 Concentration is risk information, never an automatic sell rule. Compare all held
-and requested candidate assets, preserve unranked entries, and separate actual
+and requested candidate assets. Materiality limits expensive research only.
+Persist a lightweight baseline for every holding and refresh the whole universe
+after selected research. Final CAPITAL_COMPETITION.ranking includes all holdings;
+missing scores stay null/WATCH/LOW with provenance and coverage limitations.
+Separate actual
 transaction FX/P&L, account buying power, fund look-through and risk proxy outputs.

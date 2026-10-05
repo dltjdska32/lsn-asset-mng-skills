@@ -31,6 +31,7 @@ def main() -> int:
     p.add_argument('--offline-captures', action='store_true')
     p.add_argument('--previous-run-db', type=Path)
     a=p.parse_args()
+    personal_before = hashlib.sha256(a.personal_db.read_bytes()).hexdigest()
     now=datetime.now(ZoneInfo(a.timezone))
     run_id=a.run_id or 'portfolio-'+now.strftime('%Y%m%d%H%M%S')
     ledger=open_personal_ledger(a.personal_db)
@@ -69,12 +70,35 @@ def main() -> int:
         held=[r[0] for r in c.execute("select distinct instrument_id from positions where CAST(quantity_decimal as NUMERIC) != 0 order by instrument_id")]
         schema=c.execute('select max(version) from schema_migrations').fetchone()[0]
     priced={r['instrument_id'] for r in quotes}
+    context = run.fetch_phase6_context()
+    competition = next((json.loads(c['result_json']) for c in reversed(context['calculations'])
+                        if c['calculation_name'] == 'CAPITAL_COMPETITION'), {})
+    ranking = competition.get('ranking', [])
+    baseline = {json.loads(c['result_json']).get('subject') for c in context['calculations'] if c['calculation_name'] == 'PORTFOLIO_LIGHTWEIGHT'}
+    fundamental = {json.loads(c['result_json']).get('subject') for c in context['calculations'] if c['calculation_name'] == 'EQUITY_FUNDAMENTAL'}
+    valuations = {json.loads(c['result_json']).get('subject') for c in context['calculations'] if c['calculation_name'] == 'EQUITY_VALUATION'}
+    other_executed = {json.loads(c['result_json']).get('subject') for c in context['calculations'] if c['calculation_name'] in {'FUND','ALTERNATIVE_BITCOIN','ALTERNATIVE_ETHEREUM','ALTERNATIVE_GOLD','ALTERNATIVE_SILVER'}}
+    executed = (fundamental & valuations) | other_executed
     out['verification']={
         'authoritative_zip_sha256':hashlib.sha256(a.authoritative_zip.read_bytes()).hexdigest() if a.authoritative_zip else None,
         'runtime_path':str(Path(__file__).resolve().parents[1] / 'runtime' / 'investment_stack'),
         'personal_db_path':str(a.personal_db.resolve()),'run_db_path':str(run.database_path),
         'personal_schema_version':schema,'held_assets':held,'held_count':len(held),
         'selected_deep_research_assets':sorted(set(selected_assets)),
+        'selected_deep_research_count':len(set(selected_assets)), 'baseline_count':len(baseline),
+        'executed_deep_research_count':len(executed), 'executed_deep_research_assets':sorted(executed),
+        'lightweight_only_count':len(set(held)-executed),
+        'capital_competition_count':sum(c['calculation_name']=='CAPITAL_COMPETITION' for c in context['calculations']),
+        'level3_trigger_count':len(competition.get('review_triggers', [])),
+        'fundamental_count':len(fundamental), 'valuation_count':len(valuations),
+        'final_ranking_count':len(ranking), 'final_ranking':ranking,
+        'held_ranking_count':sum(r.get('held',False) for r in ranking),
+        'unknown_score_count':sum(r.get('capital_score') is None for r in ranking),
+        'partial_ranking_count':sum(r.get('data_quality') != 'COMPLETE' for r in ranking),
+        'rotation_candidate_count':len(competition.get('rotations', [])),
+        'stage_trace':[{'stage':t['task_name'][6:], 'status':t['task_status'], **json.loads(t['metadata_json'] or '{}')}
+                       for t in tasks if t['task_name'].startswith('stage:') and t['task_status'] not in {'PLANNED','RUNNING'}],
+        'personal_db_unchanged': personal_before == hashlib.sha256(a.personal_db.read_bytes()).hexdigest(),
         'market_quote_status':'COMPLETE' if set(held)<=priced else 'PARTIAL',
         'missing_held_quotes':sorted(set(held)-priced),'quotes':quotes,
         'fx_status':'COMPLETE' if {'USD/KRW','JPY/KRW','USD/JPY'}<={r['instrument_id'] for r in fx} and not any('fx_cross_sanity:' in item for item in result.missing_inputs) else 'PARTIAL',

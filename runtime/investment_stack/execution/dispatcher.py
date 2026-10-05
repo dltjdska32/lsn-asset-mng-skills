@@ -32,6 +32,21 @@ class RuntimeServices:
         object.__setattr__(self, "run_dbs", MappingProxyType(dict(self.run_dbs)))
 
 
+def _portfolio_stage_count(output):
+    """Count actual stage outputs rather than keys in a wrapper dictionary."""
+    if 'portfolio_request' in output and hasattr(output['portfolio_request'], 'positions'):
+        return len({p.instrument_id for p in output['portfolio_request'].positions})
+    if 'selected_instrument_ids' in output:
+        return len(output['selected_instrument_ids'])
+    if 'capital_competition' in output:
+        return len(output['capital_competition'].result.ranking)
+    if 'report' in output:
+        return 1
+    if 'sections' in output:
+        return len(output['sections'])
+    return len(output)
+
+
 def _terminal(
     request: ModeRequest, availability: Availability, *, missing: tuple[str, ...] = (),
     unsupported: tuple[str, ...] = (), step: str = "preflight",
@@ -81,7 +96,7 @@ def _record_state(services: RuntimeServices, request: ModeRequest, state: StepSt
         receipt = json.loads(running['metadata_json']) if running and running.get('metadata_json') else {}
         record_stage(run_db, state.step, stage_status, started_at=receipt.get('started_at'),
                      input_count=receipt.get('input_count', 0),
-                     output_count=len(result.output) if result else 0,
+                     output_count=(_portfolio_stage_count(result.output) if request.mode is RequestMode.PERSONAL_PORTFOLIO_ANALYSIS else len(result.output)) if result else 0,
                      evidence_count=len(result.evidence_refs) if result else 0,
                      reason=state.error or ('; '.join((*result.missing_inputs, *result.unsupported_reasons)) if result else None),
                      dependency=receipt.get('dependency_stage'))
@@ -123,8 +138,12 @@ def execute_mode(request: ModeRequest, services: RuntimeServices) -> ModeResult:
     for step in plan:
         started = now()
         if isinstance(run_db, RunDatabaseManager):
+            previous = next(reversed(context.values()), None)
+            item_count = _portfolio_stage_count(previous.output) if previous else 0
+            if request.mode is RequestMode.PERSONAL_PORTFOLIO_ANALYSIS and step is PipelineStep.CALCULATE_ALLOCATION_AND_RISK:
+                item_count = next((_portfolio_stage_count(r.output) for r in reversed(context.values()) if 'portfolio_request' in r.output), 0)
             record_stage(run_db, step.value, 'RUNNING', started_at=started,
-                         input_count=sum(len(r.output) for r in context.values()),
+                         input_count=item_count if request.mode is RequestMode.PERSONAL_PORTFOLIO_ANALYSIS else sum(len(r.output) for r in context.values()),
                          dependency=states[-1].step if states else None)
         handler = services.handlers.get(step)
         if handler is None:

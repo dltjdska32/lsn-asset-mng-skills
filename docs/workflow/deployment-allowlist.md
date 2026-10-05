@@ -1,6 +1,6 @@
 # Distribution artifact allowlist
 
-This is the path allowlist for the Python wheel and source distribution. `MANIFEST.in` and `setup.py` implement it; The publication excludes development tests and fixtures; build verification checks packaged runtime payloads. Any intentional artifact change must update this document and the build validation together.
+This is the path allowlist for the Python wheel and source distribution. `MANIFEST.in` and `setup.py` implement it; `tests/test_packaging.py` compares complete built artifact file lists to it. Any intentional artifact change must update this document and the exact-list test together.
 
 ## Wheel (`investment_stack-0.1.0-py3-none-any.whl`)
 
@@ -23,6 +23,7 @@ Allowed project files are exactly:
 - `scripts/build_verified_distribution.py`, `scripts/capture_market_data.py`, `scripts/run_personal_portfolio.py`, and `scripts/run_asset_analysis.py`: clean verified build, actual HTTP capture, and configured portfolio execution.
 - The five explicitly named `config/*.yaml` inputs above.
 - All `runtime/investment_stack/**/*.py` source files and setuptools' six generated `runtime/investment_stack.egg-info/` metadata files (`PKG-INFO`, `SOURCES.txt`, `dependency_links.txt`, `entry_points.txt`, `requires.txt`, `top_level.txt`).
+- The two R15 packaging tests: `tests/test_packaging.py` and `tests/test_r15_skill_sync.py`.
 - For each of the eight skill names below, exactly `SKILL.md` and `agents/openai.yaml` under both `skills/<name>/` and `.agents/skills/<name>/`.
 - The same five explicit policy references listed above, under both skill trees.
 
@@ -32,7 +33,7 @@ The allowlist is exact at the file-path level. It excludes local credential valu
 
 The authoritative names are `investment-orchestrator`, `fundamental-analysis`, `valuation`, `fund-analysis`, `alternative-asset-analysis`, `personal-asset-analysis`, `investment-report`, and `review`. `review` retains its current name; D08 remains unresolved, so no rename or alternate UI name is introduced. `scripts/sync_agent_skills.py` copies only from `skills/` to `.agents/skills/` and `--check` verifies inventory, exact allowed files, and byte equality.
 
-The wheel installs config inputs under `sys.prefix/config/` and the two skill trees under `sys.prefix/skills/` and `sys.prefix/.agents/skills/`. Installation validation verifies that the five config resources, eight definitions, and eight UI metadata files are present; the skill source/mirror files are byte-identical. That confirms packaged skill payload discovery by path only; it does not establish that Codex automatically scans an arbitrary virtual-environment prefix. Repository-local Codex discovery is through the workspace's `.agents/skills/` mirror.
+The wheel installs config inputs under `sys.prefix/config/` and the two skill trees under `sys.prefix/skills/` and `sys.prefix/.agents/skills/`. The clean-install test verifies that the five config resources, eight definitions, and eight UI metadata files are present; the skill source/mirror files are byte-identical. That confirms packaged skill payload discovery by path only; it does not establish that Codex automatically scans an arbitrary virtual-environment prefix. Repository-local Codex discovery is through the workspace's `.agents/skills/` mirror.
 
 ## Version meanings
 

@@ -248,6 +248,21 @@ def portfolio_thesis_services(
             updated = portfolio_loader(request)
             if updated is not None:
                 portfolio = updated
+        from investment_stack.execution.capital_baseline import persist_lightweight_baseline
+        baseline_refs = persist_lightweight_baseline(run_db, (p.instrument_id for p in portfolio.positions))
+        from investment_stack.execution.capital_competition import derive_capital_competition_inputs, json_value
+        from investment_stack.calculations.capital_competition import analyze_capital_competition
+        baseline_inputs = derive_capital_competition_inputs(run_db, (p.instrument_id for p in portfolio.positions))
+        baseline_result = analyze_capital_competition(tuple(a.candidate for a in baseline_inputs.assets))
+        baseline_id = 'calc:capital-baseline:' + uuid4().hex
+        run_db.add_calculation(calculation_id=baseline_id, calculation_name='CAPITAL_COMPETITION_BASELINE',
+            formula='all_holding_evidenced_lightweight_ranking_before_materiality_v1',
+            inputs={'source_calculation_ids': [a.calculation_id for a in baseline_inputs.assets],
+                    'evidence_ids': list(dict.fromkeys(e for a in baseline_inputs.assets for e in a.candidate.score_evidence.values())),
+                    'state_version': portfolio.pinned_state.state_version,
+                    'snapshot_ref': portfolio.pinned_state.snapshot_ref,
+                    'universe': [p.instrument_id for p in portfolio.positions]},
+            result=json_value(baseline_result))
 
         section = ReportSectionInput(
             "portfolio_snapshot", "Pinned Portfolio Snapshot",
@@ -265,7 +280,8 @@ def portfolio_thesis_services(
         return StepResult(Availability.PARTIAL if enrichment and enrichment.missing_inputs else Availability.COMPLETE,
                           output={"section": section, "portfolio_request": portfolio, "sections": enrichment.sections if enrichment else ()},
                           evidence_refs=enrichment.evidence_refs if enrichment else (),
-                          calculation_refs=enrichment.calculation_refs if enrichment else (),
+                          calculation_refs=(*baseline_refs, baseline_id, *(a.calculation_id for a in baseline_inputs.assets),
+                                            *(enrichment.calculation_refs if enrichment else ())),
                           missing_inputs=enrichment.missing_inputs if enrichment else ())
 
     def materiality(request: ModeRequest, context: StepContext) -> StepResult:
@@ -290,6 +306,9 @@ def portfolio_thesis_services(
     def research_selected(request: ModeRequest, context: StepContext) -> StepResult:
         selected = context[PipelineStep.APPLY_MATERIALITY_GATE.value].output["selected_instrument_ids"]
         if not selected:
+            if context[PipelineStep.APPLY_MATERIALITY_GATE.value].availability is Availability.COMPLETE:
+                return StepResult(Availability.COMPLETE, output={'sections': (), 'deep_research_count': 0,
+                    'reason': 'NO_ASSETS_SELECTED_BY_MATERIALITY'})
             return StepResult(Availability.PARTIAL, output={"sections": ()},
                               missing_inputs=("selected_assets_for_deep_research",))
         if selected_asset_research is None:
