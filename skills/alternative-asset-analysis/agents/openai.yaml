@@ -1,0 +1,4 @@
+interface:
+  display_name: "Alternative Asset Analysis"
+  short_description: "Analyze Bitcoin, gold, and silver appropriately"
+  default_prompt: "Use $alternative-asset-analysis to analyze Bitcoin, gold, or silver with asset-appropriate methods."

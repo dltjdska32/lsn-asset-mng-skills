@@ -1,0 +1,47 @@
+"""Phase 4 evidence lineage and as-of metadata."""
+
+from investment_stack.storage.migrations import Migration
+
+
+MIGRATION = Migration(
+    version=2,
+    migration_id="run-0002-phase4-evidence",
+    statements=(
+        "ALTER TABLE pinned_personal_state ADD COLUMN personal_db_instance_id TEXT",
+        "ALTER TABLE pinned_personal_state ADD COLUMN portfolio_snapshot_id TEXT",
+        "ALTER TABLE pinned_personal_state ADD COLUMN portfolio_data_as_of TEXT",
+        "ALTER TABLE provider_states ADD COLUMN capability TEXT",
+        "ALTER TABLE provider_states ADD COLUMN error_reason TEXT",
+        "ALTER TABLE evidence ADD COLUMN instrument_id TEXT",
+        "ALTER TABLE evidence ADD COLUMN metric TEXT",
+        "ALTER TABLE evidence ADD COLUMN value_text TEXT",
+        "ALTER TABLE evidence ADD COLUMN unit TEXT",
+        "ALTER TABLE evidence ADD COLUMN currency TEXT",
+        "ALTER TABLE evidence ADD COLUMN source_name TEXT",
+        "ALTER TABLE evidence ADD COLUMN source_tier INTEGER",
+        "ALTER TABLE evidence ADD COLUMN observed_at TEXT",
+        "ALTER TABLE evidence ADD COLUMN published_at TEXT",
+        "ALTER TABLE evidence ADD COLUMN freshness_status TEXT",
+        "ALTER TABLE evidence ADD COLUMN provider_id TEXT",
+        "ALTER TABLE evidence ADD COLUMN headline TEXT",
+        "ALTER TABLE evidence ADD COLUMN updated_at TEXT",
+        "ALTER TABLE evidence ADD COLUMN event_time TEXT",
+        "ALTER TABLE evidence ADD COLUMN official_confirmation_status TEXT",
+        "ALTER TABLE evidence ADD COLUMN event_cluster_id TEXT",
+        "ALTER TABLE evidence ADD COLUMN relevance_reason TEXT",
+        "ALTER TABLE evidence ADD COLUMN selection_state TEXT",
+        "ALTER TABLE evidence ADD COLUMN selection_reason TEXT",
+        "ALTER TABLE market_observations ADD COLUMN currency TEXT",
+        "ALTER TABLE market_observations ADD COLUMN claimed_market_time TEXT",
+        "ALTER TABLE market_observations ADD COLUMN market_session_date TEXT",
+        "ALTER TABLE market_observations ADD COLUMN provider_id TEXT",
+        "ALTER TABLE market_observations ADD COLUMN freshness_status TEXT",
+        "ALTER TABLE financial_observations ADD COLUMN currency TEXT",
+        "ALTER TABLE financial_observations ADD COLUMN provider_id TEXT",
+        "ALTER TABLE macro_observations ADD COLUMN currency TEXT",
+        "ALTER TABLE macro_observations ADD COLUMN provider_id TEXT",
+        "CREATE INDEX idx_evidence_provider_id ON evidence(provider_id)",
+        "CREATE INDEX idx_evidence_event_cluster_id ON evidence(event_cluster_id)",
+        "CREATE INDEX idx_market_observations_instrument_id ON market_observations(instrument_id)",
+    ),
+)

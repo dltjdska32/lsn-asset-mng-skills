@@ -1,0 +1,4 @@
+interface:
+  display_name: "Personal Asset Analysis"
+  short_description: "Analyze confirmed personal portfolio state and risk"
+  default_prompt: "Use $personal-asset-analysis to analyze my confirmed portfolio state, exposures, and risks."

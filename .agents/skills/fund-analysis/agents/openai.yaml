@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fund Analysis"
+  short_description: "Analyze ETF and fund structure, cost, and holdings"
+  default_prompt: "Use $fund-analysis to analyze this ETF or fund using current holdings and cost evidence."

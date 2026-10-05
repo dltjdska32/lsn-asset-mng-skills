@@ -1,0 +1,23 @@
+---
+name: valuation
+description: Value supported securities using evidence-linked inputs and asset-appropriate models. Use for equity valuation, scenario ranges, multiples, discounted cash flow, and cross-checks; do not use corporate valuation models for Bitcoin, gold, or silver.
+---
+
+# Investment Valuation
+
+1. Verify asset classification before choosing a method.
+2. Use deterministic runtime calculations with evidence IDs, units, currency, and as-of timestamps. P/S and EV/EBITDA are allowed only after monetary totals are normalized to the same base currency scale and share counts are normalized to individual shares; missing/ambiguous unit scale makes the metric unavailable rather than guessed.
+3. Expose every material assumption and provide a range when inputs are uncertain.
+4. Cross-check model output against at least one compatible method when evidence permits.
+5. Reject stale prices as current prices and label unavailable inputs.
+6. Never apply company cash-flow or earnings valuation to Bitcoin, gold, or silver.
+7. Return valuation status, confidence, sensitivities, and limitations. Do not mutate personal state.
+8. In live equity runs, consume current price and financial metrics produced by `LiveDeepResearchRuntime`; do not fabricate valuation inputs when provider/Web Research evidence is missing.
+
+## v7 relative capital competition
+
+Apply [the capital allocation policy](references/capital-allocation-policy.md).
+Use evidenced Bear/Base/Bull inputs for 5Y CAGR and explicit dilution/dividends.
+Do not equate priority scores with expected return, invent scenario assumptions,
+or infer position size from company quality alone. Compare net rotation benefits
+only when tax, fees, FX and slippage are bound to verified inputs.
