@@ -90,6 +90,9 @@ SOURCE_CANDIDATE_ORDER: dict[MarketCategory, tuple[QuoteSourceSpec, ...]] = {
         ),
     ),
     MarketCategory.US_EQUITY: (
+        QuoteSourceSpec("yahoo_chart_secondary", "Yahoo secondary chart endpoint", MarketCategory.US_EQUITY,
+            2, "https://query2.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=1mo",
+            VerificationStatus.CANDIDATE_UNVERIFIED_LIVE, ("CURRENT_PRICE",)),
         QuoteSourceSpec(
             source_id="yahoo_finance",
             name="Yahoo Finance Chart / Quote API",
@@ -122,6 +125,10 @@ SOURCE_CANDIDATE_ORDER: dict[MarketCategory, tuple[QuoteSourceSpec, ...]] = {
         ),
     ),
     MarketCategory.JP_EQUITY: (
+        QuoteSourceSpec("yahoo_finance", "Yahoo chart Japan listing", MarketCategory.JP_EQUITY,
+            0, "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}.T?interval=1d&range=1mo",
+            VerificationStatus.CANDIDATE_UNVERIFIED_LIVE, ("CURRENT_PRICE",),
+            "Each response still requires listing, currency, timestamp and pinned-calendar qualification."),
         QuoteSourceSpec(
             source_id="jpx_official",
             name="Japan Exchange Group Official Feed",

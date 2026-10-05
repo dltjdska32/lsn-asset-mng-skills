@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import gzip
+import zlib
 import ssl
 import sys
 from decimal import Decimal
@@ -36,8 +38,19 @@ def urllib_transport(url: str, headers: Mapping[str, str], timeout: float) -> by
         else:
             response_context = urllib.request.urlopen(request, timeout=timeout)
         with response_context as response:
-            return response.read()
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            payload = response.read()
+            encoding = response.headers.get("Content-Encoding", "").lower().strip()
+            if encoding == "gzip":
+                payload = gzip.decompress(payload)
+            elif encoding == "deflate":
+                try:
+                    payload = zlib.decompress(payload)
+                except zlib.error:
+                    payload = zlib.decompress(payload, -zlib.MAX_WBITS)
+            elif encoding not in {"", "identity"}:
+                raise ProviderTransportError("unsupported HTTP content encoding")
+            return payload
+    except (urllib.error.URLError, TimeoutError, OSError, EOFError, zlib.error) as exc:
         raise ProviderTransportError(f"provider transport failed: {type(exc).__name__}") from exc
 
 
@@ -50,6 +63,9 @@ def fetch_json(
 ) -> Any:
     try:
         payload = transport(url, headers or {}, timeout)
+        # Captured/custom transports can return original gzip wire bytes.
+        if payload.startswith(b"\x1f\x8b"):
+            payload = gzip.decompress(payload)
         return json.loads(payload.decode("utf-8"), parse_float=Decimal)
     except ProviderTransportError:
         raise

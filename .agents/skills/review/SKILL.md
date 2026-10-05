@@ -12,3 +12,11 @@ description: Perform risk-based conditional review of investment analysis and tr
 5. Check that no Skill invented a price, timestamp, transaction, calculation, or personal state.
 6. Return actionable findings by severity. An independent reviewer agent remains optional.
 
+## v7 executed adversarial review
+
+Apply [the capital allocation policy](references/capital-allocation-policy.md).
+Persist actual Level 3 assessments for concentration and allocation triggers,
+including funds. Topic gaps make both review and its fixed stage partial; a task
+name or a trigger is not review output. Keep new concentration/add proposals
+provisional until an evidence-bound complete review exists.
+

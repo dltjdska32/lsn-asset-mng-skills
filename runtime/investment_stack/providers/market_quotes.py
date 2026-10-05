@@ -15,7 +15,7 @@ Live-verified source parsers included:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timezone, timedelta
 from decimal import Decimal
 import json
 from typing import Any, Callable, Mapping
@@ -56,7 +56,7 @@ def quote_matches_requested_market(quote: MarketQuote, instrument_id: str) -> tu
         expected_exchange, expected_currency = expected
         if quote.currency.upper() != expected_currency:
             return False, f"CURRENCY_MISMATCH: expected {expected_currency}, got {quote.currency}"
-        exchange_aliases = {"KS": "KRX", "KQ": "KOSDAQ", "NMS": "NASDAQ", "NASDAQGS": "NASDAQ", "NYQ": "NYSE", "TSE": "JPX"}
+        exchange_aliases = {"KS": "KRX", "KQ": "KOSDAQ", "NMS": "NASDAQ", "NGM": "NASDAQ", "NCM": "NASDAQ", "NASDAQGS": "NASDAQ", "NYQ": "NYSE", "TSE": "JPX"}
         actual_exchange = exchange_aliases.get((quote.exchange or "").upper(), (quote.exchange or "").upper())
         if actual_exchange != expected_exchange:
             return False, f"EXCHANGE_MISMATCH: expected {expected_exchange}, got {quote.exchange or 'UNKNOWN'}"
@@ -120,7 +120,7 @@ class MarketQuoteProviderAdapter:
             return ProviderResult(self.name, request.capability, ProviderStatus.ERROR,
                                   reason="invalid analysis_as_of format")
         prefix = request.instrument_id.split(":", 1)[0].upper()
-        exchange = {"NMS": "NASDAQ", "NASDAQGS": "NASDAQ", "KS": "KRX"}.get(prefix, prefix)
+        exchange = {"NMS": "NASDAQ", "NGM": "NASDAQ", "NCM": "NASDAQ", "NASDAQGS": "NASDAQ", "KS": "KRX"}.get(prefix, prefix)
         calendar = self.calendars.get(exchange)
         evaluator = calendar_aware_freshness_evaluator(calendar, engine=self.engine, policy=self.policy)
         result = self.quote_provider.fetch_current(
@@ -342,6 +342,20 @@ def parse_naver_basic_quote(
         )
 
     local_traded_raw = data.get("localTradedAt")
+    # A closed regular market's closePrice is a dated close, while Naver's
+    # localTradedAt may be a later page update. Keep that raw time for audit.
+    derived_close = False
+    if (not prefer_extended_hours and not is_after_market
+            and str(data.get("marketStatus", "")).upper() == "CLOSE"
+            and claimed_market_time is not None and metadata.get("exchange") in {"KRX", "KOSDAQ"}):
+        from investment_stack.freshness import get_pinned_calendar
+        calendar = get_pinned_calendar("KRX")
+        local_time = claimed_market_time.replace(tzinfo=ZoneInfo(tz_name)) if claimed_market_time.tzinfo is None else claimed_market_time
+        session = calendar.session_for_date(local_time.astimezone(ZoneInfo(tz_name)).date())
+        if session is not None and session.closes_at <= local_time <= retrieved:
+            claimed_market_time = session.closes_at
+            quote_kind = QuoteKind.LAST_VALID_CLOSE
+            derived_close = True
     if not local_traded_raw and claimed_market_time is None:
         return MarketQuoteParseResult(
             quote=None,
@@ -433,7 +447,7 @@ def parse_naver_basic_quote(
         published_at=pub_avail.public_available_at.isoformat() if pub_avail.public_available_at else None,
         claimed_market_time=claimed_market_time.isoformat() if claimed_market_time else None,
         market_session_date=quote.market_session_date,
-        official_confirmation_status="EXCHANGE_CONFIRMED" if exchange_code else "UNCONFIRMED",
+        official_confirmation_status="PROVIDER_REPORTED" if exchange_code else "UNCONFIRMED",
         metadata={
             "quote_kind": str(quote_kind),
             "exchange": exchange_name,
@@ -449,6 +463,10 @@ def parse_naver_basic_quote(
         },
     )
 
+    if derived_close:
+        observation.metadata.update(original_provider_timestamp=local_traded_raw,
+            timestamp_derivation="pinned_calendar_close_for_provider_reported_closed_market",
+            market_session="CLOSED", quote_state="CLOSE", bar_complete=True)
     return MarketQuoteParseResult(quote=quote, observation=observation)
 
 
@@ -554,7 +572,7 @@ def parse_coinbase_ticker(
         published_at=claimed_market_time.isoformat(),
         claimed_market_time=claimed_market_time.isoformat(),
         market_session_date=quote.market_session_date,
-        official_confirmation_status="EXCHANGE_CONFIRMED",
+        official_confirmation_status="PROVIDER_REPORTED",
         metadata={
             "quote_kind": str(QuoteKind.REGULAR),
             "trade_id": data.get("trade_id"),
@@ -693,7 +711,7 @@ def parse_kraken_trades(
         published_at=claimed_market_time.isoformat(),
         claimed_market_time=claimed_market_time.isoformat(),
         market_session_date=quote.market_session_date,
-        official_confirmation_status="EXCHANGE_CONFIRMED",
+        official_confirmation_status="PROVIDER_REPORTED",
         metadata={
             "quote_kind": str(QuoteKind.REGULAR),
             "trade_id": str(row[6]),
@@ -775,7 +793,7 @@ def parse_yahoo_quote(
     currency = str(meta.get("currency", "")).strip().upper()
     exchange_name = str(meta.get("exchangeName", "")).strip()
     exchange_alias = {
-        "NMS": "NASDAQ", "NASDAQGS": "NASDAQ", "NYQ": "NYSE", "NYSE": "NYSE",
+        "NMS": "NASDAQ", "NGM": "NASDAQ", "NCM": "NASDAQ", "NASDAQGS": "NASDAQ", "NYQ": "NYSE", "NYSE": "NYSE",
         "TSE": "JPX", "TYO": "JPX", "JPX": "JPX",
     }
     normalized_exchange = exchange_alias.get(exchange_name.upper(), exchange_name.upper())
@@ -794,8 +812,10 @@ def parse_yahoo_quote(
 
     epoch_time = meta.get("regularMarketTime")
     claimed_market_time: datetime | None = None
-    if epoch_time is not None:
+    if epoch_time is not None and not isinstance(epoch_time, bool):
         try:
+            if Decimal(str(epoch_time)) != Decimal(int(epoch_time)):
+                raise ValueError("fractional epoch")
             claimed_market_time = datetime.fromtimestamp(int(epoch_time), tz=ZoneInfo(tz_name))
         except Exception:
             claimed_market_time = None
@@ -809,9 +829,27 @@ def parse_yahoo_quote(
     resolved_evidence_id = evidence_id or f"yahoo_{symbol.lower()}_{int(retrieved.timestamp())}"
     resolved_source_url = source_url or f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 
-    pub_avail = PublicAvailability.exact(
-        available_at=claimed_market_time, locator=resolved_source_url
-    )
+    original_market_time = claimed_market_time
+    completed_daily_close = False
+    # Use the actual completed daily candle only when its date and price agree
+    # with regularMarketPrice. This is a derived candle-end time, not a trade time.
+    from investment_stack.freshness import get_pinned_calendar
+    calendar = get_pinned_calendar(normalized_exchange) if normalized_exchange in {"NYSE", "NASDAQ", "JPX"} else None
+    result = results[0]
+    if calendar is not None and meta.get("dataGranularity") == "1d":
+        session = calendar.session_for_date(claimed_market_time.date())
+        closes = result.get("indicators", {}).get("quote", [{}])[0].get("close", [])
+        if session is not None and session.closes_at <= original_market_time <= session.closes_at + timedelta(minutes=15) and session.closes_at <= retrieved:
+            for stamp, close in zip(result.get("timestamp", []), closes):
+                candle_date = datetime.fromtimestamp(int(stamp), ZoneInfo(tz_name)).date()
+                if candle_date != session.session_date or close is None:
+                    continue
+                candle_price = parse_finite_decimal(str(close))
+                if abs(candle_price-price) <= max(price * Decimal("0.000001"), Decimal("0.000001")):
+                    claimed_market_time = session.closes_at
+                    completed_daily_close = True
+                    break
+    pub_avail = PublicAvailability.exact(available_at=original_market_time, locator=resolved_source_url)
 
     delay_minutes: int | None = None
     raw_delay = meta.get("exchangeDataDelayedBy")
@@ -826,7 +864,7 @@ def parse_yahoo_quote(
                 error_reasons=("INVALID_DELAY_METADATA",))
     # regularMarketPrice is a regular-session quote; whether it is delayed is a
     # separate field and remains unknown when the provider omits delay metadata.
-    quote_kind = QuoteKind.REGULAR
+    quote_kind = QuoteKind.LAST_VALID_CLOSE if completed_daily_close else QuoteKind.REGULAR
     quote = MarketQuote(
         quote_id=f"quote_{resolved_evidence_id}",
         evidence_id=resolved_evidence_id,
@@ -857,16 +895,21 @@ def parse_yahoo_quote(
         metric="current_price",
         retrieved_at=retrieved.isoformat(),
         observed_at=claimed_market_time.isoformat(),
-        published_at=claimed_market_time.isoformat(),
+        published_at=original_market_time.isoformat(),
         claimed_market_time=claimed_market_time.isoformat(),
         market_session_date=quote.market_session_date,
-        official_confirmation_status="EXCHANGE_CONFIRMED",
+        official_confirmation_status="PROVIDER_REPORTED",
         metadata={
             "quote_kind": str(quote_kind),
             "exchange": exchange_name,
             "delay_minutes": delay_minutes,
             "delay_status": "UNKNOWN" if delay_minutes is None else "REPORTED",
             "public_available_time_source": "regularMarketTime",
+            "original_provider_timestamp": original_market_time.isoformat(),
+            "timestamp_derivation": "completed_daily_candle_end_from_pinned_calendar" if completed_daily_close else None,
+            "bar_complete": True if completed_daily_close else None,
+            "market_session": "CLOSED" if completed_daily_close else "REGULAR",
+            "quote_state": "CLOSE" if completed_daily_close else ("DELAYED" if delay_minutes else "DELAY_UNKNOWN"),
         },
     )
 
@@ -1127,9 +1170,11 @@ class MarketQuoteProvider:
         transport: HttpTransport | None = None,
         *,
         source_bundles: Mapping[str, Mapping[str, Any]] | None = None,
+        enable_secondary: bool = False,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._transport = transport
+        self._enable_secondary = enable_secondary
         self._bundles = dict(source_bundles or {})
         self._clock = clock or (lambda: datetime.now(timezone.utc))
 
@@ -1189,12 +1234,15 @@ class MarketQuoteProvider:
                 reason=f"UNSUPPORTED_MARKET: {instrument_id}",
             )
 
-        candidates = SOURCE_CANDIDATE_ORDER.get(market, ())
+        candidates = tuple(sorted(SOURCE_CANDIDATE_ORDER.get(market, ()), key=lambda item: item.priority))
         attempts: list[dict[str, Any]] = []
+        rejected_observations = []
 
         ticker = instrument_id.split(":")[-1].strip()
 
         for spec in candidates:
+            if spec.source_id == "yahoo_chart_secondary" and not self._enable_secondary:
+                continue
             if "CURRENT_PRICE" not in spec.capabilities:
                 continue
             # Skip unverified fixture-only endpoints for live HTTP calls unless bundle explicitly injected
@@ -1211,6 +1259,10 @@ class MarketQuoteProvider:
                 "url": url,
                 "started_at": current_retrieved_at.isoformat(),
             }
+            if spec.source_id not in {"naver_pay", "yahoo_finance", "yahoo_chart_secondary", "coinbase_public", "kraken_trades", "kraken_public", "investing_us", "investing_kr"}:
+                attempt_record.update(success=False, reason="SOURCE_ADAPTER_NOT_IMPLEMENTED")
+                attempts.append(attempt_record)
+                continue
 
             parse_res: MarketQuoteParseResult | None = None
 
@@ -1229,6 +1281,7 @@ class MarketQuoteProvider:
                     instrument_id=instrument_id,
                     retrieved_at=current_retrieved_at,
                     prefer_extended_hours=prefer_extended_hours,
+                    source_url=url,
                 )
                 attempt_record["status_code"] = 200
             # Case B: Injected HTTP transport
@@ -1238,15 +1291,17 @@ class MarketQuoteProvider:
                         {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
                         if spec.source_id == "yahoo_finance" else None
                     )
-                    status_code, body, _ = self._transport(url, request_headers, 10.0)
+                    status_code, body, response_headers = self._transport(url, request_headers, 10.0)
+                    response_retrieved = datetime.fromisoformat(response_headers["captured-retrieved-at"]) if response_headers.get("captured-retrieved-at") else now_clock()
                     attempt_record["status_code"] = status_code
                     if status_code == 200:
                         parse_res = self._parse_source_payload(
                             spec.source_id,
                             body,
                             instrument_id=instrument_id,
-                            retrieved_at=current_retrieved_at,
+                            retrieved_at=response_retrieved,
                             prefer_extended_hours=prefer_extended_hours,
+                            source_url=url,
                         )
                     else:
                         attempt_record["success"] = False
@@ -1275,6 +1330,11 @@ class MarketQuoteProvider:
                 continue
 
             quote = parse_res.quote
+
+            if quote.claimed_market_time is not None and quote.claimed_market_time > quote.retrieved_at:
+                attempt_record.update(success=False, reason="QUOTE_AFTER_RETRIEVAL")
+                attempts.append(attempt_record)
+                continue
 
             identity_ok, identity_reason = quote_matches_requested_market(quote, instrument_id)
             if not identity_ok:
@@ -1314,6 +1374,11 @@ class MarketQuoteProvider:
                 attempts.append(attempt_record)
                 continue
             if not is_eligible:
+                if parse_res.observation is not None:
+                    from dataclasses import replace
+                    rejected_observations.append(replace(parse_res.observation,
+                        metadata={**parse_res.observation.metadata, "calculation_input_approved":False,
+                                  "qualification_rejection":eval_reason}))
                 attempt_record["success"] = False
                 attempt_record["reason"] = f"INELIGIBLE: {eval_reason}"
                 attempts.append(attempt_record)
@@ -1339,6 +1404,7 @@ class MarketQuoteProvider:
             provider=self.name,
             capability=ProviderCapability.CURRENT_PRICE,
             status=ProviderStatus.UNAVAILABLE,
+            observations=tuple(rejected_observations),
             reason=("FRESHNESS_EVALUATOR_NOT_CONFIGURED" if any(
                 attempt.get("reason") == "FRESHNESS_EVALUATOR_NOT_CONFIGURED" for attempt in attempts
             ) else "CANDIDATES_EXHAUSTED"),
@@ -1353,6 +1419,7 @@ class MarketQuoteProvider:
         instrument_id: str,
         retrieved_at: datetime,
         prefer_extended_hours: bool,
+        source_url: str | None = None,
     ) -> MarketQuoteParseResult:
         if source_id == "naver_pay":
             return parse_naver_basic_quote(
@@ -1373,11 +1440,12 @@ class MarketQuoteProvider:
                 instrument_id=instrument_id,
                 retrieved_at=retrieved_at,
             )
-        elif source_id == "yahoo_finance":
+        elif source_id in {"yahoo_finance", "yahoo_chart_secondary"}:
             return parse_yahoo_quote(
                 payload,
                 instrument_id=instrument_id,
                 retrieved_at=retrieved_at,
+                source_url=source_url,
             )
         elif source_id in {"investing_us", "investing_kr"}:
             return parse_investing_quote(

@@ -84,4 +84,5 @@ class WebResearchBundleBackend:
             quote_kind=None if item.get("quote_kind") is None else str(item.get("quote_kind")),
             is_complete=None if item.get("is_complete") is None else bool(item.get("is_complete")),
             metadata=dict(metadata),
+            retrieved_at=None if item.get("retrieved_at") is None else str(item.get("retrieved_at")),
         )

@@ -186,6 +186,9 @@ class LiveSelectedAssetResearch:
                           "missing_inputs": asset_missing,
                           "conditional_dcf_values_present": bool(dcf_values)},
             ))
+            if outcome.news is not None:
+                from investment_stack.reporting.news_delta import news_delta_section
+                sections.append(news_delta_section(run_db, instrument_id))
             evidence_refs.extend(evidence)
             calculation_refs.extend(calculations)
         return SelectedAssetResearchResult(tuple(sections), evidence_refs=tuple(evidence_refs),

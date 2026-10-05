@@ -1,7 +1,0 @@
-Looking in links: work/dependency-wheels
-Processing .\work\exact-source\dist\investment_stack-0.1.0-py3-none-any.whl
-Processing .\work\dependency-wheels\tzdata-2026.4-py2.py3-none-any.whl (from investment-stack==0.1.0)
-Processing .\work\dependency-wheels\truststore-0.10.4-py3-none-any.whl (from investment-stack==0.1.0)
-Installing collected packages: tzdata, truststore, investment-stack
-
-Successfully installed investment-stack-0.1.0 truststore-0.10.4 tzdata-2026.4

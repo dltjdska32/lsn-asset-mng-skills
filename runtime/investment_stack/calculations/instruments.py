@@ -10,6 +10,7 @@ class EconomicUnderlying(StrEnum):
     COMPANY = "COMPANY"
     EQUITY_INDEX = "EQUITY_INDEX"
     BITCOIN = "BITCOIN"
+    ETHEREUM = "ETHEREUM"
     GOLD = "GOLD"
     SILVER = "SILVER"
     OTHER = "OTHER"
@@ -53,7 +54,7 @@ class InstrumentResolution:
 
 _FUND_WRAPPERS = frozenset({InstrumentWrapper.ETF, InstrumentWrapper.ETP, InstrumentWrapper.FUND, InstrumentWrapper.TRUST})
 _DERIVATIVE_WRAPPERS = frozenset({InstrumentWrapper.FUTURE, InstrumentWrapper.OPTION, InstrumentWrapper.LEVERAGED})
-_ALT_UNDERLYINGS = frozenset({EconomicUnderlying.BITCOIN, EconomicUnderlying.GOLD, EconomicUnderlying.SILVER})
+_ALT_UNDERLYINGS = frozenset({EconomicUnderlying.BITCOIN, EconomicUnderlying.ETHEREUM, EconomicUnderlying.GOLD, EconomicUnderlying.SILVER})
 
 
 def resolve_instrument(profile: InstrumentProfile) -> InstrumentResolution:

@@ -306,7 +306,7 @@ class InvestmentReportBuilder:
             if evidence_id in evidence_by_id and evidence_by_id[evidence_id].get("evidence_type") == "market"
         }
         if market_states and market_states != {"FRESH"}:
-            lines.append("- 시세 상태: " + ", ".join(f"{ko_status(state)} ({state})" for state in sorted(market_states)))
+            lines.append("- 시세 상태: " + ", ".join(f"{'최신성 기준 충족·실시간 여부 별도 확인' if state == 'FRESH' else ko_status(state)} ({state})" for state in sorted(market_states)))
         if report.review_triggers:
             labels = {"SOURCE_CONFLICT": "자료 간 값 차이", "HIGH_MATERIALITY": "판단 영향이 큼", "NEWS_REPORTED_OR_RUMOR_MATERIAL": "확인되지 않은 중요 소식", "STALE_OR_UNKNOWN_INPUT": "자료 기준시점 불확실"}
             lines.append("- 검토가 필요한 이유: " + ", ".join(labels.get(reason, "추가 확인 필요") for reason in report.review_triggers))
@@ -330,7 +330,9 @@ class InvestmentReportBuilder:
                 row = evidence_by_id[evidence_id]
                 data_time = row.get("observed_at") or row.get("published_at") or row.get("event_time") or "확인 불가"
                 source = row.get("source_name") or row.get("provider_id") or "출처 확인 불가"
-                details.append(f"- 근거 `{evidence_id}` — {source}; 자료 시각: {data_time}; 시세 상태: {ko_status(row.get('freshness_status'))}")
+                status=row.get('freshness_status')
+                freshness_label='최신성 기준 충족·실시간 여부 별도 확인' if status == 'FRESH' else ko_status(status)
+                details.append(f"- 근거 `{evidence_id}` — {source}; 자료 시각: {data_time}; 자료 최신성: {freshness_label}")
             if section.calculation_ids:
                 details.append("### 상세 계산 근거")
                 details.append("- 계산 근거: " + ", ".join(f"계산 ID `{cid}`" for cid in section.calculation_ids))

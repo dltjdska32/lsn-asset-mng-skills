@@ -12,6 +12,7 @@ from investment_stack.calculations.common import AnalysisResult, AnalysisStatus,
 
 class AlternativeAsset(StrEnum):
     BITCOIN = "BITCOIN"
+    ETHEREUM = "ETHEREUM"
     GOLD = "GOLD"
     SILVER = "SILVER"
 
@@ -56,7 +57,7 @@ class AlternativeAssetAnalyzer:
         findings: list[str] = [f"wrapper: {data.wrapper}", f"quote currency: {data.quote_currency}"]
         metadata: dict[str, object] = {"asset": data.asset.value, "wrapper": data.wrapper, "price_as_of": data.price_as_of}
 
-        if data.asset is AlternativeAsset.BITCOIN:
+        if data.asset in (AlternativeAsset.BITCOIN, AlternativeAsset.ETHEREUM):
             if not data.venue:
                 unknowns.append("venue")
             else:
@@ -72,6 +73,11 @@ class AlternativeAssetAnalyzer:
                 findings.append(f"regulatory context: {data.regulatory_status}")
             risks.extend(["protocol/regulatory risk", "custody/counterparty risk", "24/7 market liquidity can vary by venue"])
             metadata["corporate_valuation_allowed"] = False
+            if data.asset is AlternativeAsset.ETHEREUM:
+                risks.extend(["staking/slashing and validator concentration risk", "smart-contract and protocol upgrade risk"])
+                for key in ("staking_context", "fee_burn_context"):
+                    if key not in data.context:
+                        unknowns.append(key)
         elif data.asset is AlternativeAsset.GOLD:
             metrics.extend([
                 MetricResult("physical_premium", data.physical_premium, "ratio", "user_or_market_supplied_physical_premium", AnalysisStatus.COMPLETE if data.physical_premium is not None else AnalysisStatus.UNAVAILABLE, evidence_ids=data.evidence_ids),

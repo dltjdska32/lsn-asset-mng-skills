@@ -22,6 +22,8 @@ from investment_stack.calculations import (
     PositionExposure,
 )
 from investment_stack.reporting.models import Availability, ReportSectionInput
+from investment_stack.calculations.common import AnalysisResult
+from investment_stack.calculations.risk_proxy import ProxyExposure, ProxyPriceSeries, analyze_risk_proxy
 
 
 class ScenarioStatus(StrEnum):
@@ -285,6 +287,7 @@ class PortfolioAnalysisResult:
     risk_limits: tuple[RiskLimitAssessment, ...]
     missing_inputs: tuple[str, ...]
     section: ReportSectionInput
+    risk_proxy: AnalysisResult | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -485,7 +488,7 @@ def _risk_result(
             continue
         risk_inputs.append(AssetRiskInput(
             position.instrument_id, converted_value / gross,
-            tuple(item.price for item in valid),
+            tuple(item.price for item in valid), price_dates=current_timeline,
         ))
     if missing or len(risk_inputs) != len(priced_positions):
         return None, tuple(missing or ["위험 계산에 필요한 자산 series가 누락되었습니다."])
@@ -550,6 +553,62 @@ def _analyze(request: PortfolioAnalysisRequest, fx_override: Mapping[tuple[str, 
         unknown.append("정렬된 위험 자료가 불완전하여 portfolio volatility/contribution은 미확정입니다.")
         risk = None
 
+    proxy_series = []
+    proxy_gaps = []
+    position_by_id = {position.instrument_id: position for position in request.positions}
+    duplicate_series = {item.instrument_id for item in request.price_series
+                        if sum(other.instrument_id == item.instrument_id for other in request.price_series) > 1}
+    for series in request.price_series:
+        position = position_by_id.get(series.instrument_id)
+        if position is None or series.instrument_id in duplicate_series:
+            proxy_gaps.append('excluded_duplicate_or_unknown_series:' + series.instrument_id)
+            continue
+        valid = []
+        for observation in series.observations:
+            if (not observation.selected or observation.eligibility_status.upper() != 'ELIGIBLE'
+                    or observation.freshness_status.upper() not in {'FRESH', 'CURRENT'}
+                    or observation.currency.upper() not in {position.currency, request.evaluation_currency}
+                    or date.fromisoformat(observation.period) > as_of.date()):
+                continue
+            try:
+                if _timestamp(observation.public_available_at, 'proxy public_available_at') > as_of:
+                    continue
+            except ValueError:
+                continue
+            if request.period_policy and not (request.period_policy.period_start <= observation.period <= request.period_policy.period_end):
+                continue
+            valid.append(observation)
+        # A series expressed in two currencies cannot form a return sequence.
+        if len(valid) >= 2 and len({item.currency for item in valid}) == 1:
+            proxy_series.append(ProxyPriceSeries(series.instrument_id, series.frequency, valid[0].currency,
+                tuple(item.period for item in valid), tuple(item.price for item in valid),
+                tuple(item.evidence_id for item in valid)))
+        else:
+            proxy_gaps.append('insufficient_or_mixed_currency_series:' + series.instrument_id)
+    proxy_exposures = tuple(ProxyExposure(position.instrument_id, converted_positions[position.instrument_id],
+        position.currency, position.asset_class, position.sector) for position in request.positions)
+    proxy_exposures += tuple(ProxyExposure('cash:' + balance.balance_id, converted_cash[balance.balance_id],
+        balance.currency, 'CASH') for balance in request.cash)
+    proxy_refs_list = []
+    for quote in request.fx_evidence:
+        if (quote.to_currency != request.evaluation_currency or not quote.selected
+                or quote.eligibility_status.upper() != 'ELIGIBLE'
+                or quote.freshness_status.upper() not in {'FRESH', 'CURRENT'}):
+            continue
+        try:
+            if (_timestamp(quote.observed_at, 'FX observed_at') <= as_of
+                    and _timestamp(quote.public_available_at, 'FX public_available_at') <= as_of
+                    and _fx_rate(quote.from_currency, quote.to_currency, as_of, request.fx_evidence, fx_override) == quote.rate):
+                proxy_refs_list.append(quote.evidence_id)
+        except ValueError:
+            continue
+    proxy_refs = tuple(proxy_refs_list)
+    risk_proxy = analyze_risk_proxy(proxy_exposures, evaluation_currency=request.evaluation_currency,
+        series=tuple(proxy_series), full_denominator=gross_assets, evidence_ids=proxy_refs)
+    risk_proxy = replace(risk_proxy, unknowns=(*risk_proxy.unknowns, *proxy_gaps),
+        metadata={**risk_proxy.metadata, 'snapshot_ref': state.snapshot_ref,
+                  'state_version': state.state_version, 'analysis_as_of': state.analysis_as_of})
+
     policy = (request.risk_policy if request.risk_policy and request.risk_policy.approved
               and request.risk_policy.approval_ref and request.risk_policy.validation_ref else None)
     limits: list[RiskLimitAssessment] = []
@@ -585,17 +644,27 @@ def _analyze(request: PortfolioAnalysisRequest, fx_override: Mapping[tuple[str, 
         f"위험 한도 {item.metric}: {item.status.value}; value={item.value if item.value is not None else 'UNKNOWN'}; limit={item.limit if item.limit is not None else 'UNKNOWN'}."
         for item in limits
     )
+    lines.append('Risk proxy: known valued subset denominator=' + str(risk_proxy.metadata['denominator_value'])
+                 + '; known item count=' + str(risk_proxy.metadata['known_count']) + '/'
+                 + str(risk_proxy.metadata['total_count']) + '; monetary coverage='
+                 + str(risk_proxy.metadata['value_coverage']) + '; descriptive only, no risk-limit approval.')
+    lines.extend('Risk proxy ' + metric.name + '=' + (str(metric.value) if metric.value is not None else 'UNAVAILABLE')
+                 for metric in risk_proxy.metrics)
+    lines.extend('Risk proxy ' + field + ': ' + str(risk_proxy.metadata[field])
+                 for field in ('native_currency_exposure', 'asset_class_exposure', 'sector_exposure'))
+    lines.extend('Risk proxy gap: ' + gap for gap in risk_proxy.unknowns)
     lines.extend(f"UNKNOWN: {reason}" for reason in unknown)
     section = ReportSectionInput(
         name="portfolio_analysis", title="Portfolio Analysis", status=availability,
         lines=tuple(lines), metadata={"state_version": state.state_version,
                                     "snapshot_ref": state.snapshot_ref,
-                                    "evaluation_currency": request.evaluation_currency.upper()},
+                                    "evaluation_currency": request.evaluation_currency.upper(),
+                                    "risk_proxy": dict(risk_proxy.metadata)},
     )
     return PortfolioAnalysisResult(
         availability, state.state_version, state.snapshot_ref, request.evaluation_currency.upper(),
         asset_subtotal, total_cash, gross_assets, liabilities, net_worth, tuple(sorted(unvalued)),
-        allocation, risk, tuple(limits), tuple(unknown), section,
+        allocation, risk, tuple(limits), tuple(unknown), section, risk_proxy,
     )
 
 

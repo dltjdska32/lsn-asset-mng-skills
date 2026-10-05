@@ -13,3 +13,11 @@ description: Value supported securities using evidence-linked inputs and asset-a
 6. Never apply company cash-flow or earnings valuation to Bitcoin, gold, or silver.
 7. Return valuation status, confidence, sensitivities, and limitations. Do not mutate personal state.
 8. In live equity runs, consume current price and financial metrics produced by `LiveDeepResearchRuntime`; do not fabricate valuation inputs when provider/Web Research evidence is missing.
+
+## v7 relative capital competition
+
+Apply [the capital allocation policy](references/capital-allocation-policy.md).
+Use evidenced Bear/Base/Bull inputs for 5Y CAGR and explicit dilution/dividends.
+Do not equate priority scores with expected return, invent scenario assumptions,
+or infer position size from company quality alone. Compare net rotation benefits
+only when tax, fees, FX and slippage are bound to verified inputs.

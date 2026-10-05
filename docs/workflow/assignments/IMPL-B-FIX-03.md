@@ -1,7 +1,0 @@
-# IMPL-B-FIX-03 — B 시세 종목 쌍 검증
-
-- 담당: Antigravity Gemini B, 기존 conversation `f358e983-746e-4dd7-92f6-26a0fea2cb12` / `codex/gemini-b` / 별도 worktree `C:/Users/lsn/lsn-asset-mng-worktrees/gemini-b`.
-- 기준 코드: `d2db94f5d46b6e2ea04d28be0384d8b0400a923b` (WIP). REQ-v1 R06–08, 설계 v0.1, D18. 소유: providers/market_quotes.py, web_research/quote_sources.py, B 전용 테스트·인계. 공통 A 파일·C 파일 금지. 한도 초기화 뒤 21:40 KST 이후 실행.
-- 재현: root `scripts/workflow/market-fallback-checkpoint-probes.py --repo <B worktree>`는 실제 과거 공개 Coinbase/Kraken 응답 사본을 주입한 `MarketQuoteProvider.fetch_current` 검사 5 PASS / 1 FAIL. `CRYPTO:BTC/EUR` 요청에 하드코딩된 Coinbase `BTC-USD` 엔드포인트 가격을 `AVAILABLE`로 반환한다. BTC 문자열 포함만으로 시장을 판별하거나 요청 종목을 무조건 응답 DTO에 복사하지 말고, canonical pair/quote currency와 실제 source pair를 확인한다. 지원하지 않는 쌍은 명시적 UNAVAILABLE 사유로 거부한다. Kraken result key도 기대한 `XXBTZUSD` 등 허용된 USD 쌍인지 확인하며 임의 첫 list를 신뢰하지 않는다.
-- 유지할 정상 기능: BTC/USD primary 1call, HTTP 실패·파싱 실패·미래 timestamp 뒤 Kraken 2call, 모든 후보 실패 시 시도기록과 UNAVAILABLE. 잘못된 쌍/미확인 원본을 계산 적격 시세로 승격하지 않는다. `execute_quote_fallback_sequence` 공개 helper의 `retrieved_at=analysis_as_of`도 실제 clock과 분리하거나, 지원 경로에서 제거/명확히 제한한다. 후보 기능 CURRENT_PRICE 아닌 SEC fundamentals를 실제 시세 후보로 시도하지 않도록 구분한다. caller 적격성 evaluator가 부적격을 반환하면 다음 후보로 가는 사례를 실제 provider API에서 검사한다.
-- 기존 25개 담당 테스트와 위 독립 probe, 의미 있는 신규 종목쌍·source identity·eligibility 회귀를 실행해 결과/정확한 HEAD/미검증 live 경계를 `docs/workflow/handoffs/IMPL-B-FIX-03.md`에 기록한다. 5 PASS는 오프라인 재생이며 live E2E가 아니다.

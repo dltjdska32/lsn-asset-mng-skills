@@ -16,6 +16,9 @@ class AssetRiskInput:
     prices: tuple[Decimal, ...]
     liquidity_score: Decimal | None = None
     custody_risk: str | None = None
+    price_dates: tuple[str, ...] = ()
+    proxy_instrument_id: str | None = None
+    proxy_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +27,8 @@ class AssetRiskResult:
     volatility: Decimal | None
     max_drawdown: Decimal | None
     contribution: Decimal | None
+    proxy_instrument_id: str | None = None
+    proxy_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,13 +43,24 @@ class PortfolioRiskAnalyzer:
     def analyze(self, assets: tuple[AssetRiskInput, ...]) -> PortfolioRiskResult:
         if not assets:
             return PortfolioRiskResult(None, (), {}, True)
+        if len({item.instrument_id for item in assets}) != len(assets):
+            raise ValueError("duplicate risk instrument")
+        for item in assets:
+            if not item.weight.is_finite() or item.weight < ZERO:
+                raise ValueError("risk weights must be finite and nonnegative")
+            if item.proxy_instrument_id and not item.proxy_reason:
+                raise ValueError("risk proxy requires an explicit reason")
+            if item.price_dates and (len(item.price_dates) != len(item.prices) or
+                                     tuple(sorted(set(item.price_dates))) != item.price_dates):
+                raise ValueError("risk dates must be unique, ordered and match prices")
         return_series = {item.instrument_id: simple_returns(item.prices) if len(item.prices) >= 2 else () for item in assets}
         lengths = {len(series) for series in return_series.values() if series}
         aligned = bool(lengths) and len(lengths) == 1 and all(return_series[item.instrument_id] for item in assets)
+        aligned = aligned and all(item.price_dates for item in assets) and len({item.price_dates for item in assets}) == 1
         vols = {item.instrument_id: sample_stddev(return_series[item.instrument_id]) for item in assets}
         correlations: dict[str, Decimal | None] = {}
         if not aligned:
-            results = tuple(AssetRiskResult(item.instrument_id, vols[item.instrument_id], max_drawdown(item.prices), None) for item in assets)
+            results = tuple(AssetRiskResult(item.instrument_id, vols[item.instrument_id], max_drawdown(item.prices), None, item.proxy_instrument_id, item.proxy_reason) for item in assets)
             return PortfolioRiskResult(None, results, correlations, True)
 
         ids = [item.instrument_id for item in assets]
@@ -56,14 +72,14 @@ class PortfolioRiskAnalyzer:
                 key = f"{left}|{right}"
                 correlations[key] = corr
                 if corr is None or vols[left] is None or vols[right] is None:
-                    return PortfolioRiskResult(None, tuple(AssetRiskResult(item.instrument_id, vols[item.instrument_id], max_drawdown(item.prices), None) for item in assets), correlations, True)
+                    return PortfolioRiskResult(None, tuple(AssetRiskResult(item.instrument_id, vols[item.instrument_id], max_drawdown(item.prices), None, item.proxy_instrument_id, item.proxy_reason) for item in assets), correlations, True)
                 covariance[(left, right)] = covariance[(right, left)] = corr * vols[left] * vols[right]
         variance = ZERO
         for left in ids:
             for right in ids:
                 variance += weights[left] * weights[right] * covariance[(left, right)]
         if variance < ZERO:
-            return PortfolioRiskResult(None, tuple(AssetRiskResult(item.instrument_id, vols[item.instrument_id], max_drawdown(item.prices), None) for item in assets), correlations, True)
+            return PortfolioRiskResult(None, tuple(AssetRiskResult(item.instrument_id, vols[item.instrument_id], max_drawdown(item.prices), None, item.proxy_instrument_id, item.proxy_reason) for item in assets), correlations, True)
         with localcontext() as ctx:
             ctx.prec = 34
             portfolio_vol = variance.sqrt()
@@ -74,5 +90,5 @@ class PortfolioRiskAnalyzer:
                 continue
             marginal = sum((weights[right] * covariance[(left, right)] for right in ids), ZERO) / portfolio_vol
             contributions[left] = weights[left] * marginal
-        results = tuple(AssetRiskResult(item.instrument_id, vols[item.instrument_id], max_drawdown(item.prices), contributions[item.instrument_id]) for item in assets)
-        return PortfolioRiskResult(portfolio_vol, results, correlations, False)
+        results = tuple(AssetRiskResult(item.instrument_id, vols[item.instrument_id], max_drawdown(item.prices), contributions[item.instrument_id], item.proxy_instrument_id, item.proxy_reason) for item in assets)
+        return PortfolioRiskResult(portfolio_vol, results, correlations, any(item.proxy_instrument_id for item in assets))

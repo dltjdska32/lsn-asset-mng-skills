@@ -33,6 +33,7 @@ class WebResearchHit:
     quote_kind: str | None = None
     is_complete: bool | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    retrieved_at: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

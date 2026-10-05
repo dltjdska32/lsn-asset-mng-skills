@@ -30,8 +30,10 @@ def parse_transaction_request(
     text = raw_request.strip()
     lowered = text.casefold()
     in_kind = any(token in lowered for token in ("옮겼", "moved", "transfer shares"))
-    if in_kind and any(
-        token in lowered for token in ("주식", "fanuc", "btc", "gold", "금")
+    if in_kind and (
+        instrument_id is not None or QUANTITY.search(text) is not None or any(
+            token in lowered for token in ("주식", "shares", "security", "crypto", "btc", "gold", "금")
+        )
     ):
         return TransactionIntent(
             TransactionType.TRANSFER,

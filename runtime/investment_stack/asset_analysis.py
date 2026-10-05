@@ -61,8 +61,19 @@ class Phase5AssetAnalysisRuntime:
     def analyze_equity(self, fundamental: EquityFundamentalInput, valuation: EquityValuationInput) -> EquityDeepResult:
         if fundamental.instrument_id != valuation.instrument_id:
             raise ValueError("fundamental and valuation inputs must refer to the same instrument")
-        f_result = self._persist_result(self.equity.analyze(fundamental))
-        v_result = self._persist_result(self.valuation.analyze(valuation))
+        from investment_stack.execution.stage_ledger import analysis_stage
+        with analysis_stage(self.run_db, 'fundamental:' + fundamental.instrument_id,
+                            input_count=len(fundamental.evidence_ids),
+                            evidence_count=len(fundamental.evidence_ids), dependency='normalization:' + fundamental.instrument_id) as receipt:
+            f_result = self._persist_result(self.equity.analyze(fundamental))
+            receipt.update(status='SUCCESS' if f_result.status.value == 'COMPLETE' else 'PARTIAL',
+                           output_count=1, reason='; '.join(f_result.unknowns) or None)
+        with analysis_stage(self.run_db, 'valuation:' + valuation.instrument_id,
+                            input_count=len(valuation.evidence_ids), evidence_count=len(valuation.evidence_ids),
+                            dependency='fundamental:' + fundamental.instrument_id) as receipt:
+            v_result = self._persist_result(self.valuation.analyze(valuation))
+            receipt.update(status='SUCCESS' if v_result.status.value == 'COMPLETE' else 'PARTIAL',
+                           output_count=1, reason=('VALUATION_INPUT_UNAVAILABLE: ' + '; '.join(v_result.unknowns)) if v_result.status.value != 'COMPLETE' else None)
         return EquityDeepResult(f_result, v_result)
 
     def analyze_fund(self, data: FundAnalysisInput) -> AnalysisResult:

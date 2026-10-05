@@ -54,6 +54,8 @@ def equity_analysis_services(
     deep_research: LiveDeepResearchRuntime,
     phase6: Phase6ReportReviewRuntime,
     run_db: RunDatabaseManager,
+    asset_resolver=None,
+    portfolio_context_loader=None,
 ) -> RuntimeServices:
     """Return concrete handlers for SINGLE_ASSET_ANALYSIS and ASSET_COMPARISON.
 
@@ -95,6 +97,12 @@ def equity_analysis_services(
                 "run database request mode does not match the requested analysis mode or verified refresh replay",
             ))
         raw = request.payload.get("research_specs")
+        if raw is None and asset_resolver is not None:
+            try:
+                raw = asset_resolver(request)
+            except ValueError as exc:
+                return StepResult(Availability.UNSUPPORTED,
+                    unsupported_reasons=("asset_resolution_failed: " + str(exc),))
         expected = 1 if request.mode is RequestMode.SINGLE_ASSET_ANALYSIS else 2
         if not isinstance(raw, (tuple, list)) or len(raw) < expected:
             return StepResult(Availability.UNSUPPORTED, unsupported_reasons=(
@@ -129,6 +137,11 @@ def equity_analysis_services(
         outcomes = tuple(deep_research.analyze_equity(spec) for spec in specs)
         if not outcomes:
             return StepResult(Availability.UNSUPPORTED, unsupported_reasons=("no supported assets were analyzed",))
+        from .stage_ledger import verified_equity_outputs
+        integrity = verified_equity_outputs(run_db, outcomes)
+        if integrity:
+            return StepResult(Availability.FAILED, output={'outcomes': outcomes},
+                              unsupported_reasons=integrity)
         refs = tuple(dict.fromkeys(eid for outcome in outcomes for eid in outcome.evidence_ids))
         calculation_refs = tuple(dict.fromkeys(
             str(result.metadata["calculation_id"])
@@ -394,11 +407,25 @@ def equity_analysis_services(
         )
 
     def conditional_review(_request: ModeRequest, context: StepContext) -> StepResult:
+        from investment_stack.execution.capital_context import render_optional_capital_context
+        outcomes=context[PipelineStep.DEEP_RESEARCH_REQUESTED_ASSETS.value].output.get('outcomes',())
+        candidates=tuple(o.instrument_id for o in outcomes)
+        capital=render_optional_capital_context(run_db,_request,portfolio_context_loader,candidates)
+        capital_sections=(capital,) if isinstance(capital,ReportSectionInput) else capital.sections if capital else ()
+        triggers=capital.review_triggers if capital and not isinstance(capital,ReportSectionInput) else ()
+        subjects=tuple(row.instrument_id for row in (*capital.result.ranked,*capital.result.unranked)) if triggers else ()
         evidence_ids = tuple(dict.fromkeys(
             evidence_id for result in context.values() for evidence_id in result.evidence_refs
         ))
-        review_result = phase6.review.evaluate(ReviewContext(critical_evidence_ids=evidence_ids))
-        return StepResult(Availability.COMPLETE, output={"review": review_result})
+        review_result = phase6.review.evaluate(ReviewContext(critical_evidence_ids=evidence_ids,large_net_worth_impact=bool(triggers)))
+        from investment_stack.review.adversarial import review_valuation_outputs
+        review_result = review_valuation_outputs(run_db, review_result,required_subjects=subjects,review_triggers=triggers)
+        from investment_stack.reporting.adversarial import adversarial_sections
+        sections = (*capital_sections,*adversarial_sections(run_db))
+        partial=tuple(s.name+':review_data_gaps' for s in sections if s.status is not ReportAvailability.AVAILABLE)
+        return StepResult(Availability.PARTIAL if partial else Availability.COMPLETE, output={"review": review_result, "sections": sections},
+                          evidence_refs=tuple(dict.fromkeys(e for s in sections for e in s.evidence_ids)),
+                          calculation_refs=tuple(c for s in sections for c in s.calculation_ids),missing_inputs=partial)
 
     def render_report(request: ModeRequest, context: StepContext) -> StepResult:
         research = context[PipelineStep.DEEP_RESEARCH_REQUESTED_ASSETS.value]
@@ -412,10 +439,14 @@ def equity_analysis_services(
         except (TypeError, ValueError):
             section_as_of = None
         sections: list[ReportSectionInput] = []
+        sections.extend(context[PipelineStep.CONDITIONAL_REVIEW.value].output.get("sections", ()))
         unverified_outputs: list[str] = []
         technical_sections: list[tuple[str, ReportSectionInput]] = []
         technical_sources = request.payload.get("technical_analysis")
+        from investment_stack.reporting.news_delta import news_delta_section
         for outcome in outcomes:
+            if outcome.news is not None:
+                sections.append(news_delta_section(run_db, outcome.instrument_id))
             fundamental_section = _validated_analysis_section(
                 outcome.analysis.fundamental,
                 name=f"{outcome.instrument_id}_fundamental",

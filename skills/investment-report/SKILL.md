@@ -14,6 +14,14 @@ description: Produce evidence-based investment reports with pinned as-of state, 
 7. Include risks, thesis breakers, monitoring signals, and model limitations.
 8. Present strategy as analysis, never as an executed order or posted transaction.
 
+## v7 portfolio decision sections
+
+Apply [the capital allocation policy](references/capital-allocation-policy.md).
+Lead portfolio reports with its ten ordered decision sections. Include every
+holding, actual review/calculation lineage, and explicit unavailable rankings or
+5Y CAGR. Do not promote concentration warnings into automatic reductions or
+make an ETF the default answer.
+
 
 ## v1.3.1 user-facing quote/report rules
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 from investment_stack.freshness import FreshnessEngine, FreshnessStatus
 from investment_stack.monitoring.review import news_identity
@@ -52,8 +53,14 @@ class WebResearchAdapter:
         response = self._backend(WebResearchIntent.LATEST_CURRENT_DATA, query, analysis_as_of)
         retrieved = datetime.now(timezone.utc).isoformat()
         observations: list[ProviderObservation] = []
+        undated: list[ProviderObservation] = []
         for hit in response.hits:
             if hit.observed_at is None and hit.published_at is None and hit.updated_at is None:
+                # Retain source evidence without pretending retrieval is data time.
+                undated.append(replace(self._to_observation(hit, retrieved=retrieved,
+                    evidence_type=evidence_type, instrument_id=instrument_id, metric=metric),
+                    metadata={**hit.metadata,'source_kind':hit.source_kind,
+                        'data_time_unknown':True,'calculation_input_approved':False}))
                 continue
             hit_metric = hit.metadata.get("metric") if isinstance(hit.metadata.get("metric"), str) else metric
             observation = self._to_observation(
@@ -63,7 +70,7 @@ class WebResearchAdapter:
             if hit.source_kind == "news_article" and evidence_type in {"financial", "macro"}:
                 observation = replace(
                     observation,
-                    official_confirmation_status=hit.official_confirmation_status or "NEWS_REPORTED",
+                    official_confirmation_status="NEWS_REPORTED",
                     metadata={**observation.metadata, "calculation_input_approved": False},
                 )
             assessment = self._freshness.assess(observation, analysis_as_of=analysis_as_of)
@@ -72,9 +79,9 @@ class WebResearchAdapter:
             observations.append(observation)
         selected = self._freshness.latest_as_of(observations, analysis_as_of=analysis_as_of)
         if selected is None:
-            return ProviderResult(self.name, capability, ProviderStatus.UNAVAILABLE, reason="no timestamped web observation as of cutoff")
+            return ProviderResult(self.name, capability, ProviderStatus.UNAVAILABLE, tuple(undated), reason="no timestamped web observation as of cutoff")
         status = ProviderStatus.PARTIAL if selected.metadata.get("calculation_input_approved") is False else ProviderStatus.AVAILABLE
-        return ProviderResult(self.name, capability, status, tuple(observations))
+        return ProviderResult(self.name, capability, status, tuple((*observations,*undated)))
 
     def fetch_news(self, query: str, *, analysis_as_of: str, instrument_id: str | None = None) -> ProviderResult:
         response = self._backend(WebResearchIntent.LATEST_RELEVANT_NEWS, query, analysis_as_of)
@@ -82,6 +89,23 @@ class WebResearchAdapter:
         seen: set[str] = set()
         observations: list[ProviderObservation] = []
         for hit in response.hits:
+            # Data time and publication time have independent cutoffs.
+            cutoff=datetime.fromisoformat(analysis_as_of.replace('Z','+00:00'))
+            invalid=False
+            for value in (hit.published_at, hit.event_time, hit.updated_at):
+                if value is None: continue
+                try:
+                    at=datetime.fromisoformat(value.replace('Z','+00:00'))
+                    if at.tzinfo is None or at > cutoff: invalid=True
+                except (ValueError,TypeError): invalid=True
+            if invalid: continue
+            # Media repetition is not issuer/regulatory confirmation.
+            confirmation=hit.official_confirmation_status or 'NEWS_REPORTED'
+            if 'CONFIRMED' in confirmation.upper() and hit.source_kind not in {'official_release','regulatory_filing','issuer_ir'}:
+                hit=replace(hit,official_confirmation_status='NEWS_REPORTED',
+                    metadata={**hit.metadata,'confirmation_downgrade':'non-official source cannot confirm issuer claim'})
+            elif hit.official_confirmation_status is None:
+                hit=replace(hit,official_confirmation_status='LOW_CONFIDENCE' if hit.source_tier>=4 else 'NEWS_REPORTED')
             cluster = hit.event_cluster_id or news_identity(hit.source_url, hit.title)
             if cluster in seen:
                 continue
@@ -109,7 +133,7 @@ class WebResearchAdapter:
             currency=hit.currency,
             instrument_id=instrument_id,
             metric=metric,
-            retrieved_at=retrieved,
+            retrieved_at=hit.retrieved_at or retrieved,
             observed_at=hit.observed_at,
             published_at=hit.published_at,
             claimed_market_time=hit.claimed_market_time,
