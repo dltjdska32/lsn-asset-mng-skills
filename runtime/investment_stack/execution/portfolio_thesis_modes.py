@@ -7,6 +7,7 @@ callbacks or the request payload.
 """
 
 from __future__ import annotations
+from contextlib import closing
 
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -96,6 +97,8 @@ def portfolio_thesis_services(
     personal_ledger: PersonalLedgerService | None = None,
     materiality_selector: MaterialitySelector | None = None,
     selected_asset_research: SelectedAssetResearch | None = None,
+    lightweight_research: Callable[[ModeRequest], SelectedAssetResearchResult] | None = None,
+    fund_inputs_loader: Callable[[], Mapping[str, object]] | None = None,
     scenario_gate_verifier: ScenarioGateVerifier | None = None,
     thesis_evidence_collector: ThesisEvidenceCollector | None = None,
     report_refresh_services: ReportRefreshServices | None = None,
@@ -240,6 +243,12 @@ def portfolio_thesis_services(
                 "portfolio_snapshot", "Pinned Portfolio Snapshot", ("WAIT: typed pinned portfolio state is missing.",),
                 status=ReportAvailability.UNAVAILABLE)},
                 missing_inputs=("typed_portfolio_request",))
+        enrichment = lightweight_research(request) if lightweight_research is not None else None
+        if enrichment is not None and portfolio_loader is not None:
+            updated = portfolio_loader(request)
+            if updated is not None:
+                portfolio = updated
+
         section = ReportSectionInput(
             "portfolio_snapshot", "Pinned Portfolio Snapshot",
             (f"state_version={portfolio.pinned_state.state_version}; snapshot={portfolio.pinned_state.snapshot_ref}.",
@@ -249,10 +258,18 @@ def portfolio_thesis_services(
                       "snapshot_ref": portfolio.pinned_state.snapshot_ref,
                       "portfolio_data_as_of": portfolio.pinned_state.portfolio_data_as_of},
         )
-        return StepResult(Availability.COMPLETE, output={"section": section})
+        if enrichment:
+            section = replace(section, lines=(*section.lines, *(line for part in enrichment.sections for line in part.lines)),
+                              evidence_ids=enrichment.evidence_refs, calculation_ids=enrichment.calculation_refs,
+                              status=ReportAvailability.PARTIAL if enrichment.missing_inputs else ReportAvailability.AVAILABLE)
+        return StepResult(Availability.PARTIAL if enrichment and enrichment.missing_inputs else Availability.COMPLETE,
+                          output={"section": section, "portfolio_request": portfolio, "sections": enrichment.sections if enrichment else ()},
+                          evidence_refs=enrichment.evidence_refs if enrichment else (),
+                          calculation_refs=enrichment.calculation_refs if enrichment else (),
+                          missing_inputs=enrichment.missing_inputs if enrichment else ())
 
     def materiality(request: ModeRequest, context: StepContext) -> StepResult:
-        portfolio = context[PipelineStep.PIN_PERSONAL_STATE.value].output.get("portfolio_request")
+        portfolio = context.get(PipelineStep.LIGHTWEIGHT_ALL_ASSETS.value, context[PipelineStep.PIN_PERSONAL_STATE.value]).output.get("portfolio_request")
         if not isinstance(portfolio, PortfolioAnalysisRequest):
             return StepResult(Availability.PARTIAL, output={"selected_instrument_ids": ()},
                               missing_inputs=("typed_portfolio_request",))
@@ -276,8 +293,8 @@ def portfolio_thesis_services(
             return StepResult(Availability.PARTIAL, output={"sections": ()},
                               missing_inputs=("selected_assets_for_deep_research",))
         if selected_asset_research is None:
-            return StepResult(Availability.PARTIAL, output={"sections": ()},
-                              missing_inputs=("selected_asset_research_handler",))
+            return StepResult(Availability.FAILED, output={"sections": ()},
+                              unsupported_reasons=("DEEP_RESEARCH_STAGE_NOT_EXECUTED",))
         result = selected_asset_research(tuple(selected), request)
         if not isinstance(result, SelectedAssetResearchResult):
             return StepResult(Availability.UNSUPPORTED,
@@ -286,6 +303,22 @@ def portfolio_thesis_services(
             return StepResult(Availability.UNSUPPORTED,
                               output={"sections": result.sections},
                               unsupported_reasons=result.unsupported_reasons)
+        if not result.sections and not result.calculation_refs and not result.missing_inputs:
+            return StepResult(Availability.FAILED,
+                              unsupported_reasons=('DEEP_RESEARCH_STAGE_NOT_EXECUTED',))
+        persisted = run_db.fetch_phase6_context()['calculations']
+        produced = {}
+        for row in persisted:
+            if row['calculation_id'] in result.calculation_refs:
+                subject = json.loads(row['result_json'] or '{}').get('subject')
+                produced.setdefault(subject, set()).add(row['calculation_name'])
+        alternative_names = {'FUND', 'ALTERNATIVE_BITCOIN', 'ALTERNATIVE_ETHEREUM', 'ALTERNATIVE_GOLD', 'ALTERNATIVE_SILVER'}
+        unexecuted = tuple(iid + ':DEEP_RESEARCH_STAGE_NOT_EXECUTED' for iid in selected
+                           if not ({'EQUITY_FUNDAMENTAL', 'EQUITY_VALUATION'} <= produced.get(iid, set())
+                                   or bool(alternative_names & produced.get(iid, set()))))
+        if unexecuted:
+            return StepResult(Availability.FAILED, output={'sections': result.sections},
+                              unsupported_reasons=unexecuted)
         refs_missing = _missing_run_refs(run_db, result.evidence_refs, result.calculation_refs)
         missing = (*result.missing_inputs, *refs_missing)
         return StepResult(Availability.PARTIAL if missing else Availability.COMPLETE,
@@ -295,7 +328,7 @@ def portfolio_thesis_services(
                           missing_inputs=tuple(dict.fromkeys(missing)))
 
     def calculate_portfolio(_request: ModeRequest, context: StepContext) -> StepResult:
-        portfolio = context[PipelineStep.PIN_PERSONAL_STATE.value].output.get("portfolio_request")
+        portfolio = context.get(PipelineStep.LIGHTWEIGHT_ALL_ASSETS.value, context[PipelineStep.PIN_PERSONAL_STATE.value]).output.get("portfolio_request")
         if not isinstance(portfolio, PortfolioAnalysisRequest):
             return StepResult(Availability.PARTIAL, output={},
                               missing_inputs=("typed_portfolio_request",))
@@ -327,11 +360,40 @@ def portfolio_thesis_services(
                                      "status": item.status.value} for item in result.risk_limits],
                     "missing_inputs": list(result.missing_inputs)},
         )
-        section = replace(result.section, calculation_ids=(calc_id,))
-        missing = (*result.missing_inputs, *missing_refs)
+        sections=[]
+        calculation_ids=[calc_id]
+        if result.risk_proxy is not None:
+            proxy=result.risk_proxy
+            proxy_id=f"calc:risk-proxy:{uuid4().hex}"
+            proxy_refs=tuple(dict.fromkeys((*evidence_refs,*proxy.metadata.get('evidence_ids',()),
+                *(e for step in context.values() for e in step.evidence_refs if _run_has_evidence(run_db,e)))))
+            run_db.add_calculation(calculation_id=proxy_id,calculation_name='portfolio_risk_proxy',
+                formula='known valued subset concentration and evidence-backed asset price risk proxies; no full covariance',
+                inputs={'evidence_ids':list(proxy_refs),'state_version':result.state_version,'snapshot_ref':result.snapshot_ref},
+                result={'subject':'personal_portfolio','status':proxy.status.value,
+                    'metrics':[{'name':m.name,'value':_s(m.value),'unit':m.unit,'reason':m.reason} for m in proxy.metrics],
+                    'metadata':dict(proxy.metadata),'unknowns':list(proxy.unknowns)})
+            calculation_ids.append(proxy_id)
+            evidence_refs=tuple(dict.fromkeys((*evidence_refs,*proxy_refs)))
+        section = replace(result.section, calculation_ids=tuple(calculation_ids))
+        if fund_inputs_loader is not None:
+            from investment_stack.execution.fund_outputs import render_portfolio_funds
+            funds=render_portfolio_funds(run_db,portfolio,result,fund_inputs_loader())
+            sections.extend(funds.sections)
+            calculation_ids.extend(funds.calculation_refs)
+            evidence_refs=tuple(dict.fromkeys((*evidence_refs,*funds.evidence_refs)))
+        else:
+            funds=None
+        from investment_stack.execution.capital_competition import render_capital_competition
+        competition=render_capital_competition(run_db,portfolio,result,
+            optionalpolicyinputs=_request.payload.get('capital_competition_policy_inputs'))
+        sections.extend(competition.sections)
+        calculation_ids.extend(competition.calculation_refs)
+        evidence_refs=tuple(dict.fromkeys((*evidence_refs,*competition.evidence_refs)))
+        missing = (*result.missing_inputs, *missing_refs, *competition.missing_inputs, *(funds.missing_inputs if funds else ()))
         return StepResult(Availability.PARTIAL if missing else Availability.COMPLETE,
-                          output={"analysis": result, "section": section},
-                          evidence_refs=evidence_refs, calculation_refs=(calc_id,),
+                          output={"analysis": result, "section": section, "sections":tuple(sections), "capital_competition":competition},
+                          evidence_refs=evidence_refs, calculation_refs=tuple(calculation_ids),
                           missing_inputs=tuple(dict.fromkeys(missing)))
 
     def scenario_baseline(request: ModeRequest, context: StepContext) -> StepResult:
@@ -602,8 +664,18 @@ def portfolio_thesis_services(
     def conditional_review(request: ModeRequest, context: StepContext) -> StepResult:
         evidence = tuple(dict.fromkeys(eid for step in context.values() for eid in step.evidence_refs
                                        if _run_has_evidence(run_db, eid)))
-        review = phase6.review.evaluate(ReviewContext(critical_evidence_ids=evidence))
-        return StepResult(Availability.COMPLETE, output={"review": review})
+        competitions=tuple(step.output['capital_competition'] for step in context.values() if 'capital_competition' in step.output)
+        triggers=tuple(dict.fromkeys(t for c in competitions for t in c.review_triggers))
+        subjects=tuple(dict.fromkeys(row.instrument_id for c in competitions for row in (*c.result.ranked,*c.result.unranked)))
+        review = phase6.review.evaluate(ReviewContext(critical_evidence_ids=evidence, large_net_worth_impact=bool(triggers)))
+        from investment_stack.review.adversarial import review_valuation_outputs
+        review = review_valuation_outputs(run_db, review, required_subjects=subjects, review_triggers=triggers)
+        from investment_stack.reporting.adversarial import adversarial_sections
+        sections = adversarial_sections(run_db)
+        partial=tuple(s.name+':review_data_gaps' for s in sections if s.status is not ReportAvailability.AVAILABLE)
+        return StepResult(Availability.PARTIAL if partial else Availability.COMPLETE, output={"review": review, "sections": sections},
+                          evidence_refs=tuple(dict.fromkeys(e for s in sections for e in s.evidence_ids)),
+                          calculation_refs=tuple(c for s in sections for c in s.calculation_ids), missing_inputs=partial)
 
     def render_report(request: ModeRequest, context: StepContext) -> StepResult:
         sections: list[ReportSectionInput] = []
@@ -679,6 +751,9 @@ def portfolio_thesis_services(
         by_name: dict[str, ReportSectionInput] = {}
         for section in sections:
             by_name[section.name] = section
+        # The user-approved ten decision sections lead the portfolio report.
+        by_name=dict(sorted(by_name.items(),key=lambda item:(0,int(item[0].rsplit('_',1)[-1]))
+                    if item[0].startswith('capital_competition_') else (1,0)))
         if not by_name:
             return StepResult(Availability.UNSUPPORTED,
                               unsupported_reasons=("mode has no typed report section to render",))
@@ -690,16 +765,13 @@ def portfolio_thesis_services(
                 if _run_has_evidence(run_db, eid)
             ))
             review = phase6.review.evaluate(ReviewContext(critical_evidence_ids=evidence_ids))
-        phase6_result = phase6.generate(
+        generated_report = phase6.report.build(
             title=str(request.payload.get("title") or _title(request.mode)),
             sections=tuple(by_name.values()),
-            review_context=ReviewContext(critical_evidence_ids=tuple(
-                eid for item in context.values() for eid in item.evidence_refs
-                if _run_has_evidence(run_db, eid)
-            )),
+            review=review,
         )
         report = _localize_portfolio_thesis_report(
-            phase6_result.report, phase6.report._render,
+            generated_report, phase6.report._render,
             {row["evidence_id"]: row for row in run_db.fetch_phase6_context()["evidence"]},
             incomplete=bool(incomplete_steps or missing_ids),
         )

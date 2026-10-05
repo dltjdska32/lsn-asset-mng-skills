@@ -376,6 +376,14 @@ class RunDatabaseManager:
             if cursor.rowcount != 1:
                 raise RuntimeError("run metadata update did not affect exactly one row")
 
+    def finish_run(self, status: str) -> None:
+        """Persist actual terminal lifecycle without replacing the pinned clock."""
+        with self._mutation_connection() as connection:
+            connection.execute(
+                "UPDATE run_metadata SET run_status = ?, completed_at = ? WHERE run_id = ?",
+                (status, datetime.now(timezone.utc).isoformat(), self.run_id),
+            )
+
     def fetch_metadata(self) -> dict[str, Any]:
         with self._operation_lock:
             self._assert_valid()

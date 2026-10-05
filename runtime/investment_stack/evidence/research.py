@@ -11,7 +11,7 @@ from typing import Iterable
 from investment_stack.evidence.manager import RunDatabaseManager
 from investment_stack.freshness import FreshnessAssessment, FreshnessEngine, FreshnessStatus, observation_time
 from investment_stack.providers.models import ProviderObservation, ProviderResult
-from investment_stack.providers.execution import assess_current_price_observation
+from investment_stack.providers.execution import assess_current_price_observation, assess_fund_structure_observation
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,7 +91,10 @@ class EvidenceResearchStore:
                 is_current_price = observation.metric == "current_price" or observation.evidence_type == "market" and observation.metadata.get("quote_kind")
                 assessment = (
                     assess_current_price_observation(observation, analysis_as_of=analysis_as_of, engine=self.freshness)
-                    if is_current_price else self.freshness.assess(observation, analysis_as_of=analysis_as_of)
+                    if is_current_price else
+                    assess_fund_structure_observation(observation, analysis_as_of=analysis_as_of, engine=self.freshness)
+                    if observation.metric == 'fund_structure' else
+                    self.freshness.assess(observation, analysis_as_of=analysis_as_of)
                 )
                 evidence_id = _id("evidence")
                 self.run_db.add_phase4_evidence(

@@ -95,6 +95,8 @@ class SecTagDef:
 _SEC_SUPPORTED_TAGS = {
     "Revenues": SecTagDef("revenue", "money", True),
     "SalesRevenueNet": SecTagDef("revenue", "money", True),
+    "RevenueFromContractWithCustomerExcludingAssessedTax": SecTagDef("revenue", "money", True),
+    "RevenueFromContractWithCustomerIncludingAssessedTax": SecTagDef("revenue", "money", True),
     "OperatingIncomeLoss": SecTagDef("operating_income", "money", True),
     "NetIncomeLoss": SecTagDef("net_income", "money", True),
     "NetCashProvidedByUsedInOperatingActivities": SecTagDef("cash_from_operations", "money", True),
@@ -123,6 +125,21 @@ class SecCompanyFactsAdapter:
         if request.capability not in self.capabilities:
             return ProviderResult(self.name, request.capability, ProviderStatus.UNAVAILABLE, reason="capability unsupported")
         cik_raw = str(request.parameters.get("cik", "")).strip()
+        ticker = str(request.parameters.get("ticker", "")).strip().upper()
+        if not cik_raw and ticker and request.parameters.get("exchange") in {"NASDAQ", "NYSE"}:
+            try:
+                identity = fetch_json("https://www.sec.gov/files/company_tickers_exchange.json",
+                    headers={"User-Agent": self.user_agent}, timeout=self.timeout, transport=self.transport)
+                fields = identity["fields"]
+                entries = [dict(zip(fields, item)) for item in identity["data"]]
+                matches = [r for r in entries if str(r.get("ticker", "")).upper() == ticker
+                           and str(r.get("exchange", "")).upper() == request.parameters["exchange"]]
+                if len(matches) != 1:
+                    raise ValueError("SEC ticker/exchange resolution is missing or ambiguous")
+                cik_raw = str(matches[0]["cik"])
+            except (ProviderTransportError, ValueError, KeyError, TypeError) as exc:
+                return ProviderResult(self.name, request.capability, ProviderStatus.UNAVAILABLE,
+                    reason="SEC identity resolution unavailable: " + str(exc))
         if not cik_raw.isdigit():
             return ProviderResult(self.name, request.capability, ProviderStatus.UNAVAILABLE, reason="numeric cik is required")
         cik = cik_raw.zfill(10)
@@ -141,6 +158,8 @@ class SecCompanyFactsAdapter:
             return ProviderResult(self.name, request.capability, ProviderStatus.ERROR, reason=str(exc))
             
         facts = data.get("facts") if isinstance(data, dict) else None
+        if isinstance(data, dict) and data.get("cik") is not None and str(data['cik']).lstrip('0') != cik.lstrip('0'):
+            return ProviderResult(self.name, request.capability, ProviderStatus.UNAVAILABLE, reason="SEC response CIK does not match requested identity")
         if not isinstance(facts, dict) or not facts:
             return ProviderResult(self.name, request.capability, ProviderStatus.UNAVAILABLE, reason="SEC company facts unavailable")
             
@@ -216,6 +235,9 @@ class SecCompanyFactsAdapter:
                         else:
                             try:
                                 end_dt = datetime.strptime(str(end), "%Y-%m-%d")
+                                if end_dt.date() > analysis_as_of.date():
+                                    approved = False
+                                    reason = "Reporting period ends after analysis cutoff"
                                 if tag_def.is_duration:
                                     if not start:
                                         approved = False
@@ -244,6 +266,10 @@ class SecCompanyFactsAdapter:
                         
                         currency = unit_key.split("/")[0] if tag_def.kind in ("money", "per_share") else None
                         
+                        flow_basis = None
+                        if approved and tag_def.is_duration:
+                            duration = (end_dt - start_dt).days + 1
+                            flow_basis = "ANNUAL" if 330 <= duration <= 400 else "QUARTERLY" if duration <= 110 else "YTD"
                         obs = ProviderObservation(
                             evidence_type="financial",
                             source_name="SEC EDGAR Company Facts",
@@ -273,6 +299,7 @@ class SecCompanyFactsAdapter:
                                 "period_end": end,
                                 "calculation_input_approved": approved,
                                 "canonical_metric": tag_def.canonical,
+                                "flow_basis": flow_basis,
                             },
                         )
                         observations.append(obs)
@@ -303,6 +330,12 @@ class SecCompanyFactsAdapter:
                 status = ProviderStatus.UNAVAILABLE
                 result_reason = "No eligible SEC facts found"
 
+        if request.parameters.get("latest_period_only"):
+            valid_periods = [o.metadata['period_end'] for o in observations if o.metadata.get('calculation_input_approved') and o.metric != 'shares_outstanding']
+            if valid_periods:
+                latest_period = max(valid_periods)
+                observations = [o for o in observations if o.metadata.get('period_end') == latest_period]
+                eligible_count = sum(o.metadata.get('calculation_input_approved') is True for o in observations)
         return ProviderResult(
             self.name, 
             request.capability, 

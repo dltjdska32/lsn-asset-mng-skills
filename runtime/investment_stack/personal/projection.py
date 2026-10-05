@@ -205,7 +205,19 @@ def replace_projection(connection: sqlite3.Connection, state: ProjectionState) -
     """Replace materialized projections inside the caller's guarded transaction."""
 
     now = datetime.now(timezone.utc).isoformat()
-    connection.execute("DELETE FROM positions")
+    # Position rows are referenced by append-only position_history.  Deleting them
+    # breaks the FK as soon as a broker snapshot/history row exists.  Preserve the
+    # stable position_id and upsert the current projection instead.
+    active_position_ids = {f"{item.account_id}|{item.instrument_id}" for item in state.positions}
+    for row in connection.execute("SELECT position_id FROM positions").fetchall():
+        if str(row["position_id"]) not in active_position_ids:
+            connection.execute(
+                "UPDATE positions SET quantity = '0', quantity_decimal = '0', "
+                "total_cost_decimal = NULL, average_unit_cost_decimal = NULL, "
+                "cost_basis_status = ?, state_version = ?, updated_state_version = ?, updated_at = ? "
+                "WHERE position_id = ?",
+                (CostBasisStatus.UNAVAILABLE.value, state.state_version, state.state_version, now, str(row["position_id"])),
+            )
     connection.execute("DELETE FROM cash_balances")
     connection.execute("DELETE FROM liabilities")
     connection.execute("DELETE FROM cashflow")
@@ -215,7 +227,14 @@ def replace_projection(connection: sqlite3.Connection, state: ProjectionState) -
             "(position_id, account_id, instrument_id, quantity, cost_basis_status, "
             "state_version, updated_at, quantity_decimal, total_cost_decimal, "
             "average_unit_cost_decimal, currency_code, updated_state_version) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(position_id) DO UPDATE SET "
+            "account_id=excluded.account_id, instrument_id=excluded.instrument_id, "
+            "quantity=excluded.quantity, cost_basis_status=excluded.cost_basis_status, "
+            "state_version=excluded.state_version, updated_at=excluded.updated_at, "
+            "quantity_decimal=excluded.quantity_decimal, total_cost_decimal=excluded.total_cost_decimal, "
+            "average_unit_cost_decimal=excluded.average_unit_cost_decimal, currency_code=excluded.currency_code, "
+            "updated_state_version=excluded.updated_state_version",
             (
                 f"{item.account_id}|{item.instrument_id}",
                 item.account_id,

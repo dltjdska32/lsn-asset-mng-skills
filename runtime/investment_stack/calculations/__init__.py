@@ -5,6 +5,7 @@ from investment_stack.calculations.equity import EquityFundamentalAnalyzer, Equi
 from investment_stack.calculations.fund import FundAnalysisInput, FundAnalyzer, FundHolding, fund_overlap
 from investment_stack.calculations.instruments import AnalysisRoute, EconomicUnderlying, InstrumentProfile, InstrumentResolution, InstrumentWrapper, resolve_instrument
 from investment_stack.calculations.risk import AssetRiskInput, AssetRiskResult, PortfolioRiskAnalyzer, PortfolioRiskResult
+from investment_stack.calculations.personal import CostBasisResult, CashProjection, actual_cost_basis, project_cash
 from investment_stack.calculations.reconciliation import PortfolioReconciliationInput, PortfolioReconciliationResult, ReconciliationConfig, ReconciliationStatus, load_reconciliation_config, reconcile_portfolio_total
 from investment_stack.calculations.valuation import BusinessType, DcfAssumptions, DcfScenario, EquityValuationAnalyzer, EquityValuationInput, HighGrowthScenario, ValuationModel, select_model
 
@@ -16,6 +17,7 @@ __all__ = [
     "FundAnalysisInput", "FundAnalyzer", "FundHolding", "fund_overlap",
     "AnalysisRoute", "EconomicUnderlying", "InstrumentProfile", "InstrumentResolution", "InstrumentWrapper", "resolve_instrument",
     "AssetRiskInput", "AssetRiskResult", "PortfolioRiskAnalyzer", "PortfolioRiskResult",
+    "CostBasisResult", "CashProjection", "actual_cost_basis", "project_cash",
     "PortfolioReconciliationInput", "PortfolioReconciliationResult", "ReconciliationConfig", "ReconciliationStatus", "load_reconciliation_config", "reconcile_portfolio_total",
     "BusinessType", "DcfAssumptions", "DcfScenario", "EquityValuationAnalyzer", "EquityValuationInput", "HighGrowthScenario", "ValuationModel", "select_model",
 ]

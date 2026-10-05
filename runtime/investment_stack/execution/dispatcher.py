@@ -10,6 +10,7 @@ from investment_stack.evidence import RunDatabaseManager
 from investment_stack.pipelines import FixedPipelinePlanner, PipelineStep
 from investment_stack.routing import RequestMode, RequestRouter, RoutingDecision
 
+from .stage_ledger import record_stage, now
 from .models import Availability, ModeRequest, ModeResult, StepContext, StepResult, StepState, UpdateThenAnalysisResult
 
 
@@ -70,6 +71,20 @@ def _record_state(services: RuntimeServices, request: ModeRequest, state: StepSt
     if run_db is None:
         return
     result = state.result
+    stage_status = {'COMPLETE': 'SUCCESS', 'WAITING_CONFIRMATION': 'BLOCKED',
+                    'UNSUPPORTED': 'BLOCKED'}.get(state.availability.value, state.availability.value)
+    if isinstance(run_db, RunDatabaseManager):
+        rows = run_db.fetch_phase6_context()['task_states']
+        running = next((r for r in reversed(rows)
+                        if r['task_name'] == 'stage:' + state.step and r['task_status'] == 'RUNNING'), None)
+        import json
+        receipt = json.loads(running['metadata_json']) if running and running.get('metadata_json') else {}
+        record_stage(run_db, state.step, stage_status, started_at=receipt.get('started_at'),
+                     input_count=receipt.get('input_count', 0),
+                     output_count=len(result.output) if result else 0,
+                     evidence_count=len(result.evidence_refs) if result else 0,
+                     reason=state.error or ('; '.join((*result.missing_inputs, *result.unsupported_reasons)) if result else None),
+                     dependency=receipt.get('dependency_stage'))
     # Run-local task logs contain statuses and references only; request/output payloads
     # may contain personal information and are never copied into run metadata.
     run_db.record_task_state(
@@ -100,7 +115,17 @@ def execute_mode(request: ModeRequest, services: RuntimeServices) -> ModeResult:
     status = Availability.COMPLETE
     mutation_receipt = None
 
-    for step in FixedPipelinePlanner().plan(request.mode).steps:
+    plan = FixedPipelinePlanner().plan(request.mode).steps
+    run_db = _run_db_for(services, request.run_id)
+    if isinstance(run_db, RunDatabaseManager):
+        for planned in plan:
+            record_stage(run_db, planned.value, 'PLANNED')
+    for step in plan:
+        started = now()
+        if isinstance(run_db, RunDatabaseManager):
+            record_stage(run_db, step.value, 'RUNNING', started_at=started,
+                         input_count=sum(len(r.output) for r in context.values()),
+                         dependency=states[-1].step if states else None)
         handler = services.handlers.get(step)
         if handler is None:
             reason = f"required runtime handler is not configured for {step.value}"
@@ -169,6 +194,14 @@ def execute_mode(request: ModeRequest, services: RuntimeServices) -> ModeResult:
         if result.availability is Availability.PARTIAL:
             status = Availability.PARTIAL
 
+    if isinstance(run_db, RunDatabaseManager):
+        executed = {state.step for state in states}
+        for planned in plan:
+            if planned.value not in executed:
+                record_stage(run_db, planned.value, 'BLOCKED',
+                             reason='UPSTREAM_STAGE_FAILED_OR_UNSUPPORTED',
+                             dependency=states[-1].step if states else None)
+
     if status is Availability.COMPLETE:
         if request.mode is RequestMode.ASSET_UPDATE and mutation_receipt is None:
             status = Availability.UNSUPPORTED
@@ -179,6 +212,8 @@ def execute_mode(request: ModeRequest, services: RuntimeServices) -> ModeResult:
             status = Availability.UNSUPPORTED
             unsupported.append("mode result lacks a partial-aware report reference")
 
+    if isinstance(run_db, RunDatabaseManager):
+        run_db.finish_run(status.value)
     return ModeResult(
         request.run_id, request.mode, status, tuple(states),
         tuple(dict.fromkeys(refs["evidence"])), tuple(dict.fromkeys(refs["calculation"])),

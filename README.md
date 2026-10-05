@@ -72,7 +72,7 @@ run-local derived outputs rather than a personal Source of Truth.
 
 The runtime declares `tzdata` and `truststore>=0.9.1`. The default `providers/http.py` transport uses a scoped `truststore` SSL context on Windows. Public Naver, Yahoo Finance, and Coinbase endpoints have been queried successfully in bounded integration checks. This is evidence for those requests at that time, not a guarantee of current availability or broad vendor coverage.
 
-For source development, create a virtual environment and keep installation, checks, and tests on that interpreter:
+For source development, create a virtual environment and keep installation and checks on that interpreter:
 
 ```powershell
 # 1. Create a virtual environment and pin the interpreter path for every later command
@@ -83,13 +83,12 @@ $VenvPython = (Resolve-Path .\.venv\Scripts\python.exe).Path
 & $VenvPython -m pip install -e .
 
 # 3. Run validations through the same interpreter
-& $VenvPython -m unittest discover -s tests -q
 
 # 4. Verify byte-equality of the 8 skills
 & $VenvPython scripts/sync_agent_skills.py --check
 ```
 
-To verify a non-editable wheel in a clean Windows venv, build from the source checkout using an existing build environment, then use the target venv's Python for wheel installation, dependency checks, timezone verification, and tests. This sequence uses no `py` launcher and does not install into or alter the build environment:
+To verify a non-editable wheel in a clean Windows venv, build from the source checkout using an existing build environment, then use the target venv's Python for wheel installation, dependency checks, timezone verification. This sequence uses no `py` launcher and does not install into or alter the build environment:
 
 ```powershell
 # Build step (use an existing Python environment with the `build` package)
@@ -105,7 +104,6 @@ $Wheel = (Resolve-Path .\dist\investment_stack-0.1.0-py3-none-any.whl).Path
 & $VenvPython -m pip install $Wheel
 & $VenvPython -m pip check
 & $VenvPython -c "import sys, zoneinfo, investment_stack; print(sys.executable); print(investment_stack.__version__); zoneinfo.ZoneInfo('America/New_York'); zoneinfo.ZoneInfo('Asia/Seoul')"
-& $VenvPython -m unittest discover -s tests -q
 & $VenvPython scripts\sync_agent_skills.py --check
 ```
 

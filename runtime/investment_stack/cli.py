@@ -80,6 +80,11 @@ def build_parser() -> argparse.ArgumentParser:
     execute.add_argument("--refresh-replay", action="store_true")
     execute.add_argument("--run-workspace", type=Path)
     execute.add_argument("--personal-db", type=Path)
+    execute.add_argument("--live-providers", action="store_true")
+    execute.add_argument("--web-research-bundle", type=Path)
+    execute.add_argument("--market-captures", type=Path)
+    execute.add_argument("--instrument-registry", type=Path)
+    execute.add_argument("--offline-captures", action="store_true")
     execute.add_argument("--json", action="store_true")
 
     return parser
@@ -124,7 +129,10 @@ def main(argv: Sequence[str] | None = None, *, runtime_services: RuntimeServices
             if services is None and (args.run_workspace or args.personal_db):
                 if args.run_workspace is None or args.personal_db is None:
                     parser.error("configured execute host requires both --run-workspace and --personal-db")
-                services = open_configured_host(args.run_workspace, args.run_id, args.personal_db)
+                services = open_configured_host(args.run_workspace, args.run_id, args.personal_db,
+                    live_providers=args.live_providers, web_research_bundle=args.web_research_bundle,
+                    market_captures=args.market_captures, instrument_registry=args.instrument_registry,
+                    offline_captures=args.offline_captures)
             result = execute_mode(request, services or RuntimeServices())
             payload_out = result.as_dict()
             if args.run_workspace is not None and args.personal_db is not None:

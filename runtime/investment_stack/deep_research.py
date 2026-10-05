@@ -383,10 +383,18 @@ class LiveDeepResearchRuntime:
         current_price, price_warning = self._current_price(
             market, target_currency=spec.currency, instrument_id=spec.instrument_id
         )
-        metrics, normalization_warnings_tup = self._normalize_financials(
-            fundamentals,
-            target_currency=spec.currency,
-        )
+        from investment_stack.execution.stage_ledger import analysis_stage
+        with analysis_stage(self.analysis.run_db, 'normalization:' + spec.instrument_id,
+                            input_count=len(fundamentals.selected.selected_observations),
+                            evidence_count=len(fundamentals.selected.selected_observations),
+                            dependency='provider:' + spec.instrument_id) as receipt:
+            financial_sources = {}
+            metrics, normalization_warnings_tup = self._normalize_financials(
+                fundamentals, target_currency=spec.currency, sources_out=financial_sources,
+            )
+            receipt.update(output_count=len(metrics),
+                           status='SUCCESS' if metrics and not normalization_warnings_tup else 'PARTIAL',
+                           reason='; '.join(normalization_warnings_tup) or ('FINANCIAL_INPUT_UNAVAILABLE' if not metrics else None))
         normalization_warnings = list(normalization_warnings_tup)
         if price_warning:
             normalization_warnings.append(price_warning)
@@ -470,16 +478,27 @@ class LiveDeepResearchRuntime:
             reported_period=reported_period,
             evidence_ids=fundamental_evidence,
         )
+        valuation_metrics = dict(metrics)
+        for raw_metric, observation in financial_sources.items():
+            if raw_metric not in {'revenue', 'eps', 'ebitda'}:
+                continue
+            basis = str(observation.metadata.get('flow_basis') or observation.metadata.get('reporting_period') or '').upper()
+            if not basis:
+                valuation_metrics.pop(raw_metric, None)
+                normalization_warnings.append('VALUATION_FLOW_BASIS_UNAVAILABLE:' + raw_metric)
+            elif basis not in {'ANNUAL', 'TTM', 'FY', 'FULL_YEAR'}:
+                valuation_metrics.pop(raw_metric, None)
+                normalization_warnings.append('NON_ANNUAL_VALUATION_FLOW_EXCLUDED:' + raw_metric + ':' + basis)
         valuation_input = EquityValuationInput(
             instrument_id=spec.instrument_id,
             business_type=spec.business_type,
             current_price=current_price,
             currency=spec.currency,
-            eps=metrics.get("eps"),
+            eps=valuation_metrics.get("eps"),
             book_value_per_share=book_value_per_share,
             enterprise_value=enterprise_value,
-            ebitda=metrics.get("ebitda"),
-            revenue=metrics.get("revenue"),
+            ebitda=valuation_metrics.get("ebitda"),
+            revenue=valuation_metrics.get("revenue"),
             market_cap=market_cap,
             dividend_per_share=metrics.get("dividend_per_share"),
             dcf=next((scenario.assumptions for scenario in valid_dcf_scenarios if scenario.name == "base"), None),
@@ -502,6 +521,24 @@ class LiveDeepResearchRuntime:
                 valuation_result.metrics, (*valuation_result.findings, detail), valuation_result.risks,
                 valuation_result.unknowns, valuation_result.metadata,
             ))
+        if news is not None:
+            import uuid
+            news_rows = [r for r in self.analysis.run_db.fetch_evidence_rows()
+                         if r.get('instrument_id') == spec.instrument_id and r.get('evidence_type') == 'news'
+                         and r.get('selection_state') == 'SELECTED']
+            events = []
+            for row in news_rows:
+                md = json.loads(row.get('metadata_json') or '{}')
+                events.append({'headline': row.get('headline') or md.get('title') or 'dated news',
+                               'published_at': row.get('published_at'),
+                               'confirmation': row.get('official_confirmation_status'),
+                               'thesis_impact': 'WAIT ? numeric impact and thesis change require verified causal evidence',
+                               'event_cluster_id': md.get('event_cluster_id')})
+            self.analysis.run_db.add_calculation(calculation_id='calc:news-impact:' + uuid.uuid4().hex,
+                calculation_name='news_thesis_impact', formula='dated_news_confirmation_gate_v1',
+                inputs={'evidence_ids': [r['evidence_id'] for r in news_rows],
+                        'source_calculation_ids': [analyzed.fundamental.metadata['calculation_id'], analyzed.valuation.metadata['calculation_id']]},
+                result={'subject': spec.instrument_id, 'events': events, 'base_case_changed': False})
         status = "COMPLETED"
         if current_price is None or not metrics or normalization_warnings:
             status = "PARTIAL"
@@ -524,7 +561,7 @@ class LiveDeepResearchRuntime:
             news,
             analyzed,
             dict(metrics),
-            valuation_evidence,
+            evidence_ids,
         )
 
     def _current_price(
@@ -567,6 +604,7 @@ class LiveDeepResearchRuntime:
         outcome: ResearchOutcome,
         *,
         target_currency: str,
+        sources_out: dict | None = None,
     ) -> tuple[dict[str, Decimal], tuple[str, ...]]:
         period_groups: dict[tuple[object, ...], dict[str, tuple[object, int, Decimal]]] = {}
         flow_starts: dict[tuple[object, ...], dict[str, str]] = {}
@@ -605,12 +643,12 @@ class LiveDeepResearchRuntime:
                     if warning:
                         warnings.append(warning)
                     continue
-                candidate = (timestamp, -observation.source_tier, normalized)
-                if canonical in _FLOW_METRICS:
-                    starts_for_period[canonical] = str(metadata.get("start") or "")
+                candidate = (timestamp, -observation.source_tier, normalized, observation)
                 previous = metrics_for_period.get(canonical)
                 if previous is None or (candidate[0], candidate[1]) > (previous[0], previous[1]):
                     metrics_for_period[canonical] = candidate
+                    if canonical in _FLOW_METRICS:
+                        starts_for_period[canonical] = str(metadata.get("start") or "")
         # Choose one latest compatible period/basis group. Never assemble a model
         # from a newer revenue fact and older equity/debt facts implicitly.
         if period_groups:
@@ -645,6 +683,9 @@ class LiveDeepResearchRuntime:
                         warnings.append("financial period length mismatch excluded: " + ", ".join(mismatched))
         else:
             candidates = {}
+        if sources_out is not None:
+            sources_out.clear()
+            sources_out.update({name: candidate[3] for name, candidate in candidates.items()})
         return (
             {name: candidate[2] for name, candidate in candidates.items()},
             tuple(sorted(set(warnings))),

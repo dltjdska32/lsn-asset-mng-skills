@@ -137,14 +137,21 @@ class PersonalLedgerService:
         canonical_name: str,
         asset_class: str = "EQUITY",
         currency: str | None = None,
+        identifiers: dict | None = None,
     ) -> None:
+        if identifiers is not None:
+            from investment_stack.providers.instruments import InstrumentResolver
+            row = {"instrument_id": instrument_id, "canonical_name": canonical_name,
+                   "asset_class": asset_class, "currency": currency,
+                   "identifiers_json": json.dumps(identifiers)}
+            InstrumentResolver((row,)).resolve(instrument_id)
         try:
             with self.manager.guarded_write_transaction() as connection:
                 connection.execute(
                     "INSERT INTO instruments "
-                    "(instrument_id, canonical_name, asset_class, currency, created_at) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    (instrument_id, canonical_name, asset_class, currency, _now()),
+                    "(instrument_id, canonical_name, asset_class, currency, identifiers_json, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (instrument_id, canonical_name, asset_class, currency, json.dumps(identifiers) if identifiers is not None else None, _now()),
                 )
         except (sqlite3.Error, StorageNotWritableError) as exc:
             raise PostingError(f"instrument registration failed: {exc}") from exc
@@ -867,6 +874,77 @@ class PersonalLedgerService:
             raise
         except (sqlite3.Error, StorageNotWritableError, RuntimeError, ValueError) as exc:
             raise PostingError(f"atomic correction failed: {exc}") from exc
+
+    def rebaseline_position(
+        self,
+        *,
+        account_id: str,
+        instrument_id: str,
+        quantity: DecimalInput,
+        average_unit_cost: DecimalInput | None,
+        currency: str | None,
+        unit: str = "SHARE",
+        source: str = "broker-snapshot-rebaseline",
+        note: str | None = None,
+        expected_state_version: int | None = None,
+    ) -> PostingResult:
+        """Append a broker-snapshot position rebaseline without inventing trade fills.
+
+        The ledger records only the delta required to make the deterministic
+        projection equal the authoritative broker quantity/cost basis.  This is
+        intentionally distinct from BUY/SELL because exact executions may be
+        unavailable.
+        """
+        target_quantity = exact_decimal(quantity, field="quantity")
+        target_average = exact_decimal(average_unit_cost, field="average_unit_cost")
+        if target_quantity is None or target_quantity < ZERO:
+            raise IntentValidationError("rebaseline quantity must be non-negative")
+        if target_average is not None and target_average < ZERO:
+            raise IntentValidationError("rebaseline average_unit_cost must be non-negative")
+        try:
+            with self.manager.guarded_write_transaction() as connection:
+                current = self._current_state_version(connection)
+                if expected_state_version is not None and current != expected_state_version:
+                    raise PostingError("state_version conflict")
+                before = compute_projection(connection, target_state_version=current)
+                position = self._find_position(before, account_id, instrument_id)
+                old_quantity = ZERO if position is None else position.quantity
+                old_cost = ZERO if position is None or position.total_cost is None else position.total_cost
+                target_cost = None if target_average is None else target_quantity * target_average
+                quantity_delta = target_quantity - old_quantity
+                cost_delta = None if target_cost is None else target_cost - old_cost
+                status = CostBasisStatus.UNAVAILABLE if target_cost is None else CostBasisStatus.USER_PROVIDED
+                next_version = current + 1
+                intent = TransactionIntent(
+                    TransactionType.ASSET_ADJUSTMENT,
+                    account_id=account_id, instrument_id=instrument_id,
+                    quantity=quantity_delta, currency=currency, unit=unit,
+                    occurred_at=datetime.now(timezone.utc), timezone="UTC",
+                    notes=note or source, confirmation_state=ConfirmationState.CONFIRMED,
+                    idempotency_key=f"{source}:{account_id}:{instrument_id}:{next_version}",
+                )
+                canonical, context, fingerprint = self._canonical_posting_state(connection, intent)
+                normalized = self._require_ready(canonical, context)
+                self._insert_state_version(connection, next_version, "broker-position-rebaseline", {
+                    "account_id": account_id, "instrument_id": instrument_id, "source": source,
+                    "target_quantity": encode_decimal(target_quantity),
+                    "target_average_unit_cost": encode_decimal(target_average),
+                })
+                transaction_id = uuid4().hex
+                self._insert_transaction(connection, normalized, transaction_id=transaction_id,
+                                         state_version=next_version, fingerprint=fingerprint)
+                self._insert_entries(connection, (LedgerEntry(
+                    "ASSET", account_id, instrument_id, quantity_delta=quantity_delta,
+                    currency=currency, unit=unit, cost_basis_delta=cost_delta,
+                    cost_basis_status=status, metadata={"rebaseline": True, "source": source},
+                ),), transaction_id=transaction_id, state_version=next_version)
+                projection = compute_projection(connection, target_state_version=next_version)
+                replace_projection(connection, projection)
+                return PostingResult((transaction_id,), next_version, projection)
+        except LedgerError:
+            raise
+        except (sqlite3.Error, StorageNotWritableError, RuntimeError, ValueError) as exc:
+            raise PostingError(f"position rebaseline failed: {exc}") from exc
 
     def rebuild_projection(
         self, target_state_version: int | None = None, *, hook: PostingHook | None = None

@@ -14,3 +14,10 @@ description: Analyze confirmed personal portfolio state, cash, liabilities, expo
 7. Present scenarios as non-posting outputs; never imply that an order or ledger change occurred.
 8. State missing data and net-worth limitations plainly.
 9. Build selected-equity deep-research callbacks with `LiveDeepResearchRuntime`; a materiality PASS followed by prose-only web analysis does not satisfy `deep_research_selected_assets`.
+
+## v7 capital allocation and completed calculations
+
+Apply [the capital allocation policy](references/capital-allocation-policy.md).
+Concentration is risk information, never an automatic sell rule. Compare all held
+and requested candidate assets, preserve unranked entries, and separate actual
+transaction FX/P&L, account buying power, fund look-through and risk proxy outputs.

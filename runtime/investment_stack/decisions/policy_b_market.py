@@ -102,6 +102,15 @@ def _persisted_dcf_values(
     for calc in calculation_rows:
         inputs, result = _json(calc["inputs_json"]), _json(calc["result_json"])
         if inputs and result and inputs.get("subject") == instrument_id and result.get("subject") == instrument_id:
+            # An explicit unavailable attempt contains no valuation and cannot
+            # create ambiguity with a source-bound calculation at the same pin.
+            if (result.get("status") == "UNAVAILABLE"
+                    and isinstance(result.get("metrics"), list)
+                    and all(isinstance(m, dict) and m.get("value") is None
+                            and m.get("status") == "UNAVAILABLE" for m in result["metrics"])
+                    and isinstance(result.get("metadata"), dict)
+                    and not result["metadata"].get("dcf_assumption_value_bindings")):
+                continue
             matching.append((calc, inputs, result))
     if len(matching) != 1:
         return None, None, None, "persisted valuation calculation is missing or ambiguous for this run/instrument"

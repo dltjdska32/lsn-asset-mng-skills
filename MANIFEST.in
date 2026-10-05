@@ -2,8 +2,11 @@ include README.md
 include ARCHITECTURE.md
 include docs/workflow/deployment-allowlist.md
 include scripts/sync_agent_skills.py
-include tests/test_packaging.py
-include tests/test_r15_skill_sync.py
+include scripts/build_verified_distribution.py
+include scripts/capture_market_data.py
+include scripts/run_personal_portfolio.py
+include scripts/run_asset_analysis.py
+include scripts/run_equity_screening.py
 include config/freshness.yaml
 include config/materiality.yaml
 include config/providers.yaml
@@ -42,6 +45,16 @@ include skills/review/SKILL.md
 include skills/review/agents/openai.yaml
 include .agents/skills/review/SKILL.md
 include .agents/skills/review/agents/openai.yaml
+include skills/investment-orchestrator/references/capital-allocation-policy.md
+include skills/personal-asset-analysis/references/capital-allocation-policy.md
+include skills/valuation/references/capital-allocation-policy.md
+include skills/investment-report/references/capital-allocation-policy.md
+include skills/review/references/capital-allocation-policy.md
+include .agents/skills/investment-orchestrator/references/capital-allocation-policy.md
+include .agents/skills/personal-asset-analysis/references/capital-allocation-policy.md
+include .agents/skills/valuation/references/capital-allocation-policy.md
+include .agents/skills/investment-report/references/capital-allocation-policy.md
+include .agents/skills/review/references/capital-allocation-policy.md
 global-exclude personal.db
 global-exclude run.db
 global-exclude *.db*
@@ -60,3 +73,5 @@ global-exclude *.pfx
 global-exclude *.log
 global-exclude __pycache__
 global-exclude *.py[cod]
+prune tests
+prune scripts/workflow

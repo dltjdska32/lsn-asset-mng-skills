@@ -18,11 +18,12 @@ EXPECTED_CONFIGS = [
     "reconciliation.yaml",
     "web_research.yaml",
 ]
+POLICY_SKILLS = {'investment-orchestrator','personal-asset-analysis','valuation','investment-report','review'}
 
 def get_data_files():
     data_files = []
 
-    # We explicitly allowlist only the 8 expected skills and exactly 2 files for each
+    # Eight skills, UI metadata, and five explicitly scoped policy references.
     for base in ["skills", ".agents/skills"]:
         for skill_name in EXPECTED_SKILLS:
             # 1. SKILL.md
@@ -38,6 +39,12 @@ def get_data_files():
             if not os.path.isfile(openai_yaml):
                 raise FileNotFoundError(f"Missing required UI metadata: {openai_yaml}")
             data_files.append((agents_dir, [openai_yaml]))
+            if skill_name in POLICY_SKILLS:
+                references_dir=os.path.join(skill_dir,'references')
+                policy=os.path.join(references_dir,'capital-allocation-policy.md')
+                if not os.path.isfile(policy):
+                    raise FileNotFoundError(f'Missing policy reference: {policy}')
+                data_files.append((references_dir,[policy]))
 
     # Runtime configuration examples are allowlisted individually. These are
     # data inputs, not automatically selected policy defaults by the CLI.

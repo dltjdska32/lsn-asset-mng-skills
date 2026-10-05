@@ -18,6 +18,9 @@ EXPECTED_SKILLS = frozenset(
         "review",
     }
 )
+POLICY_SKILLS = frozenset({'investment-orchestrator','personal-asset-analysis',
+                          'valuation','investment-report','review'})
+POLICY_REFERENCE = 'references/capital-allocation-policy.md'
 
 
 def sync(project_root: Path, check_only: bool = False) -> None:
@@ -48,6 +51,7 @@ def sync(project_root: Path, check_only: bool = False) -> None:
 
     files_to_sync = ("SKILL.md", "agents/openai.yaml")
     allowed_relative_files = {Path(name) / rel for name in EXPECTED_SKILLS for rel in files_to_sync}
+    allowed_relative_files.update(Path(name)/POLICY_REFERENCE for name in POLICY_SKILLS)
     for root, label in ((source_root, "authoritative"), (discovery_root, "discovery")):
         if not root.exists():
             continue
@@ -62,7 +66,10 @@ def sync(project_root: Path, check_only: bool = False) -> None:
     mismatches = []
 
     for name in sorted(EXPECTED_SKILLS):
-        for file_rel_path in files_to_sync:
+        extra=(POLICY_REFERENCE,) if name in POLICY_SKILLS and (source_root/name/POLICY_REFERENCE).is_file() else ()
+        if not extra and (discovery_root/name/POLICY_REFERENCE).is_file():
+            raise ValueError(f'Stale discovery policy reference: {name}')
+        for file_rel_path in (*files_to_sync,*extra):
             source = source_root / name / file_rel_path
             if not source.is_file():
                 raise FileNotFoundError(f"Missing authoritative skill source: {source}")

@@ -1,7 +1,0 @@
-# GEMINI31-A-SEC-01 — SEC Company Facts fact-row 변환
-
-담당: Gemini 3.1 Pro High A. 기준: A HEAD `65388c1a8b2813982c52148d52cb2b069924a05e`; 요구사항 R02–R04, 설계 DESIGN-2026-09-23-v0.1 §3/§8. 대상 `runtime/investment_stack/providers/adapters.py`, 신규 `tests/unit/test_r04_sec_companyfacts.py`, A 전용 `docs/workflow/handoffs/GEMINI31-A-SEC-01.md`만. 다른 소유 파일 수정 금지. shell/RunCommand/git/test/pip/web 금지; 파일 읽기/쓰기만. 총괄이 테스트한다.
-
-현 구현은 `facts` dict 전체를 `company_facts` 단일 observation.value에 넣어 실제 재무 계산용 fact가 없다. `facts → taxonomy → tag → units → fact[]`를 순회해 **지원이 명시된 us-gaap 태그**만 canonical metric으로 매핑하고, 각 fact를 별도 `ProviderObservation`으로 반환하라. val, unit, start/end, fy/fp, form, accn, filed, frame, namespace/tag 원본 metadata를 보존하라. money/shares/per-share 차원을 혼동하지 말고 unsupported namespace/tag/unit를 유사어 추정하지 말라. 문자열/Decimal 숫자는 Decimal 정밀도를 보존하고 bool/NaN/Infinity를 계산 후보에서 제외한다. 공시 공개일은 fact별 `filed`를 UTC 날짜 종료 시점으로 처리하되 analysis_as_of를 넘는 fact를 선택 후보로 노출하지 말라. 단순 published_at request 값으로 덮지 말라. 시작/종료·양식 등 필수값 누락 시 이유를 metadata 또는 result에 구분하라. 수집은 됐으나 적격 fact가 0개면 AVAILABLE 성공이 아니라 PARTIAL/UNAVAILABLE 상태와 reason으로 알려라. 중복/정정 accession은 임의 병합하지 말고 각 vintage를 유지하라.
-
-실제 nested SEC 형태 synthetic fixture로 복수 fact, 단위, 동일 기간 정정, future filed, unsupported tag, 빈 facts, malformed fact를 테스트하라. 순서 permutation에 영향을 받지 않는 결정적 관측 순서가 필요하다. 기존 `tests/unit/test_phase4_providers.py`의 빈 Revenue tag가 AVAILABLE이라고 기대하는 테스트는 요구사항과 충돌하므로 수정하지 말고 인계에 정확한 기대 변경을 남겨라. 이 과제는 parser 수직 슬라이스이며 deep_research 실제 소비 연결까지 완료했다고 주장하지 말라. API·미실행 검사·남은 결합 의존성·기준 SHA를 인계하라.
