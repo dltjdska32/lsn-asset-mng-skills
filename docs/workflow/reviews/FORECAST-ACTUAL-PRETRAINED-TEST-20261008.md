@@ -1,5 +1,7 @@
 # 실제 사전학습 모델 테스트
 
+**후속 해결:** 아래는 수정 전 실패를 보존한 보고서다. FORECAST-BROWSER-07/08에서 시간대·실제 target_name 출력·nullable ID 누락·Kronos 경로 복원을 보완했다. 수락 소스 `8c993d4c0c5c7af090e52c8f462634f6f90e65c0`의 새 별도 최종 검증은 989 PASS / 2 SKIP / 206 subtests PASS, fresh wheel/sdist 및 실제 가중치 12/60개월 추론 PASS다. 루트 소스 통합 `bc0fd92df010ea1a01fa5960f01d5786f15278b0`. 최신 근거는 `FORECAST-BROWSER-08-FINAL-VERIFY-20261008.md`와 `FORECAST-BROWSER-08-INDEPENDENT-REVIEW-20261008.md`를 참조한다. 금융 예측 정확도는 여전히 미검증이다.
+
 판정: **부분 성공. 실제 모델 연결 코드의 보완이 필요하다.** 내려받은 safetensors로 로딩과 추론을 실행했고 모델이나 가중치를 모의 구현으로 대체하지 않았다. 입력은 합성 월봉이며 실제 금융 성능 검증은 아니다. 런타임 코드는 수정하지 않았다.
 
 ## 환경과 실행

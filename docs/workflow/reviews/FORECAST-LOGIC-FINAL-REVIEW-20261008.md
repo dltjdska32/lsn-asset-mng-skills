@@ -1,6 +1,6 @@
 # 예측 엔진 로직 보완 검토
 
-**2026-10-08 실제가중치 후속테스트:** 이후공개weights다운로드/해시검증과실제CPUload/infer를실행했다. Kronos12/60추론정상,Chronos는실API입력timestamp/반환target_name처리2P1잔존,실Kronosimport의sys.path잔존P2확인. 아래933PASS는원래승인된합성검증범위의역사적결과이며실제모델연결완성을뜻하지않는다. 최신결과는 `FORECAST-ACTUAL-PRETRAINED-TEST-20261008.md` 참조.
+**2026-10-08 실제 가중치 후속 보완 완료:** 공개 weights로 발견한 Chronos timestamp/target_name 2P1, Kronos sys.path P2 및 새 독립 검토의 nullable identity P1을 브라우저 GPT 07/08에서 수정했다. 새 별도 최종 검증은 989 PASS / 2 SKIP / 206 subtests PASS, fresh wheel/sdist 및 실제 Chronos/Kronos 12/60개월 추론 PASS다. 수락 `8c993d4c`, 루트 통합 `bc0fd92`. 아래 933 PASS는 06의 역사적 결과다. 최신 근거는 `FORECAST-BROWSER-08-FINAL-VERIFY-20261008.md`; 금융 성능/OOS는 미검증이다.
 
 ## 결론과 범위
 
