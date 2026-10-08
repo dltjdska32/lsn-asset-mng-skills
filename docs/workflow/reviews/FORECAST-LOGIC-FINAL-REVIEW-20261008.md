@@ -1,5 +1,7 @@
 # 예측 엔진 로직 보완 검토
 
+**2026-10-08 실제가중치 후속테스트:** 이후공개weights다운로드/해시검증과실제CPUload/infer를실행했다. Kronos12/60추론정상,Chronos는실API입력timestamp/반환target_name처리2P1잔존,실Kronosimport의sys.path잔존P2확인. 아래933PASS는원래승인된합성검증범위의역사적결과이며실제모델연결완성을뜻하지않는다. 최신결과는 `FORECAST-ACTUAL-PRETRAINED-TEST-20261008.md` 참조.
+
 ## 결론과 범위
 
 브라우저 ChatGPT가 구현하고 Codex가 설계·반례·독립 검토를 담당했다. 수신06 수정본의 네 P1과 정상 반복 import P2는 별도 독립 검토에서 해결을 확인했다. 고정 소스 `bb3091e75ac2e6106b483afe894264b8a23ef630`는 별도 새 최종 검증을 통과했다. 기존 저장소의 source 통합 commit은 `7b8cde08b37c307ffff5af9dd53c8977605f67d1`이다. 통합52파일의 Git blob을 수락소스와 대조했고 사용자 기존WIP7개 rawSHA는 보존했다. 원격push·배포·주문은 수행하지 않았다.
