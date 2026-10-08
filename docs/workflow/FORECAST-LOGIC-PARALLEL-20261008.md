@@ -1,0 +1,23 @@
+# FORECAST-LOGIC-01 parallel correction assignments
+
+Codex design/coordinator/reviewer. User-authorized Antigravity Gemini3.1ProHigh/high implementation with session-only permission bypass and local owned commits. No push/deployment/personalDB/orders. Actual acceptance requires independent tests, not CLI success text.
+
+Shared design: FORECAST-LOGIC-DESIGN-20261008, F01-F07. Shared frozen base for correction branches: a3111f98ff8eaa2832e1d74d916f1a7da51aefe7. Earlier431c941 and a3111f9 rejected; 30 passing/9 failing independent combined checks at a3111f9. Root old WIP unchanged.
+
+| Task | Branch / worktree suffix under workspace/cache | Ownership | Dependency / done condition |
+|---|---|---|---|
+| FORECAST-LOGIC-CORE-02 | codex/forecast-v7-logic-fix / forecast-v7-logic-fix | contracts, ensemble, engine, MC, scenario; core tests/handoff | F01/F02/F03/F06, strict request/output binding and conditional non-ranking assessment. Existing incidental adapter call-site changes are references; final adapter/data/storage files come from dedicated owners below. All independent core probes must pass. |
+| FORECAST-LOGIC-DATA-01 | codex/forecast-v7-data-fix / forecast-v7-data-fix | dataset/backtest/tabular adapter, training/walkforward/reliability/runner, extras, data tests/handoff | F04/F05 actual script PIT/purged labels, source/adjustment/time contracts, real native synthetic fit/infer, no fictitious OOS. Consume final core API at integration. |
+| FORECAST-LOGIC-INTEGRITY-01 | codex/forecast-v7-integrity-fix / forecast-v7-integrity-fix | pretrained adapters/registry/integrity helpers/bootstrap/store/hook, integrity tests/handoff | F07 + row/time/output path alignment, single manifest bootstrap→load, pre-import pinned source verification, typed registered run persistence/linkage. Consume final core API at integration. |
+
+Data and integrity assignments are independent directories; no writer edits another checkout. Shared task/design/review documents are Codex-only. Dedicated owners do not merge other branches. All have exact scope and completion tests in ignored workspace/cache/gemini-*-assignment.txt (core: gemini-corrections-02.txt). Session IDs at dispatch: core65604, data45225, integrity39144.
+
+Coordinated interface: core retains instrument_id/currency/as_of/current_price/target_date/horizon_steps/frequency with explicit price_basis and point/validation semantics. Computation COMPLETE/PARTIAL/UNAVAILABLE/ERROR remains separate from EXPERIMENTAL/OOS_VALIDATED. Defaults cannot authenticate REAL/caller metadata. Kronos source_root is optional constructor input handled by integrity owner BEFORE import; runner provides configured source_root without arbitrary sys.path insertion. Store accepts component model-run IDs so engine integration can preserve links. Constructor migrations and schema fixture differences are resolved by the designated Gemini integrator after all frozen implementation commits, with Codex review; no claim complete from branch-only subset tests.
+
+Codex independent reviews at frozen bases are recorded in core worktree reviews01-04; original Korean design/implementation audit is root reviews/FORECAST-V7-DESIGN-AUDIT-20261008.md. Final integration gets full forecasting+independent probes, existing runtime regressions, fresh packaging and a separate final verification session. Real pretrained inference and real5-yearOOS remain separate empirical prerequisites; production ranking/hourly activation is outside this batch.
+
+## Design revision02 / independent correction status
+
+Core9ebd5ab (code9c0b6fd) independently46PASS; expandedkind/semantics/scenario/model-contract probes23PASS/15FAIL. Core03 session23129 active. Data b00af95 rejected by5/5 independent actualCLI/artifact/split probes; DATA-02 session25113 active. Integrity509e561 rejected by3/3 manifest/path/instrument probes and canonicalrun-schema conflict; INTEGRITY-02 session53581 active. CLIAPIerrors after localcommits never treated as acceptance.
+
+Integrity owner gets minimaladditionalownership runtime/investment_stack/migrations/run.py and optionalSQL-onlymigrationhelper. ExistingRunDatabase validates exactschema fromRUN_MIGRATIONS; registeringtheforecasttables/linksinoneofficialrunmigration is necessary, ratherthan arbitraryDDL or thirdcacheDB. Preserve2DBarchitecture and strictrole/schema/instrument/runcontextvalidation. Nochangeexecution/personal/providers/skills. Existingnative runvalidator must pass beforeandafter syntheticforecastpersistence; baseinstallationcannotimportoptionalmodeldependencies throughSQLcatalog. Parentintegrates allfrozencommits, migratesconstructor/corefixtures and verifiescurrentdatacontracts withthefinalcatalog.
