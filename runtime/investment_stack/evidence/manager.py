@@ -93,6 +93,10 @@ REQUIRED_RUN_TABLES = frozenset(
         "materiality_decisions",
         "review_findings",
         "report_sections",
+        "source_documents",
+        "forecast_model_runs",
+        "forecast_ensembles",
+        "forecast_ensemble_components",
     }
 )
 

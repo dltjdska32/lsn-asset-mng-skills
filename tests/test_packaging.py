@@ -173,7 +173,7 @@ class TestPackaging(unittest.TestCase):
         sdist_fixed_paths = {
             "ARCHITECTURE.md", "MANIFEST.in", "PKG-INFO", "README.md", "pyproject.toml", "setup.py", "setup.cfg",
             "docs/workflow/deployment-allowlist.md", "scripts/sync_agent_skills.py",
-            "tests/test_packaging.py", "tests/test_r15_skill_sync.py",
+            "tests/test_packaging.py", "tests/test_r15_skill_sync.py", "tests/test_e2e_forecast.py",
         }
         sdist_config_paths = {f"config/{name}" for name in EXPECTED_CONFIGS}
         sdist_runtime = {f"runtime/{path}" for path in runtime}

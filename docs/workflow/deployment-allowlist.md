@@ -19,7 +19,7 @@ Allowed project files are exactly:
 - `docs/workflow/deployment-allowlist.md` and `scripts/sync_agent_skills.py`.
 - The five explicitly named `config/*.yaml` inputs above.
 - All `runtime/investment_stack/**/*.py` source files and setuptools' six generated `runtime/investment_stack.egg-info/` metadata files (`PKG-INFO`, `SOURCES.txt`, `dependency_links.txt`, `entry_points.txt`, `requires.txt`, `top_level.txt`).
-- The two R15 packaging tests: `tests/test_packaging.py` and `tests/test_r15_skill_sync.py`.
+- The two R15 packaging tests: `tests/test_packaging.py`, `tests/test_r15_skill_sync.py`, and `tests/test_e2e_forecast.py`.
 - For each of the eight skill names below, exactly `SKILL.md` and `agents/openai.yaml` under both `skills/<name>/` and `.agents/skills/<name>/`.
 
 The allowlist is exact at the file-path level. It excludes local credential values, `.env` files, database files and sidecars, workspace/run data, logs, caches, virtual environments, Git metadata, bytecode, keys, and certificates. The five YAML files are shipped as explicit input resources under the wheel's `sys.prefix/config/`; the CLI does not auto-load them as global defaults, and call sites must choose a config path explicitly. In particular, values such as `config/freshness.yaml`'s 20-minute/one-day age fields are not thereby approved for all price purposes. `providers.yaml` contains the name of an optional environment variable, not its value. This path check does not scan allowed text files for accidental secret literals, so code review still applies.

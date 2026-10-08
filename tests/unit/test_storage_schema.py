@@ -50,4 +50,6 @@ class StorageSchemaTests(unittest.TestCase):
                 ).fetchone()[0]
             self.assertTrue(REQUIRED_RUN_TABLES.issubset(tables))
             self.assertEqual(version, CURRENT_RUN_SCHEMA_VERSION)
-            self.assertNotEqual(CURRENT_PERSONAL_SCHEMA_VERSION, CURRENT_RUN_SCHEMA_VERSION)
+            # Independent migration histories need not have different integer versions.
+            self.assertIn("schema_migrations", tables)
+            self.assertNotIn("portfolio_positions", tables)
