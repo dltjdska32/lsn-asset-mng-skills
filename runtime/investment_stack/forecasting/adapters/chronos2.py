@@ -51,6 +51,16 @@ class Chronos2Adapter(ForecastAdapter):
         offset = pd.tseries.frequencies.to_offset(request.frequency)
         return [last + offset * (i + 1) for i in range(request.horizon_steps)]
 
+    @staticmethod
+    def _provider_timestamps(values: Any) -> pd.DatetimeIndex:
+        """Express validated instants as UTC-naive datetime64 for Chronos 2.3.x.
+
+        Its normalize_df casts a NumPy datetime64 array to int64. Feeding
+        timezone-aware pandas timestamps produces an object array instead.
+        Convert to UTC *before* removing tz metadata to preserve the instant.
+        """
+        return pd.DatetimeIndex(pd.to_datetime(list(values), utc=True)).tz_localize(None)
+
     def forecast(self, request: ForecastRequest) -> ModelForecast:
         request.validate()
         ok, reason = self.available()
@@ -75,11 +85,24 @@ class Chronos2Adapter(ForecastAdapter):
                     target_semantics=request.target_semantics
                 )
             if request.timestamps:
-                ts = pd.to_datetime(list(request.timestamps))
+                observed_dates = request.timestamps
             else:
-                ts = pd.date_range(end=pd.Timestamp(request.as_of), periods=len(hist), freq=request.frequency)
-            context_df = pd.DataFrame({"id": request.instrument_id, "timestamp": ts, "target": hist})
-            future_df = pd.DataFrame({"id": request.instrument_id, "timestamp": self._future_timestamps(request)})
+                observed_dates = pd.date_range(
+                    end=pd.Timestamp(request.as_of), periods=len(hist), freq=request.frequency
+                )
+            # Keep the request's aware, PIT-validated calendar as the sole
+            # authority. Both provider input and expected output use the same
+            # aware instants, converted to UTC at the provider boundary.
+            future_dates = self._future_timestamps(request)
+            context_df = pd.DataFrame({
+                "id": request.instrument_id,
+                "timestamp": self._provider_timestamps(observed_dates),
+                "target": hist,
+            })
+            future_df = pd.DataFrame({
+                "id": request.instrument_id,
+                "timestamp": self._provider_timestamps(future_dates),
+            })
             for name, values in request.covariates.items():
                 vals = list(values)
                 if len(vals) == len(hist):
@@ -100,20 +123,39 @@ class Chronos2Adapter(ForecastAdapter):
             )
             if not isinstance(pred, pd.DataFrame) or len(pred) != request.horizon_steps:
                 raise ValueError("Chronos prediction path length mismatch")
-            expected_dates = pd.date_range(start=request.timestamps[-1], periods=request.horizon_steps + 1, freq=request.frequency)[1:]
+            # The same future_dates supplied to the provider determine the
+            # exact expected UTC path; do not independently regenerate dates.
+            if not pred.columns.is_unique:
+                raise ValueError("Chronos duplicate return columns")
             if not {"id", "timestamp"}.issubset(pred.columns):
                 raise ValueError("Chronos returned no ID/timestamp path")
-            if not pred["id"].eq(request.instrument_id).all():
+            if not pred["id"].notna().all() or not pred["id"].eq(request.instrument_id).fillna(False).all():
                 raise ValueError("Chronos instrument ID mismatch")
             returned = pd.to_datetime(pred["timestamp"], utc=True)
-            if list(returned) != list(pd.to_datetime(expected_dates, utc=True)):
+            if list(returned) != list(pd.to_datetime(future_dates, utc=True)):
                 raise ValueError("Chronos timestamp path mismatch")
-            numeric_columns = [c for c in pred if c not in ("id", "timestamp")]
-            if not numeric_columns or not np.isfinite(pred[numeric_columns].to_numpy(dtype=float)).all():
+            # Chronos 2.3.2 supplies a string target_name column. Unlike an
+            # unbound annotation, it is an identity contract for the target
+            # column named "target" in context_df. Older stubs may omit it.
+            if "target_name" in pred and (
+                not pred["target_name"].notna().all()
+                or not pred["target_name"].eq("target").fillna(False).all()
+            ):
+                raise ValueError("Chronos target_name identity mismatch")
+            allowed = {"id", "timestamp", "target_name", "predictions",
+                       "0.1", "0.25", "0.5", "0.75", "0.9"}
+            unexpected = set(pred.columns) - allowed
+            if unexpected:
+                raise ValueError(f"Chronos unexpected return columns: {sorted(map(str, unexpected))}")
+            # Inspect only explicitly supported numeric price/quantile columns;
+            # do not silently ignore arbitrary text or unbound extra outputs.
+            price_cols = [c for c in ("predictions", "0.1", "0.25", "0.5", "0.75", "0.9") if c in pred]
+            if not ("predictions" in pred or "0.5" in pred):
+                raise ValueError("Chronos missing point/median prediction column")
+            if not np.isfinite(pred[price_cols].to_numpy(dtype=float)).all():
                 raise ValueError("Chronos nonfinite prediction")
             # All returned steps must satisfy the price and quantile contracts,
             # not merely the terminal step validated by ModelForecast.
-            price_cols = [c for c in ("predictions", "0.1", "0.25", "0.5", "0.75", "0.9") if c in pred]
             if not price_cols or (pred[price_cols].to_numpy(dtype=float) <= 0).any():
                 raise ValueError("Chronos nonpositive price anywhere in path")
             quantile_cols = [c for c in ("0.1", "0.25", "0.5", "0.75", "0.9") if c in pred]

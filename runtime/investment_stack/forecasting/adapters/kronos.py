@@ -79,6 +79,8 @@ class KronosAdapter(ForecastAdapter):
             # forbidden on the very next source verification. Scope the flag
             # to the controlled import and restore it, even if loading fails.
             previous_bytecode_flag = sys.dont_write_bytecode
+            original_path_list = sys.path
+            original_path_items = sys.path[:]
             import_path = str(sr)
             sys.path.insert(0, import_path)
             sys.dont_write_bytecode = True
@@ -90,11 +92,13 @@ class KronosAdapter(ForecastAdapter):
                 self._predictor = KronosPredictor(model, tokenizer, device=self.device, max_context=self.max_context)
             finally:
                 sys.dont_write_bytecode = previous_bytecode_flag
-                # Remove our own prepend, not another caller's existing entry.
-                if sys.path and sys.path[0] == import_path:
-                    sys.path.pop(0)
-                else:
-                    sys.path.remove(import_path)
+                # Official pinned model/kronos.py itself appends '../' during
+                # import. Restore *all* original entries, ordering, duplicates,
+                # and the list identity, even if import/constructor rebounded
+                # sys.path or raised. The RLock serializes Kronos loads.
+                if sys.path is not original_path_list:
+                    sys.path = original_path_list
+                original_path_list[:] = original_path_items
             return self._predictor
 
     def forecast(self, request: ForecastRequest) -> ModelForecast:
