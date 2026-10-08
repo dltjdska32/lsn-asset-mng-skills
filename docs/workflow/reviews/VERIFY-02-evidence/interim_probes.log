@@ -1,8 +1,0 @@
-test_rc04_missing_eps_period_cannot_borrow_other_metric_context (__main__.FollowUpReview.test_rc04_missing_eps_period_cannot_borrow_other_metric_context) ... ok
-test_rc05_duplicate_gap_comparisons_are_not_consecutive_quarters (__main__.FollowUpReview.test_rc05_duplicate_gap_comparisons_are_not_consecutive_quarters) ... ok
-test_rc05_reversed_quarters_cannot_create_current_direction (__main__.FollowUpReview.test_rc05_reversed_quarters_cannot_create_current_direction) ... ok
-
-----------------------------------------------------------------------
-Ran 3 tests in 1.418s
-
-OK

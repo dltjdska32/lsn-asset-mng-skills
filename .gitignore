@@ -15,8 +15,15 @@ build/
 secrets.*
 secrets/
 *.secret
-workspace/runs/
-workspace/cache/
+workspace/
+models/
+*.safetensors
+tests/
+*.log
+scripts/workflow/
+docs/workflow/reviews/VERIFY-02-evidence/
+docs/workflow/reviews/*.py
+docs/workflow/reviews/*.txt
 *.db
 *.db-shm
 *.db-wal

@@ -2,9 +2,6 @@ include README.md
 include ARCHITECTURE.md
 include docs/workflow/deployment-allowlist.md
 include scripts/sync_agent_skills.py
-include tests/test_packaging.py
-include tests/test_e2e_forecast.py
-include tests/test_r15_skill_sync.py
 include config/freshness.yaml
 include config/materiality.yaml
 include config/providers.yaml
