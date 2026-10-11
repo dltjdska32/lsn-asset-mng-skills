@@ -30,6 +30,8 @@ def main() -> int:
     p.add_argument('--instrument-registry', type=Path)
     p.add_argument('--offline-captures', action='store_true')
     p.add_argument('--previous-run-db', type=Path)
+    p.add_argument("--forecast-config", type=Path)
+    p.add_argument("--forecast-inputs", type=Path)
     a=p.parse_args()
     personal_before = hashlib.sha256(a.personal_db.read_bytes()).hexdigest()
     now=datetime.now(ZoneInfo(a.timezone))
@@ -51,7 +53,7 @@ def main() -> int:
     if a.market_captures:
         from investment_stack.providers.capture import CapturedMarketTransport
         transport=CapturedMarketTransport(a.market_captures,allow_live_fallback=not a.offline_captures)
-    services=compose_configured_host(run,ledger,web_research_bundle=a.web_research_bundle,live_providers=a.live_providers,transport=transport,special_rules=rules,include_reference_assets=a.include_reference_assets,research_all_held=a.research_all_held,instrument_registry=a.instrument_registry,previous_run_db=a.previous_run_db)
+    services=compose_configured_host(run,ledger,web_research_bundle=a.web_research_bundle,live_providers=a.live_providers,transport=transport,special_rules=rules,include_reference_assets=a.include_reference_assets,research_all_held=a.research_all_held,instrument_registry=a.instrument_registry,previous_run_db=a.previous_run_db,forecast_config=a.forecast_config,forecast_inputs=a.forecast_inputs)
     request=ModeRequest(run_id,RequestMode.PERSONAL_PORTFOLIO_ANALYSIS,
         {'portfolio_source':'pinned_ledger','evaluation_currency':a.evaluation_currency.upper()})
     result=execute_mode(request,services)

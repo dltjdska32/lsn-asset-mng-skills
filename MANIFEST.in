@@ -7,8 +7,11 @@ include scripts/capture_market_data.py
 include scripts/run_personal_portfolio.py
 include scripts/run_asset_analysis.py
 include scripts/run_equity_screening.py
-include tests/test_packaging.py
-include tests/test_r15_skill_sync.py
+include scripts/bootstrap_pretrained_models.py
+include scripts/run_pretrained_forecast.py
+include scripts/train_tabular_forecaster.py
+include scripts/walk_forward_tabular.py
+include requirements-forecasting.txt
 include config/freshness.yaml
 include config/materiality.yaml
 include config/providers.yaml
@@ -75,3 +78,6 @@ global-exclude *.pfx
 global-exclude *.log
 global-exclude __pycache__
 global-exclude *.py[cod]
+
+
+prune tests

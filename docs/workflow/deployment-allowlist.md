@@ -23,7 +23,8 @@ Allowed project files are exactly:
 - `scripts/build_verified_distribution.py`, `scripts/capture_market_data.py`, `scripts/run_personal_portfolio.py`, and `scripts/run_asset_analysis.py`: clean verified build, actual HTTP capture, and configured portfolio execution.
 - The five explicitly named `config/*.yaml` inputs above.
 - All `runtime/investment_stack/**/*.py` source files and setuptools' six generated `runtime/investment_stack.egg-info/` metadata files (`PKG-INFO`, `SOURCES.txt`, `dependency_links.txt`, `entry_points.txt`, `requires.txt`, `top_level.txt`).
-- The two R15 packaging tests: `tests/test_packaging.py` and `tests/test_r15_skill_sync.py`.
+- No `tests/` directory or testing source files. The local checkout keeps all tests for offline validation; neither source distributions, wheels, nor public/GPT runtime archives carry those files. `MANIFEST.in` uses an explicit final `prune tests` to override default setuptools test discovery.
+- The optional local forecasting input lock `requirements-forecasting.txt`, manual bootstrap utility `scripts/bootstrap_pretrained_models.py`, CLI `scripts/run_pretrained_forecast.py`, native training `scripts/train_tabular_forecaster.py`, and `scripts/walk_forward_tabular.py`. Bootstrap is **manual only**, may contact Hugging Face/Git if explicitly invoked without `--local-files-only`, and is **never called automatically by analysis or inference services**. `--local-files-only` verifies existing local pinned Kronos source without clone/fetch/checkout. No weights or checkpoints are distributable. The wheel includes only the new `runtime/investment_stack/forecasting/**/*.py` source; optional dependencies are *not* installed by default.
 - For each of the eight skill names below, exactly `SKILL.md` and `agents/openai.yaml` under both `skills/<name>/` and `.agents/skills/<name>/`.
 - The same five explicit policy references listed above, under both skill trees.
 
@@ -43,9 +44,37 @@ The wheel installs config inputs under `sys.prefix/config/` and the two skill tr
 | Python distribution and runtime | `0.1.0` | `pyproject.toml` and `investment_stack.__version__`; kept in sync. |
 | Contract envelope | `0.2` | Typed contract format version; evolves independently of the package. |
 | Personal database schema | `4` | Latest personal migration number. |
-| Run database schema | `2` | Latest run-evidence migration number. |
+| Run database schema | `4` | Latest run migration (forecast tables); personal schema remains independent. |
 | Config files | per-file | YAML files carry their own `version`; `RunContext.config_version` is context metadata, not a distribution version. |
 
 No release mapping between architecture `v1.3`, the `v1.3.1` hardening description in README, and Python distribution `0.1.0` is defined. This package task does not create a release, change migration history, or claim that a schema/config version was upgraded.
 
 - `scripts/run_equity_screening.py`: explicit public equity universe screening; no personal holdings bundled.
+
+## Local-only verification and public artifact boundary
+
+Existing `tests/test_packaging.py`, `tests/test_r15_skill_sync.py`, the native
+XGBoost/LightGBM E2E, and all AI forecasting/source/calendar/PIT regressions
+remain in local checkouts. They are intentionally not copied into public
+wheel/sdist artifacts or new operational runtime bundles. Run the local
+packaging suite **against a newly built wheel and sdist** before publishing.
+The sdist version check extracts the actual distribution into a temporary
+directory, then compares `pyproject.toml`, runtime `__version__`, generated
+`PKG-INFO`, and architecture metadata there without importing a `tests/` tree.
+`tests/test_packaging.py` checks exact runtime/config/skills/script allowlists,
+rejects sensitive paths, and independently verifies the complete absence of
+`tests/` paths in both distributions.
+
+`.gitignore` now excludes new `tests/` files and local temporary output,
+while preserving all earlier credential/DB/cache exclusions. **Existing tracked
+test files remain in working trees and the Git index until the integration
+owner executes `git rm --cached` for the approved test paths.** This patch
+neither deletes tests nor modifies Git history or the index.
+
+`scripts/build_verified_distribution.py` only imports setuptools and reads
+runtime sources; it neither imports `tests` nor needs test sources inside
+sdist. Its source remains explicitly allowlisted. The local verification
+suite is a release prerequisite, not an sdist runtime dependency.
+
+No investment logic, schema, model, workflow, policy, or dependency changes
+are authorized by this publication-only adjustment.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import sqlite3
 import uuid
@@ -93,6 +94,9 @@ REQUIRED_RUN_TABLES = frozenset(
         "materiality_decisions",
         "review_findings",
         "report_sections",
+        "forecast_model_runs",
+        "forecast_ensembles",
+        "forecast_ensemble_components",
     }
 )
 
@@ -411,6 +415,37 @@ class RunDatabaseManager:
             except (OSError, sqlite3.Error, RuntimeError, ValueError):
                 self.status = RunDatabaseStatus.INVALID
                 raise
+
+    def record_instrument_resolution(
+        self, *, instrument_id: str, resolved_identifier: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Record the already-verified host resolver identity for same-run consumers.
+
+        Immutable for each requested ID; conflicting re-resolution is refused.
+        This is NOT evidence of an eligible price, share, or forecast.
+        """
+        if not isinstance(instrument_id, str) or not instrument_id.strip():
+            raise ValueError('non-empty instrument_id required')
+        if not isinstance(resolved_identifier, str) or not resolved_identifier.strip():
+            raise ValueError('non-empty resolved identifier required')
+        resolution_id = 'resolution:' + hashlib.sha256(
+            (self.run_id + '\0' + instrument_id).encode('utf-8')).hexdigest()
+        with self._mutation_connection() as connection:
+            current = connection.execute(
+                'SELECT resolved_identifier, resolution_status FROM instrument_resolutions '
+                'WHERE run_id=? AND requested_identifier=?',
+                (self.run_id, instrument_id)).fetchall()
+            if current:
+                if len(current) != 1 or current[0]['resolved_identifier'] != resolved_identifier or current[0]['resolution_status'] != 'RESOLVED':
+                    raise ValueError('conflicting run instrument identity')
+                return
+            connection.execute(
+                'INSERT INTO instrument_resolutions '
+                '(resolution_id,run_id,requested_identifier,resolved_identifier,resolution_status,metadata_json) '
+                'VALUES (?,?,?,?,?,?)',
+                (resolution_id,self.run_id,instrument_id,resolved_identifier,'RESOLVED',
+                 json.dumps(metadata or {},sort_keys=True,default=str)))
 
     def add_evidence(
         self,
@@ -801,9 +836,10 @@ class RunDatabaseManager:
         formula: str,
         inputs: dict[str, Any],
         result: dict[str, Any] | None,
+        _connection: sqlite3.Connection | None = None,
     ) -> None:
         """Persist deterministic calculation lineage referencing evidence IDs in inputs."""
-        with self._mutation_connection() as connection:
+        def insert(connection):
             connection.execute(
                 "INSERT INTO calculations "
                 "(calculation_id, run_id, calculation_name, formula, inputs_json, result_json, created_at) "
@@ -815,6 +851,32 @@ class RunDatabaseManager:
                     datetime.now(timezone.utc).isoformat(),
                 ),
             )
+
+        if _connection is not None:
+            # A supplied SQLite handle has no authority merely because its
+            # tables share names with run.db. Authenticate its opened file,
+            # immutable run metadata and schema under the canonical lock.
+            with self._operation_lock:
+                self._assert_valid()
+                path = self._operational_database_path()
+                identity = self._database_identity
+                if identity is None:
+                    raise StorageIdentityError('run database identity was not established')
+                verify_opened_database_identity(
+                    _connection, expected_path=path, expected_identity=identity
+                )
+                original_factory = _connection.row_factory
+                try:
+                    _connection.row_factory = sqlite3.Row
+                    errors = _validate_run_connection(_connection, expected_run_id=self.run_id)
+                finally:
+                    _connection.row_factory = original_factory
+                if errors:
+                    raise StorageIdentityError('foreign or invalid run connection: ' + '; '.join(errors))
+                insert(_connection)
+        else:
+            with self._mutation_connection() as connection:
+                insert(connection)
 
     def fetch_phase6_context(self) -> dict[str, object]:
         """Return validated run-local inputs needed by Phase 6 report/review logic."""

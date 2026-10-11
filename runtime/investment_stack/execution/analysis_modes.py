@@ -57,6 +57,7 @@ def equity_analysis_services(
     run_db: RunDatabaseManager,
     asset_resolver=None,
     portfolio_context_loader=None,
+    forecast_service=None,
 ) -> RuntimeServices:
     """Return concrete handlers for SINGLE_ASSET_ANALYSIS and ASSET_COMPARISON.
 
@@ -171,10 +172,20 @@ def equity_analysis_services(
                 return StepResult(Availability.UNSUPPORTED, unsupported_reasons=(
                     f"{outcome.instrument_id}: required research providers are not configured",
                 ))
+        forecast = None
+        if forecast_service is not None:
+            forecast = forecast_service.run_for_instruments(
+                tuple(outcome.instrument_id for outcome in outcomes),
+                currency_by_id={spec.instrument_id: spec.currency for spec in specs},
+            )
+            refs = tuple(dict.fromkeys((*refs, *forecast.evidence_refs)))
+            calculation_refs = tuple(dict.fromkeys((*calculation_refs, *forecast.calculation_refs)))
+            missing = (*missing, *forecast.missing_inputs)
         return StepResult(
             Availability.PARTIAL if missing else Availability.COMPLETE,
-            output={"outcomes": outcomes}, evidence_refs=refs,
-            calculation_refs=calculation_refs, missing_inputs=missing,
+            output={"outcomes": outcomes, "ai_forecast_sections": forecast.sections if forecast else (),
+                    "ai_forecast_review_triggers": forecast.review_triggers if forecast else ()},
+            evidence_refs=refs, calculation_refs=calculation_refs, missing_inputs=missing,
         )
 
     def pairwise_comparison(_request: ModeRequest, context: StepContext) -> StepResult:
@@ -414,7 +425,12 @@ def equity_analysis_services(
         capital=render_optional_capital_context(run_db,_request,portfolio_context_loader,candidates)
         capital_sections=(capital,) if isinstance(capital,ReportSectionInput) else capital.sections if capital else ()
         triggers=capital.review_triggers if capital and not isinstance(capital,ReportSectionInput) else ()
-        subjects=tuple(row.instrument_id for row in (*capital.result.ranked,*capital.result.unranked)) if triggers else ()
+        research_ai = context.get(PipelineStep.DEEP_RESEARCH_REQUESTED_ASSETS.value)
+        if research_ai is not None and isinstance(getattr(research_ai,'output',None),dict):
+            triggers=tuple(dict.fromkeys((*triggers,*research_ai.output.get('ai_forecast_review_triggers',()))))
+        subjects=(tuple(row.instrument_id for row in (*capital.result.ranked,*capital.result.unranked))
+                  if triggers and capital is not None and not isinstance(capital,ReportSectionInput)
+                  else candidates if triggers else ())
         evidence_ids = tuple(dict.fromkeys(
             evidence_id for result in context.values() for evidence_id in result.evidence_refs
         ))
@@ -440,6 +456,7 @@ def equity_analysis_services(
         except (TypeError, ValueError):
             section_as_of = None
         sections: list[ReportSectionInput] = []
+        sections.extend(research.output.get("ai_forecast_sections", ()))
         sections.extend(context[PipelineStep.CONDITIONAL_REVIEW.value].output.get("sections", ()))
         unverified_outputs: list[str] = []
         technical_sections: list[tuple[str, ReportSectionInput]] = []

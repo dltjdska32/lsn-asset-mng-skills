@@ -44,3 +44,17 @@ tests/temp/
 *.log
 validation/
 artifacts/
+
+# Local verification sources remain on disk but are excluded from new Git tracking.
+tests/
+# Prior local validation exclusions remain above; discard transient build artifacts.
+tmp/
+temp/
+*.tmp
+*.prof
+*.trace
+htmlcov/
+coverage.xml
+
+# Preserve historical private snapshot replay locally; exclude public tracking.
+scripts/replay_portfolio_snapshot.py

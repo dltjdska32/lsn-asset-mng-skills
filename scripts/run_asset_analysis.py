@@ -20,6 +20,7 @@ def main():
  p.add_argument('--previous-run-db',type=Path)
  p.add_argument('--portfolio-context',action='store_true')
  p.add_argument('--evaluation-currency',default='KRW')
+ p.add_argument("--forecast-config",type=Path);p.add_argument("--forecast-inputs",type=Path)
  a=p.parse_args();assets=json.loads(a.assets_json.read_text()) if a.assets_json else [{'instrument_id':v} for v in a.asset]
  if not assets:p.error('at least one explicit asset is required')
  mode=RequestMode.SINGLE_ASSET_ANALYSIS if len(assets)==1 else RequestMode.ASSET_COMPARISON
@@ -33,7 +34,7 @@ def main():
  if a.market_captures:
   from investment_stack.providers.capture import CapturedMarketTransport
   transport=CapturedMarketTransport(a.market_captures,allow_live_fallback=not a.offline_captures)
- host=compose_configured_host(run,ledger,live_providers=a.live_providers,transport=transport,web_research_bundle=a.web_research_bundle,instrument_registry=a.instrument_registry,previous_run_db=a.previous_run_db)
+ host=compose_configured_host(run,ledger,live_providers=a.live_providers,transport=transport,web_research_bundle=a.web_research_bundle,instrument_registry=a.instrument_registry,previous_run_db=a.previous_run_db,forecast_config=a.forecast_config,forecast_inputs=a.forecast_inputs)
  result=execute_mode(ModeRequest(rid,mode,{'assets':assets,'portfolio_context':a.portfolio_context,
    'evaluation_currency':a.evaluation_currency.upper()}),host);out=result.as_dict();out['run_id']=rid;out['run_db_path']=str(run.database_path)
  with closing(sqlite3.connect(run.database_path)) as c, c:
