@@ -55,3 +55,6 @@ temp/
 *.trace
 htmlcov/
 coverage.xml
+
+# Preserve historical private snapshot replay locally; exclude public tracking.
+scripts/replay_portfolio_snapshot.py
