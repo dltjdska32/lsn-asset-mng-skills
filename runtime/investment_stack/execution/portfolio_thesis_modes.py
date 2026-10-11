@@ -99,6 +99,7 @@ def portfolio_thesis_services(
     selected_asset_research: SelectedAssetResearch | None = None,
     lightweight_research: Callable[[ModeRequest], SelectedAssetResearchResult] | None = None,
     fund_inputs_loader: Callable[[], Mapping[str, object]] | None = None,
+    forecast_service=None,
     scenario_gate_verifier: ScenarioGateVerifier | None = None,
     thesis_evidence_collector: ThesisEvidenceCollector | None = None,
     report_refresh_services: ReportRefreshServices | None = None,
@@ -403,13 +404,33 @@ def portfolio_thesis_services(
             evidence_refs=tuple(dict.fromkeys((*evidence_refs,*funds.evidence_refs)))
         else:
             funds=None
+        # Post-valuation companion is run for the complete held+explicit-candidate
+        # universe; materiality/deep-research depth cannot pre-filter this list.
+        forecast = None
+        if forecast_service is not None:
+            held = {p.instrument_id: p.currency for p in portfolio.positions}
+            proposed = _request.payload.get('candidate_ids', ())
+            if not isinstance(proposed, (tuple, list)) or any(not isinstance(x,str) for x in proposed):
+                proposed = ()
+            all_ids = tuple(dict.fromkeys((*held, *proposed)))
+            for iid in proposed:
+                if iid not in held and getattr(forecast_service, 'currency_resolver', None) is not None:
+                    try: held[iid]=forecast_service.currency_resolver(iid)
+                    except (ValueError, KeyError):pass
+            forecast = forecast_service.run_for_instruments(all_ids, currency_by_id=held)
+            sections.extend(forecast.sections)
+            calculation_ids.extend(forecast.calculation_refs)
+            evidence_refs=tuple(dict.fromkeys((*evidence_refs,*forecast.evidence_refs)))
         from investment_stack.execution.capital_competition import render_capital_competition
         competition=render_capital_competition(run_db,portfolio,result,
+            forecast_companion=forecast,
+            candidate_ids=tuple(proposed) if forecast is not None else tuple(
+                x for x in _request.payload.get('candidate_ids', ()) if isinstance(x, str)),
             optionalpolicyinputs=_request.payload.get('capital_competition_policy_inputs'))
         sections.extend(competition.sections)
         calculation_ids.extend(competition.calculation_refs)
         evidence_refs=tuple(dict.fromkeys((*evidence_refs,*competition.evidence_refs)))
-        missing = (*result.missing_inputs, *missing_refs, *competition.missing_inputs, *(funds.missing_inputs if funds else ()))
+        missing = (*result.missing_inputs, *missing_refs, *competition.missing_inputs, *(funds.missing_inputs if funds else ()), *(forecast.missing_inputs if forecast else ()))
         return StepResult(Availability.PARTIAL if missing else Availability.COMPLETE,
                           output={"analysis": result, "section": section, "sections":tuple(sections), "capital_competition":competition},
                           evidence_refs=evidence_refs, calculation_refs=tuple(calculation_ids),

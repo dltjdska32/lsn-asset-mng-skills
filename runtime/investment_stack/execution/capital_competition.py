@@ -338,7 +338,7 @@ def derive_capital_competition_inputs(run, instrument_ids):
 TITLES = ('핵심 결론', '자본 집중 우선순위', '정리 우선순위', '유지/관찰 자산', '신규자금 투입 우선순위', '자본 재배치 후보', 'Concentration Risk', 'Expected 5Y CAGR', '주요 Thesis Breaker', 'Latest Material Events')
 
 
-def render_capital_competition(run, portfolio_request, portfolio_result, optionalpolicyinputs=None, *, candidate_ids=()):
+def render_capital_competition(run, portfolio_request, portfolio_result, optionalpolicyinputs=None, *, candidate_ids=(), forecast_companion=None):
     """Persist outputs and render all ten sections before the fixed Review stage.
 
     Missing qualitative data remains WATCH/unranked. User-approved score inputs
@@ -517,4 +517,26 @@ def render_capital_competition(run, portfolio_request, portfolio_result, optiona
                     metadata={'capital_competition': True, 'review_triggers': result.review_triggers,
                               'non_posting': True, 'score_is_expected_return': False})
                     for i, (title, body) in enumerate(zip(TITLES, lines)))
-    return CapitalCompetitionReport(sections, result, (calc_id,), refs, result.review_triggers, tuple(dict.fromkeys(missing)))
+    # Append experimental companion AFTER the ten unchanged MAIN decision sections.
+    # Read-only rendering: forecast numbers never feed six dimensions, scenarios,
+    # categories, rotations or Level 3 authority.
+    if forecast_companion is not None:
+        lines_ai = []
+        for iid, item in forecast_companion.per_instrument.items():
+            lines_ai.append(
+                f'{iid}: {item["status"]}; AI 가격 CAGR(배당·세금·비용·FX 제외)='
+                f'{item.get("price_cagr") if item.get("price_cagr") is not None else "확인 불가"}; '
+                f'모델={[(m["model_id"], m["status"], m["point"]) for m in item["models"]]}; '
+                f'MC={item["assessment"].get("status", "UNAVAILABLE")}; '
+                f'앙상블={item.get("ensemble_id") or "없음"}; '
+                f'검증공백={item.get("reason") or "없음"}; 자동순위허용=false'
+            )
+        sections = (*sections, ReportSectionInput('capital_ai_companion',
+            'AI 가격 전망 보조 비교 (실험적·투자 승인 아님)',
+            tuple(lines_ai or ['사용 가능한 AI 모델 결과 없음']),status=Availability.PARTIAL,
+            evidence_ids=forecast_companion.evidence_refs,
+            calculation_ids=forecast_companion.calculation_refs,
+            metadata={'ranking_allowed':False,'score_unchanged':True,'non_posting':True}))
+    ai_review = tuple(getattr(forecast_companion, 'review_triggers', ()) or ()) if forecast_companion else ()
+    return CapitalCompetitionReport(tuple(sections), result, (calc_id,), refs,
+        tuple(dict.fromkeys((*result.review_triggers,*ai_review))), tuple(dict.fromkeys(missing)))

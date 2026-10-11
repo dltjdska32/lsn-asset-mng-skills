@@ -27,6 +27,12 @@ def market_urls(listings=None):
             urls.append(f'https://m.stock.naver.com/api/stock/{ticker}/integration')
         else:
             symbol=ticker+'.T' if exchange=='JPX' else ticker
+            # Explicit offline-replayable one-year split-events chart contract.
+            # The forecast consumer still requires a pinned independent full
+            # exchange-session calendar and semantic corporate-action binding.
+            urls.append(f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=1y&events=div%2Csplits')
+            urls.append(f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1mo&range=5y&events=div%2Csplits')
+            urls.append(f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=5d&events=div%2Csplits')
             for host in ('query1.finance.yahoo.com','query2.finance.yahoo.com'):
                 urls.append(f'https://{host}/v8/finance/chart/{symbol}?interval=1d&range=1mo')
                 urls.append(f'https://{host}/v1/finance/search?'+urlencode({'q':symbol,'quotesCount':0,'newsCount':10}))

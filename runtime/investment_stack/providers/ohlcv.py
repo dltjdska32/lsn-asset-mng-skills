@@ -408,7 +408,10 @@ def parse_yahoo_chart_ohlcv(
     meta = res_data.get("meta", {})
     symbol = str(meta.get("symbol", "")).strip().upper()
     expected_ticker = instrument_id.split(":")[-1].strip().upper()
-    if symbol != expected_ticker:
+    allowed_tickers = {expected_ticker}
+    if instrument_id.startswith(('JPX:', 'TSE:')):
+        allowed_tickers.add(expected_ticker + '.T')
+    if symbol not in allowed_tickers:
         return OHLCVParseResult(
             bar_set=None,
             error_reasons=(

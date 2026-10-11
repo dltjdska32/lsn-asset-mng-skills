@@ -107,7 +107,15 @@ def import_prior_research(run, previous_run_db, instrument_ids):
         run.add_calculation(calculation_id=cid, calculation_name='VALIDATED_PRIOR_RESEARCH',
             formula='explicit_validity_bounded_prior_import_v1',
             inputs={'evidence_ids': list(mappings.values()), 'source_run_id': meta['run_id'],
-                'source_calculation_id': calc['calculation_id']}, result={'subject': iid, 'metrics': metrics})
+                'source_calculation_id': calc['calculation_id'],
+                'source_calculation_formula': calc['formula'],
+                'source_analysis_as_of': meta['analysis_as_of'],
+                'source_analysis_metadata': output.get('metadata') if isinstance(output.get('metadata'),dict) else None,
+                'source_analysis_type': calc['calculation_name'],
+                'source_analysis_status': output.get('status', 'UNSPECIFIED')},
+            result={'subject': iid, 'metrics': metrics,
+                    'source_analysis_type': calc['calculation_name'],
+                    'source_analysis_status': output.get('status', 'UNSPECIFIED')})
         imported.append(cid)
     run.record_task_state(task_name='validated_prior_import', task_status='COMPLETE' if imported else 'PARTIAL',
         metadata={'imported_calculation_count': len(imported), 'reason': None if imported else 'NO_ELIGIBLE_VALIDITY_BOUNDED_PRIOR_RESEARCH'})

@@ -152,7 +152,7 @@ def _posted_portfolio_request(run: RunDatabaseManager, ledger: PersonalLedgerSer
     )
 
 
-def compose_configured_host(run: RunDatabaseManager, ledger: PersonalLedgerService, *, web_research_bundle: Path | None = None, live_providers: bool = False, transport=None, special_rules=None, include_reference_assets: bool = False, research_all_held: bool = False, instrument_registry: Path | None = None, previous_run_db: Path | None = None) -> RuntimeServices:
+def compose_configured_host(run: RunDatabaseManager, ledger: PersonalLedgerService, *, web_research_bundle: Path | None = None, live_providers: bool = False, transport=None, special_rules=None, include_reference_assets: bool = False, research_all_held: bool = False, instrument_registry: Path | None = None, previous_run_db: Path | None = None, forecast_config: Path | None = None, forecast_inputs: Path | None = None) -> RuntimeServices:
     """Compose all seven modes around one explicit run database and ledger."""
     metadata = run.fetch_phase6_context()["run_metadata"]
     context = run.fetch_phase6_context()
@@ -208,6 +208,8 @@ def compose_configured_host(run: RunDatabaseManager, ledger: PersonalLedgerServi
     for iid, reason in resolver.failures.items():
         live.missing.append(iid + ':instrument_resolution:' + reason)
     for iid, asset in resolved.items():
+        run.record_instrument_resolution(instrument_id=iid, resolved_identifier=asset.listing_id,
+                                         metadata={'currency':asset.currency,'asset_class':asset.asset_class})
         run.record_task_state(task_name='instrument_resolution:'+iid, task_status='COMPLETE',
             metadata={'listing_id':asset.listing_id,'asset_class':asset.asset_class,
                       'currency':asset.currency,**asset.provenance})
@@ -222,6 +224,8 @@ def compose_configured_host(run: RunDatabaseManager, ledger: PersonalLedgerServi
         requested = resolver.request_specs(request)
         for spec in requested:
             asset = resolver.resolved[spec.instrument_id]
+            run.record_instrument_resolution(instrument_id=asset.instrument_id, resolved_identifier=asset.listing_id,
+                                             metadata={'currency':asset.currency,'asset_class':asset.asset_class})
             run.record_task_state(task_name='instrument_resolution:'+asset.instrument_id,
                 task_status='COMPLETE', metadata={'listing_id':asset.listing_id,**asset.provenance})
         return requested
@@ -233,10 +237,20 @@ def compose_configured_host(run: RunDatabaseManager, ledger: PersonalLedgerServi
         bound_request=ModeRequest(request.run_id,request.mode,payload)
         live.lightweight(bound_request)
         return _posted_portfolio_request(run,ledger,bound_request,live)
+    from investment_stack.execution.forecasting import load_postvaluation_service
+    forecast_service = load_postvaluation_service(run, forecast_config, forecast_inputs)
+    if forecast_service is not None:
+        # Only an explicit captured/live provider transport can acquire forecast
+        # history; the ordinary offline host cannot silently fetch the network.
+        if (live_providers or transport is not None) and getattr(forecast_service, 'engine_factory', None) is None:
+            from investment_stack.execution.forecast_source import ForecastSourceCollector
+            forecast_service.source_collector = ForecastSourceCollector(run, resolver, chosen_transport, prefer_native_monthly=True)
+        forecast_service.currency_resolver = lambda iid: resolver.resolve(iid).currency
     equity = equity_analysis_services(
         deep_research=deep, phase6=Phase6ReportReviewRuntime(run), run_db=run,
         asset_resolver=resolve_request_specs,
         portfolio_context_loader=capital_context_loader,
+        forecast_service=forecast_service,
     )
 
     specs = {iid: asset.equity_spec() for iid, asset in resolved.items() if asset.asset_class == 'EQUITY'}
@@ -289,6 +303,7 @@ def compose_configured_host(run: RunDatabaseManager, ledger: PersonalLedgerServi
         materiality_selector=live.select,
         selected_asset_research=research_selected,
         fund_inputs_loader=lambda: dict(live.fund_inputs),
+        forecast_service=forecast_service,
     )
     return compose_seven_mode_services(
         run_db=run, ledger=ledger, equity_services=equity, portfolio_thesis_services=portfolio,
@@ -298,7 +313,7 @@ def compose_configured_host(run: RunDatabaseManager, ledger: PersonalLedgerServi
 def open_configured_host(run_workspace: Path, run_id: str, personal_db: Path, *,
                          live_providers=False, web_research_bundle=None,
                          market_captures=None, instrument_registry=None,
-                         offline_captures=False) -> RuntimeServices:
+                         offline_captures=False, forecast_config=None, forecast_inputs=None) -> RuntimeServices:
     transport = None
     if market_captures is not None:
         from investment_stack.providers.capture import CapturedMarketTransport
@@ -307,4 +322,5 @@ def open_configured_host(run_workspace: Path, run_id: str, personal_db: Path, *,
         open_run_database(run_workspace, run_id), open_personal_ledger(personal_db),
         live_providers=live_providers, web_research_bundle=web_research_bundle,
         transport=transport, instrument_registry=instrument_registry,
+        forecast_config=forecast_config, forecast_inputs=forecast_inputs,
     )

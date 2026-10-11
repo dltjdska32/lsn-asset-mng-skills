@@ -31,3 +31,7 @@ make an ETF the default answer.
 12. When multiple comparable sources disagree, verify timestamp/session/source authority and never average the conflicting prices. Preserve conflict lineage.
 13. Separate quote retrieval from news research. Prefer market-appropriate quote sources; web research is fallback and must satisfy timestamp/freshness rules.
 14. When current price remains unavailable, explain the reason in Korean (for example `오늘 시세 확인 실패`, checked-source count when known, and latest verified data time when known) rather than exposing an internal English status code.
+
+## 실험적 AI 예측 표시 경계
+
+동일 run의 `AI_FORECAST` 계산 및 저장 model/ensemble receipt가 검증된 경우만 AI companion(모델별 point, disagree, 조건부 MC, 가격 CAGR, 시간축/출처, 실패·누락)을 보여줍니다. 가격 CAGR에 배당/비용/세금/환율을 포함하거나 기존 EPS 5년 시나리오 CAGR/자본 경쟁 점수·순위·회전 승인으로 표시하지 않습니다. `ranking_allowed=false`, OOS 정확도 미검증을 유지합니다. 모델이 없거나 source 적격성이 없으면 수치 없는 UNAVAILABLE을 같은 종목 행에 유지합니다.

@@ -1,161 +1,72 @@
-# investment-stack
+# 이성남 자산관리
 
-The eight skill definitions under `skills/` are authoritative. Codex repository-local discovery uses byte-identical mirrors under `.agents/skills/`; after changing a skill, run `py scripts/sync_agent_skills.py`. The architecture invariant rejects drift.
+기업의 성장성과 적정가를 분석하고, 전체 보유 종목과 신규 후보를 비교해 자본을 어디에 집중할지 판단하는 투자 분석 도구입니다. 기존 가치평가 뒤에 AI 가격 전망과 불확실성 분석을 보조 자료로 추가했습니다.
 
-`investment-stack` is a local-first, deterministic runtime for evidence-based
-investment analysis. The canonical v1.3 architecture is frozen; v1.3.1 hardens current-quote fallback and Korean user-facing status rendering; implementation
-is proceeding in bounded phases.
+## 투자 방향
 
-Version labels have separate meanings: canonical architecture `v1.3`, the README's `v1.3.1` hardening description, and Python distribution/runtime `0.1.0` are not mapped release numbers. Contract envelopes (`0.2`), personal/run database schemas (latest migrations `4`/`3`), and config-file versions evolve independently. See [the distribution allowlist and version meanings](docs/workflow/deployment-allowlist.md).
+**성장성·가치평가를 바탕으로 한 집중 자본배분**이 기본입니다.
 
-The repository contains implementation slices across Phases 1–8. At independently reviewed code checkpoint `4e55a56`, the runtime has fixed-pipeline service bundles for the seven request modes and a host composition helper. [`analysis_modes.render_report`](runtime/investment_stack/execution/analysis_modes.py) connects a five-part safe **WAIT** briefing to [`InvestmentReportBuilder`](runtime/investment_stack/reporting/builder.py) and stores a content-bound briefing reference. The configured-mode E2E pass verifies those service paths under injected dependencies. A separate Codex task completed [final verification](docs/workflow/reviews/VERIFY-01.md) on exact checkout `2a078da` with no later runtime changes. Explicit `--run-workspace` and `--personal-db` can open the seven-mode host. Action numbers stay withheld unless stored source bodies and the pinned ledger reparse. See [implementation status](IMPLEMENTATION_STATUS.md) for the current binding and the remaining waits. Implemented capabilities include:
+- 보유한 모든 종목과 명시한 신규 후보를 경쟁시킵니다. 처음부터 Top 6만 골라 분석하지 않습니다.
+- 높은 확신을 가진 4~6개 종목에 집중할 수 있습니다. 4~6개는 의무 보유 개수나 자동 매매 목표가 아닙니다.
+- 성장성 30%, 가치평가 25%, 사업 품질 15%, 재무 건전성 10%, 산업 성장성 10%, 하방위험 10%의 점수는 **연구 우선순위**입니다. 기대수익률 자체를 뜻하지 않습니다.
+- 비중 25~30% 또는 상위 두 종목의 높은 집중도는 추가 검토 신호입니다. 8% 상한이나 10% 초과 시 자동 축소 규칙은 없습니다.
+- 자료가 부족한 보유 종목도 비교 목록에 남습니다. 근거가 없는 숫자를 만들거나 자동 매매하지 않습니다.
 
-- exactly seven request modes;
-- deterministic mode routing with an explicit mode override;
-- one immutable fixed pipeline per mode;
-- provider capability registration and ordered fallback;
-- environment-only credential lookup;
-- credential redaction for logs and diagnostics;
-- exactly eight Codex skills with narrow responsibilities.
-- OS-aware `personal.db` resolution outside the source repository;
-- isolated `workspace/runs/<run-id>/run.db` evidence stores;
-- centralized SQLite foreign-key, timeout, row, and transaction policy;
-- independently versioned personal and run schemas;
-- fail-closed personal startup and mutation guards;
-- validated Online Backup API backups, retention, atomic migrations, and
-  validated restore.
-- typed transaction intents with deterministic confirmation policy;
-- an append-only posted ledger with idempotency and exact Decimal storage;
-- atomic posting, reversal, and reversal-plus-replacement correction bundles;
-- monotonically increasing personal state versions;
-- rebuildable position, cash, liability, and cashflow projections;
-- weighted-average, user-provided, and unavailable cost-basis states;
-- cash-only transfers, explicit FX and loan components, splits, and ticker
-  aliases;
-- free-first provider adapters for OpenDART, SEC Company Facts, and timestamped
-  Kraken public trades;
-- injected Web Research fallback for latest/current data and latest relevant
-  news without a separate Skill, Agent, or database;
-- immutable `analysis_as_of` / timezone pinning, freshness assessment, provider
-  states, source conflicts, observation selection, and calculation lineage in
-  `run.db`;
-- explicit partial/unavailable behavior when credentials, timestamps, or
-  provider coverage are missing;
-- deterministic equity fundamentals and asset-appropriate equity valuation with
-  explicit assumptions only;
-- ETF/fund NAV, cost, concentration, tracking, liquidity, and dated look-through
-  analysis;
-- Bitcoin, gold, and silver analysis with price/risk and asset-specific context,
-  never corporate DCF/EPS valuation;
-- a materiality gate that precedes portfolio deep research, plus cross-asset
-  allocation and aligned historical risk/contribution calculations;
-- partial-aware as-of reports with explicit Analysis/Market/Financial/Macro/Portfolio
-  data timestamps, confidence, unknowns, evidence identifiers, and calculation lineage;
-- deterministic conditional review for materiality, low confidence, conflicts,
-  stale/unknown critical inputs, unsupported requests/models, material news/rumor,
-  and strategy-impact triggers; an independent reviewer callback remains optional.
+## AI가 더하는 정보
 
-- final MVP acceptance regression spanning unit/integration/adversarial seams;
-- executable frozen-architecture invariants plus validated backup/restore drill;
-- cross-phase checks that research/report flows cannot mutate `personal.db` and future observations cannot become current-value claims.
-- final fixed-pipeline coverage for all seven Request Modes and explicit non-posting scenario boundaries;
-- end-to-end Provider → Evidence → Asset Analysis → Calculation Lineage → Report/Review validation;
-- live selected-equity bridge from Provider/Web Research through financial observations into fundamental/valuation calculations, with a structured Codex web-hit bundle adapter;
-- release hardening that rejects repo-local runtime databases, SQLite sidecars, non-example `.env` files, and secret artifacts.
+`공시·시장자료 → 펀더멘털 → 가치평가 → AI 가격 전망·불확실성 → 자본 경쟁·검토·보고`
 
-No server, generic DAG, outbox, research cache, advanced tax-lot engine,
-portfolio-performance attribution engine, MCP layer, or mandatory independent reviewer
-is introduced by this slice. Web Research remains an adapter boundary and reports are
-run-local derived outputs rather than a personal Source of Truth.
+기존의 EPS, 성장률, 희석, 최종 PER, 배당을 명시한 5년 시나리오 수익률이 투자 판단의 기준입니다. AI는 시장가격의 가능한 경로와 모델 간 차이를 보여줍니다. **AI가 종목 순위, 매수 승인, 회전 승인이나 현재 적정가를 자동으로 바꾸지는 않습니다.** 코드의 `ranking_allowed=False`도 이 경계를 유지합니다.
 
-## Run locally
+| 구성 | 역할 | 사용 조건 |
+|---|---|---|
+| Chronos-2-small | 월별 가격 경로의 보조 전망 | 검증된 가격 자료와 로컬 가중치 |
+| Kronos-mini | OHLCV·거래대금을 이용한 보조 전망 | 로컬 모델·토크나이저·고정 소스와 실제 거래대금 |
+| XGBoost / LightGBM | 학습된 특징 기반 보조 전망 | 별도로 준비하고 검증한 학습 산출물 |
+| FinCast | 추가 모델용 어댑터 | 기본 비활성화, 실제 파일 추론 연결·가중치 검증 미완료 |
+| Ensemble | 사용 가능한 전망 결합 | 실패 모델은 감사 기록에 남김 |
+| Monte Carlo | 추정 중앙값·과거 변동성에 조건부인 시뮬레이션 | 실증적으로 보정된 신뢰구간과 구분 |
 
-The runtime declares `tzdata` and `truststore>=0.9.1`. The default `providers/http.py` transport uses a scoped `truststore` SSL context on Windows. Public Naver, Yahoo Finance, and Coinbase endpoints have been queried successfully in bounded integration checks. This is evidence for those requests at that time, not a guarantee of current availability or broad vendor coverage.
+모델이 코드에 있다는 사실은 사용 중이거나 성능이 검증됐다는 뜻이 아닙니다. 학습 산출물·자료가 없으면 사용 불가로 표시합니다.
 
-For source development, create a virtual environment and keep installation, checks, and tests on that interpreter:
+## 5년 전망을 읽는 방법
 
-```powershell
-# 1. Create a virtual environment and pin the interpreter path for every later command
-python -m venv .venv
-$VenvPython = (Resolve-Path .\.venv\Scripts\python.exe).Path
+월봉 60단계 경로를 만들 수 있어도 5년 뒤 가격을 신뢰성 있게 맞힐 수 있다는 뜻은 아닙니다. AI 가격 CAGR은 마지막 완성 월봉과 목표일 사이의 **실제 경과연수**로 계산하며 배당·세금·비용·환율은 포함하지 않습니다.
 
-# 2. Install the project and dependencies through that interpreter
-& $VenvPython -m pip install -e .
+현재 DCF 적정가를 5년 뒤 가격으로 재사용하지 않습니다. 미래 가격 앵커는 같은 실행에서 선택된 EPS와 명시적인 연간 EPS 성장률·최종 PER 가정을 검증한 경우에만 사용합니다. 예를 들어 `EPS × (1+연간 성장률)^5 × 최종 PER`은 가정에 따른 시나리오 산식이지 실제 예측 결과가 아닙니다. 실행기가 성장률·PER 승인 근거를 자동 생성하지 않으므로, 가정을 준비하지 않으면 앵커 없는 일부 확인 상태로 남습니다.
 
-# 3. Run validations through the same interpreter
-& $VenvPython -m unittest discover -s tests -q
+## 실행 환경과 자료
 
-# 4. Verify byte-equality of the 8 skills
-& $VenvPython scripts/sync_agent_skills.py --check
+Python 패키지, 로컬 모델 파일, 분석용 자료를 준비해야 실제 계산이 실행됩니다. 분석 경로는 모델을 자동 다운로드하거나 유료 Hugging Face 원격 추론을 호출하지 않습니다. 모델 다운로드 유틸은 사용자가 별도로 호출하는 관리 기능입니다.
+
+- Yahoo 원생 5년 월봉 경로는 지원되는 미국·일본 종목 및 통화·시간대·출처 계약에서만 동작합니다. 마지막 미완성 월과 범위 첫 부분월은 제외합니다.
+- 월봉·최신 일봉 종가·기업행위 정보를 함께 검사합니다. 불명확한 분할, 지원하지 않는 달력·공급자·조정 방식은 사용 불가로 남깁니다.
+- Yahoo 기본 자료에는 거래대금이 없으므로 이 입력에서는 Kronos가 사용 불가입니다. 종가×거래량으로 거래대금을 만들어내지 않습니다. 한국 Naver 조정 가격은 현재 지원하지 않습니다.
+- 선택된 원자료의 종목·통화·단위·배율·회계기간·발표시각을 확인하고 정식 지표를 재계산합니다. 자료가 분석시각 이후에 발표됐거나 모순되면 검증된 사실로 사용하지 않습니다. SHA 검사는 저장 후 변조 여부를 확인하며 공급자의 외부 공증은 아닙니다.
+
+설정 예시:
+
+```json
+{"chronos_model_dir":"/absolute/local/chronos","local_files_only":true,"device":"cpu"}
 ```
 
-To verify a non-editable wheel in a clean Windows venv, build from the source checkout using an existing build environment, then use the target venv's Python for wheel installation, dependency checks, timezone verification, and tests. This sequence uses no `py` launcher and does not install into or alter the build environment:
+개인 자료는 사용자가 지정한 비공개 경로에서 읽고, 분석 결과는 별도 실행 공간에 저장합니다. 공개 저장소에는 개인 DB·인증정보·모델 가중치·캐시를 넣지 않습니다.
 
-```powershell
-# Build step (use an existing Python environment with the `build` package)
-$BuildPython = 'C:\path\to\existing-build-venv\Scripts\python.exe'
-& $BuildPython -m build --wheel --sdist --no-isolation
-
-# Clean target environment; select the required Python executable explicitly
-python -m venv .venv-wheel-check
-$VenvPython = (Resolve-Path .\.venv-wheel-check\Scripts\python.exe).Path
-$Wheel = (Resolve-Path .\dist\investment_stack-0.1.0-py3-none-any.whl).Path
-
-# The same interpreter installs the wheel and runs all checks
-& $VenvPython -m pip install $Wheel
-& $VenvPython -m pip check
-& $VenvPython -c "import sys, zoneinfo, investment_stack; print(sys.executable); print(investment_stack.__version__); zoneinfo.ZoneInfo('America/New_York'); zoneinfo.ZoneInfo('Asia/Seoul')"
-& $VenvPython -m unittest discover -s tests -q
-& $VenvPython scripts\sync_agent_skills.py --check
+```bash
+python -m pip install -e .
+PYTHONPATH=runtime python scripts/run_personal_portfolio.py \
+  --personal-db /private/verified/personal.db \
+  --run-workspace /private/workspace/runs \
+  --forecast-config /absolute/path/forecast-models.json \
+  --market-captures /private/verified/chart-captures --offline-captures
 ```
 
-If dependency installation cannot use the existing package cache, stop and report the missing wheel/package before attempting a broad download. `pyproject.toml` permits Python 3.11 and later, but the Windows install verification in this task is specific to the interpreter version recorded in `IMPLEMENTATION_STATUS.md`; other versions need their own run.
+시장 캡처는 `scripts/capture_market_data.py`의 원문·manifest 형식을 사용합니다. 스크립트와 상세 설정, 지원 조건은 [통합 안내](docs/workflow/AI_FORECASTING_INTEGRATION.md)를 확인하세요. Bash의 `PYTHONPATH=runtime` 표기는 Windows PowerShell에서는 `$env:PYTHONPATH='runtime'`로 지정합니다.
 
-## Market data and chart limits
+## 검증 상태와 한계
 
-`MarketQuoteProvider` validates source identity, price fields, currency, and source timestamps, then records every attempted source. The [default provider factory](runtime/investment_stack/providers/factory.py) wires the R01 eligibility evaluator and the [bounded pinned calendar snapshots](runtime/investment_stack/freshness/calendar.py) currently available for NASDAQ and KRX. It can qualify an eligible close as `LAST_VALID_CLOSE`; reports must preserve that dated-close label, since it is not an intraday quote. The snapshots cover only their explicitly listed September 2026 dates. There is no general dynamic exchange-calendar service or universal delay/age threshold. Other exchanges and dates without a matching pinned schedule fail closed for stale-close qualification.
+[최신 구현 현황](IMPLEMENTATION_STATUS.md)에는 실제 실행한 검사와 미검증 항목을 구분해 기록합니다. 합성 자료의 연결 검사, 실제 모델 추론 성공, 장기 금융 예측 정확도는 서로 다른 검증입니다. 5년 금융 OOS 성능, 불확실성 보정과 투자 우위는 아직 입증되지 않았습니다.
 
-The configured seven-mode composition is an embedding-host API, not automatic CLI wiring. The host must create and pin `run.db`, provide the personal-ledger service and typed personal-state loaders, inject credentials/providers and required callbacks, build the equity and portfolio/thesis bundles, then call `compose_seven_mode_services` ([composition code](runtime/investment_stack/execution/service_composition.py), [integration handoff](docs/workflow/handoffs/LUNA-R14-SEVEN-MODE-COMPOSITION-01.md)). `investment-stack execute` with the [default CLI](runtime/investment_stack/cli.py) has no configured handlers and returns `UNSUPPORTED`; it does not open personal data or discover credentials/providers automatically.
+8개 원본 스킬과 7개 고정 요청 모드, 개인 DB/실행 DB 분리를 유지합니다. GPT 프로젝트에 ZIP을 올리는 것만으로 실행이 보장되지는 않습니다. 파일 접근과 코드 실행 환경이 필요하며 모든 채팅이 하나의 영구 컨테이너를 공유하거나 매시간 모델을 실행한다고 보장하지 않습니다.
 
-The default Phase 4 → Phase 5 equity path performs live provider retrieval when configured, persists selected evidence to `run.db`, and passes an eligible market observation into deterministic valuation. A verified integration pull on 2026-09-27 used Yahoo's 2026-09-25 close and Naver's 2026-09-23 close, both labeled `LAST_VALID_CLOSE`; neither is a live intraday price ([R01 integration handoff](docs/workflow/handoffs/R01-WEEKEND-PRICE-01.md)). This one-time public-source check does not establish continuous API availability or comprehensive external-vendor coverage. Investing.com direct page requests returned HTTP 403 in the recorded check; no live claim is made for that source. OpenDART requires an injected `OPENDART_API_KEY` for credentialed use.
-
-The Naver daily-price endpoint returns a top-level list without an echoed ticker. Its response can be associated with an instrument only when the request uses the matching canonical Naver `/api/stock/{code}/price` route. The provider withholds a validated `BarSet` unless both a strict verification flag and an adjustment receipt are supplied, while preserving raw bars in diagnostics. The receipt is currently a caller-provided marker; corporate-action receipt authenticity is not checked by this adapter. Passing those raw bars manually as a `Sequence[Bar]` bypasses source provenance and is not safe for production analysis. Yahoo daily bars are parsed separately from current quotes. Technical indicator functions are deterministic calculations over completed bars; they do not authorize buy or sell actions, and the signal gate remains disabled until a verified policy registry exists.
-
-Indicator conventions are explicit in the calculation API: SMA uses the trailing period of closes; EMA uses alpha `2 / (period + 1)` and an initial SMA seed; Wilder RSI seeds average gains/losses over `period` price changes and then uses Wilder smoothing; MACD is fast EMA minus slow EMA with the signal EMA seeded from the first signal-period MACD values; ATR uses true range and Wilder smoothing; relative volume compares the current bar with the preceding lookback volumes; volatility is sample standard deviation of log returns (`ddof=1`) with optional annualization. Trend, pivot, and breakout periods/thresholds are caller inputs. `Sequence[Bar]` supports deterministic calculations but does not carry a source-validation receipt, so production analysis must pass only a series validated by its caller.
-
-**Skills and Packaging:**
-The authoritative skill instructions are in the `skills/` source directory, while Codex repository-local discovery uses byte-identical mirrors under `.agents/skills/`. The `sync_agent_skills.py --check` command enforces exact byte equality between the source and the mirror. 
-
-Wheel and source-distribution file paths are checked against the exact [distribution allowlist](docs/workflow/deployment-allowlist.md), including five explicitly named config inputs and all eight skill definitions/UI metadata files. The wheel places config inputs under `sys.prefix/config`, and skills beneath `sys.prefix/skills` and `sys.prefix/.agents/skills`. Config files are explicit inputs; the CLI does not automatically load them as global defaults. This verifies the installed discovery payload by path, not automatic Codex UI discovery from an arbitrary virtual-environment path. Repository-local Codex sessions use the workspace `.agents/skills/` mirror. The artifact allowlist excludes credential values, databases and sidecars, environment files, cache/run data, logs, virtual environments, Git metadata, bytecode, and key/certificate files by path. It does not scan source text for accidental secrets.
-
-`OPENDART_API_KEY` is optional; the embedding host supplies an `EnvironmentCredentials` instance or uses the default environment loader. When the key is absent, the provider reports `MISSING_CREDENTIAL` and the research flow can continue with public/keyless or injected Web Research paths. The host also supplies any personal-state loader; no personal database is implicitly selected or opened by service composition.
-
-## Safety boundary
-
-The personal database defaults to the platform user-data directory:
-
-- Windows: `%LOCALAPPDATA%\investment-stack\personal\personal.db`
-- macOS: `~/Library/Application Support/investment-stack/personal/personal.db`
-- Linux: `$XDG_DATA_HOME/investment-stack/personal/personal.db`, falling back
-  to `~/.local/share`
-
-Backups default to the same OS data root under `investment-stack/backups`.
-Override paths are accepted only when absolute, validated, and outside a Git
-repository. Every personal mutation entry point added in later phases must use
-`PersonalDatabaseManager.guarded_write_transaction()` so path, schema, database
-instance identity, opened-file identity, and writable state are checked before
-the mutation transaction begins. Generic SQLite connection helpers are read-only;
-writable connections are an internal manager-owned primitive.
-Phase 3 posting is available only through `PersonalLedgerService`, which enters
-the manager-owned guarded writer. Posted transactions and entries are protected
-by append-only database triggers. Missing economic time, timezone, cash impact,
-or entity resolution remains pending/confirmation-only and cannot affect the
-confirmed projections. In-kind asset transfers are not supported. See
-[ARCHITECTURE.md](ARCHITECTURE.md) for the frozen invariants.
-
-
-Current implementation handoff: [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).
-Phase 7 acceptance record: [docs/PHASE7_ACCEPTANCE.md](docs/PHASE7_ACCEPTANCE.md).
-Final hardening record: [docs/PHASE8_FINAL_HARDENING.md](docs/PHASE8_FINAL_HARDENING.md).
-
-Live deep-research bridge: [docs/LIVE_DEEP_RESEARCH.md](docs/LIVE_DEEP_RESEARCH.md).
+[아키텍처](ARCHITECTURE.md) · [배포 파일 목록](docs/workflow/deployment-allowlist.md)
